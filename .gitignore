@@ -16,3 +16,6 @@ secrets.yaml
 
 .DS_Store
 .vscode/
+
+# Wi-Fi credentials and HTTP token for the spike
+firmware/spike/main/secrets.h

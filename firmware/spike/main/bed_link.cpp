@@ -1,6 +1,7 @@
 #include "bed_link.h"
 
 #include <cinttypes>
+#include <cstdarg>
 #include <cstdio>
 #include <cstring>
 
@@ -173,6 +174,31 @@ std::string hex(const uint8_t* data, size_t len) {
     return out;
 }
 
+__attribute__((format(printf, 2, 3))) void appendf(std::string& out, const char* fmt, ...) {
+    char buf[256];
+    va_list args;
+    va_start(args, fmt);
+    std::vsnprintf(buf, sizeof(buf), fmt, args);
+    va_end(args);
+    out += buf;
+}
+
+// Recent connection events, readable over the network for the stability test
+constexpr int EVENT_LOG_SIZE = 32;
+char event_log[EVENT_LOG_SIZE][96];
+int event_next = 0;
+
+__attribute__((format(printf, 1, 2))) void log_event(const char* fmt, ...) {
+    char* line = event_log[event_next];
+    int used = std::snprintf(line, sizeof(event_log[0]), "[%" PRId64 "s] ", now_us() / 1000000);
+    va_list args;
+    va_start(args, fmt);
+    std::vsnprintf(line + used, sizeof(event_log[0]) - used, fmt, args);
+    va_end(args);
+    event_next = (event_next + 1) % EVENT_LOG_SIZE;
+    ESP_LOGI(TAG, "%s", line);
+}
+
 // ------------------------------------------------------------------ storage
 
 void store_save(int index) {
@@ -262,7 +288,7 @@ void terminate(Bed& bed, const char* why) {
     if (bed.conn == NO_CONN) {
         return;
     }
-    ESP_LOGW(TAG, "Bed %d: dropping link (%s)", index_of(&bed), why);
+    log_event("bed %d dropping link: %s", index_of(&bed), why);
     ble_gap_terminate(bed.conn, BLE_ERR_REM_USER_CONN_TERM);
 }
 
@@ -514,7 +540,7 @@ void on_notify(Bed& bed, const uint8_t* data, size_t len) {
             bed.failures = 0;
             bed.connected_since_us = now_us();
             bed.connects++;
-            ESP_LOGI(TAG, "Bed %d '%s': PIN accepted, ready", index_of(&bed), bed.name);
+            log_event("bed %d '%s' ready (rssi %d)", index_of(&bed), bed.name, bed.rssi);
             if (!bed.features_done) {
                 write(bed, octo::get_features());
             }
@@ -523,7 +549,7 @@ void on_notify(Bed& bed, const uint8_t* data, size_t len) {
     }
     if (octo::is_pin_rejected(data, len)) {
         bed.pin_rejects++;
-        ESP_LOGE(TAG, "Bed %d '%s' rejected the PIN; check it with 'bed set'", index_of(&bed), bed.name);
+        log_event("bed %d '%s' rejected the PIN; check it with 'bed set'", index_of(&bed), bed.name);
         bed.next_attempt_us = now_us() + PIN_REJECTED_BACKOFF_US;
         terminate(bed, "PIN rejected");
         return;
@@ -551,7 +577,7 @@ int gap_event(ble_gap_event* event, void* arg) {
         case BLE_GAP_EVENT_CONNECT: {
             Bed& bed = beds[reinterpret_cast<intptr_t>(arg)];
             if (event->connect.status != 0) {
-                ESP_LOGW(TAG, "Bed %d: connect failed (status %d)", index_of(&bed), event->connect.status);
+                log_event("bed %d connect failed (status %d)", index_of(&bed), event->connect.status);
                 bed.state = State::Idle;
                 connect_failed(bed);
                 release_connect_gate();
@@ -576,8 +602,8 @@ int gap_event(ble_gap_event* event, void* arg) {
             }
             const bool was_ready = bed->state == State::Ready;
             const int64_t up_s = was_ready ? (now_us() - bed->connected_since_us) / 1000000 : 0;
-            ESP_LOGW(TAG, "Bed %d '%s': disconnected (reason 0x%x, up %" PRId64 " s)", index_of(bed), bed->name,
-                     event->disconnect.reason, up_s);
+            log_event("bed %d '%s' disconnected (reason 0x%x, up %" PRId64 " s)", index_of(bed), bed->name,
+                      event->disconnect.reason, up_s);
             if (bed->state != State::Ready && bed->state != State::Authenticating) {
                 release_connect_gate();  // failed during discovery
             }
@@ -684,7 +710,7 @@ void keepalive_tick(ble_npl_event*) {
 }
 
 void stats_tick(ble_npl_event*) {
-    print_status();
+    std::fputs(status_text().c_str(), stdout);
     ble_npl_callout_reset(&stats_co, ble_npl_time_ms_to_ticks32(STATS_INTERVAL_MS));
 }
 
@@ -806,6 +832,15 @@ bool stop(int index) {
     return write(beds[index], octo::motor_stop());
 }
 
+void stop_all() {
+    for (auto& bed : beds) {
+        if (!bed.move_cmd.empty()) {
+            bed.move_cmd.clear();
+            write(bed, octo::motor_stop());
+        }
+    }
+}
+
 bool light(int index, bool on) {
     if (index < 0 || index >= MAX_BEDS || beds[index].state != State::Ready) {
         return false;
@@ -813,39 +848,56 @@ bool light(int index, bool on) {
     return write(beds[index], octo::light(on));
 }
 
-void print_status() {
+std::string status_text() {
     const int64_t now = now_us();
-    std::printf("STAT up=%" PRId64 "s heap=%u min=%u largest=%u\n", now / 1000000,
-                static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_8BIT)),
-                static_cast<unsigned>(heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT)),
-                static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)));
+    std::string out;
+    appendf(out, "STAT up=%" PRId64 "s heap=%u min=%u largest=%u\n", now / 1000000,
+            static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_8BIT)),
+            static_cast<unsigned>(heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT)),
+            static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)));
     for (int i = 0; i < MAX_BEDS; ++i) {
         const Bed& bed = beds[i];
         if (!bed.configured) {
-            std::printf("  bed %d: not configured\n", i);
+            appendf(out, "  bed %d: not configured\n", i);
             continue;
         }
         const int64_t link_s = bed.state == State::Ready ? (now - bed.connected_since_us) / 1000000 : 0;
         const int64_t adv_ago = bed.last_adv_us ? (now - bed.last_adv_us) / 1000000 : -1;
-        std::printf("  bed %d '%s' %s: %s link=%" PRId64 "s rssi=%d adv_ago=%" PRId64
-                    "s connects=%" PRIu32 " drops=%" PRIu32 " pin_rejects=%" PRIu32 " last_reason=0x%x\n",
-                    i, bed.name, mac_string(bed.mac).c_str(), state_name(bed.state), link_s, bed.rssi, adv_ago,
-                    bed.connects, bed.disconnects, bed.pin_rejects, bed.last_disconnect_reason);
+        appendf(out,
+                "  bed %d '%s' %s: %s link=%" PRId64 "s rssi=%d adv_ago=%" PRId64 "s connects=%" PRIu32
+                " drops=%" PRIu32 " pin_rejects=%" PRIu32 " last_reason=0x%x\n",
+                i, bed.name, mac_string(bed.mac).c_str(), state_name(bed.state), link_s, bed.rssi, adv_ago,
+                bed.connects, bed.disconnects, bed.pin_rejects, bed.last_disconnect_reason);
         if (bed.features_done) {
-            std::printf("    features: motors=%d presets=%d light=%d rgbw=%d synchro=%d\n", bed.motor_count,
-                        bed.memory_slots, bed.has_light, bed.has_rgbw, bed.has_synchro);
+            appendf(out, "    features: motors=%d presets=%d light=%d rgbw=%d synchro=%d\n", bed.motor_count,
+                    bed.memory_slots, bed.has_light, bed.has_rgbw, bed.has_synchro);
         }
     }
+    return out;
 }
 
-void print_scan() {
+std::string scan_text() {
     const int64_t now = now_us();
-    std::printf("%-17s  %-19s %5s  %s\n", "address", "name", "rssi", "seen");
+    std::string out;
+    appendf(out, "%-17s  %-19s %5s  %s\n", "address", "name", "rssi", "seen");
     for (int i = 0; i < scan_cache_used; ++i) {
         const ScanEntry& entry = scan_cache[i];
-        std::printf("%-17s  %-19s %5d  %" PRId64 "s ago%s\n", addr_string(entry.addr).c_str(), entry.name,
-                    entry.rssi, (now - entry.last_seen_us) / 1000000, entry.octo_service ? "  [Octo FFE0]" : "");
+        appendf(out, "%-17s  %-19s %5d  %" PRId64 "s ago%s\n", addr_string(entry.addr).c_str(), entry.name,
+                entry.rssi, (now - entry.last_seen_us) / 1000000, entry.octo_service ? "  [Octo FFE0]" : "");
     }
+    return out;
+}
+
+std::string events_text() {
+    std::string out;
+    for (int i = 0; i < EVENT_LOG_SIZE; ++i) {
+        const char* line = event_log[(event_next + i) % EVENT_LOG_SIZE];
+        if (line[0] != '\0') {
+            out += line;
+            out += '\n';
+        }
+    }
+    return out;
 }
 
 }  // namespace bed_link

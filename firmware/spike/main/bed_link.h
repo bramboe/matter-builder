@@ -27,8 +27,10 @@ bool configure(int index, const uint8_t mac[6], const std::string& pin, const st
 void clear(int index);
 bool move(int index, Part part, bool up, float seconds);
 bool stop(int index);
+void stop_all();
 bool light(int index, bool on);
-void print_status();
-void print_scan();
+std::string status_text();
+std::string scan_text();
+std::string events_text();
 
 }  // namespace bed_link

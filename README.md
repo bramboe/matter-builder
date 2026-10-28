@@ -40,7 +40,18 @@ Na een protocolwijziging in octo-bed: `tools/gen_vectors.py ../octo-bed`.
 
 ## F0 bouwen en testen
 
-Vereist ESP-IDF v5.5.5.
+Vereist ESP-IDF v5.5.5. Kopieer eerst `firmware/spike/main/secrets.example.h`
+naar `secrets.h` en vul wifi en token in (staat niet in git).
+
+Installeren op een ESP32 die nog ESPHome draait, via het netwerk:
+
+```sh
+~/esp/esphome-venv/bin/python tools/esphome_ota_upload.py <ip> firmware/spike/build/octo_spike.bin
+tools/octo.sh status          # daarna alles via het netwerk
+tools/octo.sh --ota firmware/spike/build/octo_spike.bin   # volgende updates
+```
+
+Of via USB:
 
 ```sh
 cd firmware/spike
@@ -49,7 +60,7 @@ idf.py build
 idf.py -p /dev/cu.usbserial-XXXX flash monitor
 ```
 
-In de console (de PIN wordt in NVS opgeslagen, niet in de firmware):
+In de console, of via `tools/octo.sh <commando>` (de PIN wordt in NVS opgeslagen, niet in de firmware):
 
 ```
 octo> scan

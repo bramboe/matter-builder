@@ -1,0 +1,18 @@
+# ESP-IDF
+build/
+sdkconfig
+sdkconfig.old
+managed_components/
+dependencies.lock
+
+# Host tests
+test/host/build/
+
+# Never commit flash dumps or ESPHome YAML: they contain secrets
+*.bin
+backups/
+*.yaml.secret
+secrets.yaml
+
+.DS_Store
+.vscode/

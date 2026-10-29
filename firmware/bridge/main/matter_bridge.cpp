@@ -372,6 +372,29 @@ std::string open_commissioning_window() {
                                 : std::string("could not open the commissioning window: ") + err.AsString() + "\n";
 }
 
+std::string fabrics_text() {
+    std::string out;
+    chip::DeviceLayer::PlatformMgr().LockChipStack();
+    for (const auto& fabric : chip::Server::GetInstance().GetFabricTable()) {
+        const chip::CharSpan label = fabric.GetFabricLabel();
+        char line[96];
+        std::snprintf(line, sizeof(line), "fabric %u: vendor 0x%04X, fabric id 0x%" PRIX64 ", label '%.*s'\n",
+                      fabric.GetFabricIndex(), chip::to_underlying(fabric.GetVendorId()), fabric.GetFabricId(),
+                      static_cast<int>(label.size()), label.data());
+        out += line;
+    }
+    chip::DeviceLayer::PlatformMgr().UnlockChipStack();
+    return out.empty() ? "no fabrics\n" : out;
+}
+
+std::string remove_fabric(unsigned index) {
+    chip::DeviceLayer::PlatformMgr().LockChipStack();
+    const CHIP_ERROR err = chip::Server::GetInstance().GetFabricTable().Delete(static_cast<chip::FabricIndex>(index));
+    chip::DeviceLayer::PlatformMgr().UnlockChipStack();
+    return err == CHIP_NO_ERROR ? "fabric " + std::to_string(index) + " removed\n"
+                                : std::string("could not remove fabric: ") + err.AsString() + "\n";
+}
+
 std::string describe() {
     char qr[64] = {};
     char manual[32] = {};

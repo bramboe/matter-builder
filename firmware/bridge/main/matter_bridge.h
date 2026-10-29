@@ -33,4 +33,9 @@ std::string describe();
 // "matter open": let another controller pair for 5 minutes (multi-admin)
 std::string open_commissioning_window();
 
+// "matter fabrics" / "matter remove <index>": the controllers paired with
+// the bridge, e.g. to drop one that was removed without unpairing
+std::string fabrics_text();
+std::string remove_fabric(unsigned index);
+
 }  // namespace matter_bridge

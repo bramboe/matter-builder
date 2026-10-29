@@ -1,5 +1,6 @@
 // octo-matter bridge: the Octo beds as standard Matter devices.
 
+#include <cstdlib>
 #include <string>
 #include <vector>
 
@@ -17,6 +18,12 @@ std::string cmd_matter(const std::vector<std::string>& args) {
     if (args.size() == 2 && args[1] == "open") {
         return matter_bridge::open_commissioning_window();
     }
+    if (args.size() == 2 && args[1] == "fabrics") {
+        return matter_bridge::fabrics_text();
+    }
+    if (args.size() == 3 && args[1] == "remove") {
+        return matter_bridge::remove_fabric(static_cast<unsigned>(std::strtoul(args[2].c_str(), nullptr, 10)));
+    }
     return matter_bridge::describe();
 }
 
@@ -33,7 +40,7 @@ extern "C" void app_main() {
     bed_link::start();
     matter_bridge::start();
     net::start();
-    add_command("matter", "matter [open]                           pairing codes, fabrics, endpoints; open: pairing window\n", cmd_matter);
+    add_command("matter", "matter [open|fabrics|remove <n>]        pairing codes, endpoints; pairing window; controllers\n", cmd_matter);
     console_start();
     ESP_LOGI("main", "octo-matter bridge running; type 'help'");
 }

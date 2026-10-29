@@ -776,12 +776,15 @@ void start() {
 }
 
 void run_in_host(const std::function<void()>& fn) {
-    HostRequest request;
+    // Zero-initialise: the ESP-IDF NPL port only allocates the event's pool
+    // block when ev->event is null, so stack garbage there is a wild write.
+    HostRequest request{};
     request.fn = &fn;
     request.done = xSemaphoreCreateBinary();
     ble_npl_event_init(&request.event, run_request, &request);
     ble_npl_eventq_put(nimble_port_get_dflt_eventq(), &request.event);
     xSemaphoreTake(request.done, portMAX_DELAY);
+    ble_npl_event_deinit(&request.event);  // return the pool block
     vSemaphoreDelete(request.done);
 }
 

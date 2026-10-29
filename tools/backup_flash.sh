@@ -20,8 +20,8 @@ echo "Backup to $DIR"
 esptool --port "$PORT" chip-id | tee "$DIR/chip-id.txt"
 esptool --port "$PORT" flash-id | tee "$DIR/flash-id.txt"
 
-esptool --port "$PORT" --baud 460800 read-flash 0 ALL "$DIR/flash-read1.bin"
-esptool --port "$PORT" --baud 460800 read-flash 0 ALL "$DIR/flash-read2.bin"
+esptool --port "$PORT" --baud "${BAUD:-460800}" read-flash 0 ALL "$DIR/flash-read1.bin"
+esptool --port "$PORT" --baud "${BAUD:-460800}" read-flash 0 ALL "$DIR/flash-read2.bin"
 
 if ! cmp -s "$DIR/flash-read1.bin" "$DIR/flash-read2.bin"; then
     echo "ERROR: the two flash reads differ; do not flash this device, retry the backup" >&2

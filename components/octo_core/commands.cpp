@@ -25,9 +25,12 @@ const char* HELP =
     "scan                                    nearby BLE devices with a name or the Octo service\n"
     "bed set <0|1> <MAC> <PIN> [name]        configure a bed (PIN is never shown)\n"
     "bed clear <0|1>                         forget a bed\n"
-    "move <0|1> <head|feet|both> <up|down> <seconds>\n"
+    "move <0|1> <head|legs|both> <up|down> <seconds>\n"
     "stop <0|1>                              stop the motors\n"
     "light <0|1> <on|off>                    under-bed light\n"
+    "travel <0|1> <head|legs> <seconds>      full travel time of a motor\n"
+    "calibrate <0|1> <head|legs>             raise from flat; then 'calibrate <0|1> stop' at the top\n"
+    "json                                    state for the settings page\n"
     "system                                  firmware slots, reset reason, network\n"
     "revert                                  boot the other firmware slot\n"
     "reboot                                  restart\n";
@@ -71,7 +74,13 @@ std::string cmd_bed(const Args& args) {
         if (!parse_mac(args[3], mac)) {
             return "MAC must look like AA:BB:CC:DD:EE:01\n";
         }
-        const std::string name = args.size() >= 6 ? args[5] : "Bed " + std::to_string(index);
+        std::string name;  // the rest of the line, so names may contain spaces
+        for (size_t i = 5; i < args.size(); ++i) {
+            name += (i > 5 ? " " : "") + args[i];
+        }
+        if (name.empty()) {
+            name = "Bed " + std::to_string(index);
+        }
         bool ok = false;
         bed_link::run_in_host([&] { ok = bed_link::configure(index, mac, args[4], name); });
         return ok ? "stored\n" : "PIN must be 4 digits\n";
@@ -83,28 +92,72 @@ std::string cmd_bed(const Args& args) {
     return "usage: bed set <0|1> <MAC> <PIN> [name] | bed clear <0|1>\n";
 }
 
+// "legs" and "feet" are the same motor
+bool parse_part(const std::string& text, bool allow_both, bed_link::Part& part) {
+    if (text == "head") {
+        part = bed_link::Part::Head;
+    } else if (text == "legs" || text == "feet") {
+        part = bed_link::Part::Feet;
+    } else if (text == "both" && allow_both) {
+        part = bed_link::Part::Both;
+    } else {
+        return false;
+    }
+    return true;
+}
+
+std::string cmd_travel(const Args& args) {
+    int index;
+    bed_link::Part part;
+    if (args.size() != 4 || !parse_index(args[1], index) || !parse_part(args[2], false, part)) {
+        return "usage: travel <0|1> <head|legs> <seconds>\n";
+    }
+    const float seconds = std::strtof(args[3].c_str(), nullptr);
+    bool ok = false;
+    bed_link::run_in_host([&] { ok = bed_link::set_travel(index, part, seconds); });
+    return ok ? "travel time stored\n" : "bed not configured\n";
+}
+
+std::string cmd_calibrate(const Args& args) {
+    int index;
+    if (args.size() != 3 || !parse_index(args[1], index)) {
+        return "usage: calibrate <0|1> <head|legs|stop>\n";
+    }
+    if (args[2] == "stop") {
+        float seconds = -1.0f;
+        bed_link::run_in_host([&] { seconds = bed_link::calibrate_stop(index); });
+        if (seconds < 0.0f) {
+            return "not calibrating, or the time was out of range: nothing stored\n";
+        }
+        char text[48];
+        std::snprintf(text, sizeof(text), "travel time %.1f s stored\n", seconds);
+        return text;
+    }
+    bed_link::Part part;
+    if (!parse_part(args[2], false, part)) {
+        return "usage: calibrate <0|1> <head|legs|stop>\n";
+    }
+    bool ok = false;
+    bed_link::run_in_host([&] { ok = bed_link::calibrate_start(index, part); });
+    return ok ? "raising; send 'calibrate <bed> stop' when it reaches the top\n" : "bed not ready\n";
+}
+
 std::string cmd_move(const Args& args) {
     int index;
     if (args.size() != 5 || !parse_index(args[1], index)) {
         return "usage: move <0|1> <head|feet|both> <up|down> <seconds>\n";
     }
     bed_link::Part part;
-    if (args[2] == "head") {
-        part = bed_link::Part::Head;
-    } else if (args[2] == "feet") {
-        part = bed_link::Part::Feet;
-    } else if (args[2] == "both") {
-        part = bed_link::Part::Both;
-    } else {
-        return "part must be head, feet or both\n";
+    if (!parse_part(args[2], true, part)) {
+        return "part must be head, legs or both\n";
     }
     if (args[3] != "up" && args[3] != "down") {
         return "direction must be up or down\n";
     }
     const bool up = args[3] == "up";
     const float seconds = std::strtof(args[4].c_str(), nullptr);
-    if (seconds < 0.3f || seconds > 60.0f) {
-        return "seconds must be 0.3..60\n";
+    if (seconds < 0.3f || seconds > bed_link::MAX_TRAVEL_S + 5.0f) {
+        return "seconds must be 0.3..125\n";
     }
     bool ok = false;
     bed_link::run_in_host([&] { ok = bed_link::move(index, part, up, seconds); });
@@ -196,6 +249,13 @@ std::string run_command(const std::string& line) {
     }
     if (cmd == "bed") return cmd_bed(args);
     if (cmd == "move") return cmd_move(args);
+    if (cmd == "travel") return cmd_travel(args);
+    if (cmd == "calibrate") return cmd_calibrate(args);
+    if (cmd == "json") {
+        std::string out;
+        bed_link::run_in_host([&] { out = bed_link::state_json(); });
+        return out;
+    }
     if (cmd == "stop") return cmd_stop(args);
     if (cmd == "light") return cmd_light(args);
     if (cmd == "system") return boot_guard::describe() + nvs_text() + net::describe();
@@ -235,8 +295,8 @@ void console_start() {
     esp_console_dev_uart_config_t uart_config = ESP_CONSOLE_DEV_UART_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_console_new_repl_uart(&uart_config, &repl_config, &repl));
 
-    for (const char* name : {"help", "status", "events", "scan", "bed", "move", "stop", "light", "system",
-                             "revert", "reboot"}) {
+    for (const char* name : {"help", "status", "events", "scan", "bed", "move", "stop", "light", "travel", "calibrate",
+                             "json", "system", "revert", "reboot"}) {
         esp_console_cmd_t cmd = {};
         cmd.command = name;
         cmd.func = console_dispatch;

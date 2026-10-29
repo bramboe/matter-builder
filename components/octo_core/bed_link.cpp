@@ -82,6 +82,13 @@ struct Bed {
     int64_t last_ack_us = 0;
     int64_t connected_since_us = 0;
 
+    // Calibration (travel times in tenths of a second)
+    uint16_t head_travel_ds = 300;
+    uint16_t feet_travel_ds = 300;
+    bool calibrating = false;
+    Part calibrate_part = Part::Head;
+    int64_t calibrate_started_us = 0;
+
     // Features
     bool features_done = false;
     int motor_count = -1;
@@ -114,6 +121,7 @@ ScanEntry scan_cache[SCAN_CACHE_SIZE];
 int scan_cache_used = 0;
 uint8_t own_addr_type = 0;
 bool synced = false;
+bed_link::CalibratedCallback calibrated_callback;
 bool connect_in_progress = false;
 int64_t next_connect_allowed_us = 0;
 
@@ -220,6 +228,10 @@ void store_save(int index) {
         nvs_set_str(nvs, key, bed.pin);
         std::snprintf(key, sizeof(key), "b%dname", index);
         nvs_set_str(nvs, key, bed.name);
+        std::snprintf(key, sizeof(key), "b%dth", index);
+        nvs_set_u16(nvs, key, bed.head_travel_ds);
+        std::snprintf(key, sizeof(key), "b%dtf", index);
+        nvs_set_u16(nvs, key, bed.feet_travel_ds);
     } else {
         nvs_erase_key(nvs, key);
         std::snprintf(key, sizeof(key), "b%dpin", index);
@@ -254,6 +266,10 @@ void store_load() {
         if (nvs_get_str(nvs, key, bed.name, &len) != ESP_OK) {
             std::snprintf(bed.name, sizeof(bed.name), "Bed %d", i);
         }
+        std::snprintf(key, sizeof(key), "b%dth", i);
+        nvs_get_u16(nvs, key, &bed.head_travel_ds);  // keeps the default if absent
+        std::snprintf(key, sizeof(key), "b%dtf", i);
+        nvs_get_u16(nvs, key, &bed.feet_travel_ds);
         bed.configured = true;
         ESP_LOGI(TAG, "Bed %d '%s' %s loaded", i, bed.name, mac_string(bed.mac).c_str());
     }
@@ -810,6 +826,8 @@ Info info(int index) {
         result.configured = bed.configured;
         result.ready = bed.state == State::Ready;
         result.name = bed.name;
+        result.head_travel_s = bed.head_travel_ds / 10.0f;
+        result.feet_travel_s = bed.feet_travel_ds / 10.0f;
     }
     return result;
 }
@@ -820,8 +838,12 @@ bool configure(int index, const uint8_t mac[6], const std::string& pin, const st
     }
     Bed& bed = beds[index];
     terminate(bed, "reconfigured");
+    const uint16_t head_travel = bed.head_travel_ds;  // calibration survives a new PIN or name
+    const uint16_t feet_travel = bed.feet_travel_ds;
     bed = Bed{};
     bed.configured = true;
+    bed.head_travel_ds = head_travel;
+    bed.feet_travel_ds = feet_travel;
     std::memcpy(bed.mac, mac, sizeof(bed.mac));
     std::snprintf(bed.pin, sizeof(bed.pin), "%s", pin.c_str());
     std::snprintf(bed.name, sizeof(bed.name), "%s", name.c_str());
@@ -875,6 +897,94 @@ bool light(int index, bool on) {
         return false;
     }
     return write(beds[index], octo::light(on));
+}
+
+bool set_travel(int index, Part part, float seconds) {
+    if (index < 0 || index >= MAX_BEDS || !beds[index].configured || part == Part::Both) {
+        return false;
+    }
+    if (seconds < MIN_TRAVEL_S) seconds = MIN_TRAVEL_S;
+    if (seconds > MAX_TRAVEL_S) seconds = MAX_TRAVEL_S;
+    Bed& bed = beds[index];
+    (part == Part::Head ? bed.head_travel_ds : bed.feet_travel_ds) = static_cast<uint16_t>(seconds * 10.0f + 0.5f);
+    store_save(index);
+    return true;
+}
+
+void on_calibrated(CalibratedCallback callback) {
+    calibrated_callback = std::move(callback);
+}
+
+bool calibrate_start(int index, Part part) {
+    if (part == Part::Both || !move(index, part, true, MAX_TRAVEL_S)) {
+        return false;
+    }
+    Bed& bed = beds[index];
+    bed.calibrating = true;
+    bed.calibrate_part = part;
+    bed.calibrate_started_us = now_us();
+    log_event("bed %d calibrating %s", index, part == Part::Head ? "head" : "legs");
+    return true;
+}
+
+float calibrate_stop(int index) {
+    if (index < 0 || index >= MAX_BEDS || !beds[index].calibrating) {
+        return -1.0f;
+    }
+    Bed& bed = beds[index];
+    stop(index);
+    bed.calibrating = false;
+    const float seconds = (now_us() - bed.calibrate_started_us) / 1000000.0f;
+    if (seconds < MIN_TRAVEL_S || seconds >= MAX_TRAVEL_S) {
+        log_event("bed %d calibration discarded (%.1f s)", index, seconds);
+        return -1.0f;
+    }
+    set_travel(index, bed.calibrate_part, seconds);
+    log_event("bed %d %s travel %.1f s", index, bed.calibrate_part == Part::Head ? "head" : "legs", seconds);
+    if (calibrated_callback) {
+        calibrated_callback(index, bed.calibrate_part, seconds);
+    }
+    return seconds;
+}
+
+static std::string json_string(const char* text) {
+    std::string out = "\"";
+    for (const char* c = text; *c != '\0'; ++c) {
+        if (*c == '"' || *c == '\\') {
+            out += '\\';
+            out += *c;
+        } else if (static_cast<unsigned char>(*c) >= 0x20) {
+            out += *c;
+        }
+    }
+    return out + "\"";
+}
+
+std::string state_json() {
+    const int64_t now = now_us();
+    std::string out;
+    appendf(out, "{\"uptime\":%" PRId64 ",\"heap\":%u,\"beds\":[", now / 1000000,
+            static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_8BIT)));
+    for (int i = 0; i < MAX_BEDS; ++i) {
+        const Bed& bed = beds[i];
+        appendf(out,
+                "%s{\"index\":%d,\"configured\":%s,\"name\":%s,\"mac\":\"%s\",\"state\":\"%s\",\"rssi\":%d,"
+                "\"head_travel\":%.1f,\"legs_travel\":%.1f,\"calibrating\":%s,\"calibrate_elapsed\":%.1f,"
+                "\"drops\":%" PRIu32 "}",
+                i ? "," : "", i, bed.configured ? "true" : "false", json_string(bed.name).c_str(),
+                bed.configured ? mac_string(bed.mac).c_str() : "", state_name(bed.state), bed.rssi,
+                bed.head_travel_ds / 10.0, bed.feet_travel_ds / 10.0,
+                !bed.calibrating ? "null" : bed.calibrate_part == Part::Head ? "\"head\"" : "\"legs\"",
+                bed.calibrating ? (now - bed.calibrate_started_us) / 1000000.0 : 0.0, bed.disconnects);
+    }
+    out += "],\"scan\":[";
+    for (int i = 0; i < scan_cache_used; ++i) {
+        const ScanEntry& entry = scan_cache[i];
+        appendf(out, "%s{\"address\":\"%s\",\"name\":%s,\"rssi\":%d,\"seen\":%" PRId64 ",\"octo\":%s}",
+                i ? "," : "", addr_string(entry.addr).c_str(), json_string(entry.name).c_str(), entry.rssi,
+                (now - entry.last_seen_us) / 1000000, entry.octo_service ? "true" : "false");
+    }
+    return out + "]}";
 }
 
 std::string status_text() {

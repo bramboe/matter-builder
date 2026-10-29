@@ -1,6 +1,6 @@
 # Octo Bed → Matter bridge — ontwerp
 
-Status: ontwerp, nog geen code. Datum: 2026-10-28.
+Status: F0–F2 gebouwd (2026-10-29). Afwijkingen van dit ontwerp staan in §13.
 Bron voor protocol en gedrag: `~/Documents/GitHub/octo-bed` v2.9.2 (`protocol.py`, `const.py`, `octo_bed_client.py`).
 
 ## 1. Doel
@@ -178,3 +178,19 @@ Let op in de configuratie: esp-matter zet BLE standaard uit na commissioning. Da
 3. Lopen er naast de bedden nog andere BLE-apparaten via deze proxy?
 4. Moet het ook in Apple Home komen (multi-admin)?
 5. Welke functies wil je echt houden: synchro-modus, hardware-presets, RGBW?
+
+## 13. Afwijkingen in de bouw
+
+- **Koppelen gaat via wifi, niet via BLE.** CHIPoBLE staat uit, zodat NimBLE
+  alleen van de bedverbindingen is. De wifi-gegevens komen uit `secrets.h`.
+- **Eén Matter-apparaat per bed** (bridged node met hoofd, benen en licht als
+  onderdelen) in plaats van losse apparaten per onderdeel. Endpoints: 2–5
+  bed 1, 6–9 bed 2; vast, zodat controllers ze herkennen.
+- **De instellingenpagina staat altijd aan** en is beveiligd met het token
+  uit `secrets.h`, in plaats van via de BOOT-knop.
+- **Namen in Apple Home:** iOS haalt de naam van de bridge uit de DCL; met de
+  test-ID's (0xFFF1/0x8000) wordt dat "Matter Accessory". De bedden zelf
+  krijgen wel hun eigen naam.
+- **Geheugen op de klassieke ESP32 is krap** (±30 KB vrij, dalend naar
+  ±8–20 KB bij koppelen of veel verkeer). Een ESP32-C6 of -S3 is de uitweg.
+

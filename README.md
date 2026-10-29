@@ -9,7 +9,8 @@ Opvolger van de Home Assistant-integratie
 [octo-bed](https://github.com/bramboe/octo-bed); het BLE-protocol is daaruit
 geport en wordt met golden vectors gelijk gehouden.
 
-> **Status: F0 (BLE-spike).** Nog geen Matter. Zie [docs/ontwerp.md](docs/ontwerp.md).
+> **Status: F2.** De bridge (`firmware/bridge`) draait: beide bedden als Matter-apparaten
+> met hoofd, benen en licht, en een instellingenpagina op de ESP. Zie [docs/ontwerp.md](docs/ontwerp.md).
 
 ## Terug naar ESPHome
 
@@ -25,7 +26,9 @@ tools/backup_flash.sh /dev/cu.usbserial-XXXX
 | Pad | Inhoud |
 |---|---|
 | `components/octo_protocol` | Octo BLE-pakketprotocol (C++ port van `protocol.py`) |
-| `firmware/spike` | F0: NimBLE-central naar 1–2 bedden, PIN, keep-alive, seriële console |
+| `components/octo_core` | Bedverbindingen, boot guard, console-commando's, HTTP-API en instellingenpagina |
+| `firmware/bridge` | De Matter-bridge (esp-matter release/v1.6) |
+| `firmware/spike` | F0: alleen de bedverbindingen, zonder Matter |
 | `test/host` | Host-tests tegen golden vectors uit de Python-referentie |
 | `tools/` | Vectorgenerator, flash-backup en -restore |
 | `docs/` | Ontwerp en terugvalprocedure |
@@ -76,6 +79,34 @@ F0 is geslaagd als beide bedden 24 uur verbonden blijven (de `STAT`-regels,
 elke 5 minuten, tonen `drops=0` of alleen herstelde drops) en bewegen werkt.
 Sluit tijdens het testen de `octo_bed`-integratie en de OCTO-app af: het bed
 accepteert maar één verbinding.
+
+## Bridge bouwen
+
+Vereist ook esp-matter `release/v1.6` (in `~/esp/esp-matter`):
+
+```sh
+. ~/esp/esp-idf-v5.5.5/export.sh && . ~/esp/esp-matter/export.sh
+cd firmware/bridge && idf.py build
+tools/octo.sh --ota firmware/bridge/build/octo_bridge.bin
+```
+
+`firmware/bridge/main/secrets.h` mag een symlink naar die van de spike zijn.
+
+## Instellen en kalibreren
+
+Open `http://<ip van de ESP>/` in een browser. De pagina vraagt één keer om het
+token uit `secrets.h` en bewaart dat in de browser. Daar kun je:
+
+- een bed kiezen uit de Bluetooth-scan en met PIN en naam opslaan;
+- per motor de looptijd invullen, of meten: helemaal omlaag, *Start meting*,
+  en *Stop* zodra het onderdeel bovenaan is;
+- hoofd en benen kort bewegen, stoppen en het licht schakelen.
+
+Hetzelfde kan via de console: `travel`, `calibrate`, `bed set` (zie `help`).
+
+Koppelen met Matter: `tools/octo.sh matter` geeft de code, `matter open` opent
+een koppelvenster voor een extra controller, `matter fabrics` en
+`matter remove <n>` tonen en verwijderen gekoppelde controllers.
 
 ## Licentie
 

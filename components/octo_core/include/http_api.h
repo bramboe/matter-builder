@@ -1,6 +1,7 @@
 // The HTTP API shared by all apps, so a device can be used and updated
 // without USB. Every request needs the header "X-Octo-Token: <token>".
 //
+//   GET  /      settings page (no token needed to load it)
 //   POST /cmd   body = console command line   -> command output
 //   POST /ota   body = firmware image (.bin)  -> flashed to the other slot, reboot
 //

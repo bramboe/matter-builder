@@ -34,8 +34,6 @@ const char* TAG = "bridge";
 constexpr uint16_t FLAT = 10000;
 constexpr uint16_t RAISED = 0;
 
-// Full travel time of one motor; the octo_bed default. Calibration is F2.
-constexpr int64_t FULL_TRAVEL_US = 30 * 1000000LL;
 // Targets at either end drive a little longer, into the end stop, so the
 // estimate is corrected whenever the bed goes fully up or flat.
 constexpr int64_t END_STOP_EXTRA_US = 3 * 1000000LL;
@@ -182,14 +180,19 @@ CHIP_ERROR Cover::HandleMovement(WC::WindowCoveringType type) {
     }
     const bool up = goal < start;  // fewer hundredths closed = higher
     const int64_t distance = up ? start - goal : goal - start;
-    const int64_t travel = FULL_TRAVEL_US * distance / FLAT;
-    const int64_t run = travel + (is_end(goal) ? END_STOP_EXTRA_US : 0);
-
-    bool ok = false;
     const int index = bed;
     const bed_link::Part motor = part;
-    bed_link::run_in_host(
-        [&] { ok = bed_link::move(index, motor, up, static_cast<float>(run) / 1000000.0f); });
+    bool ok = false;
+    int64_t travel = 0;
+    int64_t run = 0;
+    bed_link::run_in_host([&] {
+        // The calibrated full travel time of this motor
+        const bed_link::Info info = bed_link::info(index);
+        const float full_s = motor == bed_link::Part::Head ? info.head_travel_s : info.feet_travel_s;
+        travel = static_cast<int64_t>(full_s * 1000000.0f) * distance / FLAT;
+        run = travel + (is_end(goal) ? END_STOP_EXTRA_US : 0);
+        ok = bed_link::move(index, motor, up, static_cast<float>(run) / 1000000.0f);
+    });
     if (!ok) {
         ESP_LOGW(TAG, "Bed %d not ready, movement refused", bed);
         WC::Attributes::TargetPositionLiftPercent100ths::Set(endpoint_id, position);
@@ -346,6 +349,21 @@ uint16_t add_light(node_t* node, endpoint_t* device) {
     return endpoint::get_id(ep);
 }
 
+// Calibration ends with the motor at the top: make that the known position.
+// Called in the BLE host task, so the update is handed to the Matter thread.
+void on_calibrated(int index, bed_link::Part part, float) {
+    const intptr_t arg = index * 2 + (part == bed_link::Part::Head ? 0 : 1);
+    (void) chip::DeviceLayer::PlatformMgr().ScheduleWork([](intptr_t value) {
+        BedEndpoints& bed = beds[value / 2];
+        Cover& cover = value % 2 == 0 ? bed.head : bed.feet;
+        cover.moving = false;
+        cover.position = RAISED;
+        cover.publish();
+        WC::Attributes::TargetPositionLiftPercent100ths::Set(cover.endpoint_id, RAISED);
+        cover.save();
+    }, arg);
+}
+
 }  // namespace
 
 void start() {
@@ -376,6 +394,7 @@ void start() {
         bed.light_endpoint = add_light(node, device);
     }
 
+    bed_link::run_in_host([] { bed_link::on_calibrated(on_calibrated); });
     esp_matter::set_custom_device_instance_info_provider(&device_info);
     ESP_ERROR_CHECK(esp_matter::start(on_event));
 

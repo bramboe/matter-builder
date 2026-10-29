@@ -55,6 +55,17 @@ esp_err_t handle_cmd(httpd_req_t* req) {
     return httpd_resp_sendstr(req, run_command(line).c_str());
 }
 
+// The settings page (web/index.html, embedded at build time). It holds no
+// secrets: everything it does goes through /cmd with the token.
+extern const char index_html_start[] asm("_binary_index_html_start");
+extern const char index_html_end[] asm("_binary_index_html_end");
+
+esp_err_t handle_index(httpd_req_t* req) {
+    httpd_resp_set_type(req, "text/html; charset=utf-8");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
+    return httpd_resp_send(req, index_html_start, index_html_end - index_html_start - 1);
+}
+
 void restart_task(void*) {
     vTaskDelay(pdMS_TO_TICKS(500));
     esp_restart();
@@ -135,6 +146,12 @@ void start(const char* token) {
         ESP_LOGE(TAG, "HTTP server failed to start");
         return;
     }
+    httpd_uri_t index = {};
+    index.uri = "/";
+    index.method = HTTP_GET;
+    index.handler = handle_index;
+    httpd_register_uri_handler(server, &index);
+
     httpd_uri_t cmd = {};
     cmd.uri = "/cmd";
     cmd.method = HTTP_POST;

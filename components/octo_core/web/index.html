@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Octo bedden</title>
+<style>
+:root{--bg:#f4f4f2;--card:#fff;--fg:#1d1d1b;--mute:#6b6b66;--line:#ddddd8;--acc:#2f6f8f;--ok:#2e7d4f;--bad:#b3402e}
+@media (prefers-color-scheme:dark){:root{--bg:#161615;--card:#22221f;--fg:#ececea;--mute:#9a9a94;--line:#3a3a36;--acc:#6fb0d0;--ok:#6cc08b;--bad:#e07b67}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 system-ui,-apple-system,sans-serif}
+main{max-width:720px;margin:0 auto;padding:16px}
+h1{font-size:20px;margin:4px 0 2px}
+h2{font-size:17px;margin:0}
+h3{font-size:13px;margin:14px 0 6px;color:var(--mute);text-transform:uppercase;letter-spacing:.04em}
+.sub{color:var(--mute);font-size:13px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;margin:12px 0}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.head{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+button{font:inherit;padding:7px 12px;border-radius:7px;border:1px solid var(--line);background:var(--bg);color:var(--fg);cursor:pointer}
+button.pri{background:var(--acc);border-color:var(--acc);color:#fff}
+button:disabled{opacity:.45;cursor:default}
+input,select{font:inherit;padding:6px 8px;border-radius:7px;border:1px solid var(--line);background:var(--bg);color:var(--fg);min-width:0}
+input[type=number]{width:5.5em}
+label{display:flex;flex-direction:column;gap:3px;font-size:13px;color:var(--mute)}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;background:var(--bad)}
+.dot.ok{background:var(--ok)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+#msg{min-height:1.4em;color:var(--mute);font-size:13px}
+.steps{margin:0;padding-left:20px;color:var(--mute);font-size:13px}
+</style>
+</head>
+<body>
+<main>
+<h1>Octo bedden</h1>
+<div class="sub" id="sys">Verbinden…</div>
+<div id="msg"></div>
+<div id="beds"></div>
+
+<div class="card">
+<h2>Bed instellen</h2>
+<p class="sub">Zet de octo_bed-integratie en de OCTO-app uit: een bed accepteert maar één verbinding. De PIN wordt alleen op de ESP opgeslagen.</p>
+<div class="grid">
+<label>Plek<select id="slot"><option value="0">Bed 1</option><option value="1">Bed 2</option></select></label>
+<label>Bed (Bluetooth)<select id="mac"></select></label>
+<label>PIN<input id="pin" type="password" inputmode="numeric" maxlength="4" autocomplete="off"></label>
+<label>Naam<input id="name" maxlength="23" placeholder="bijv. Sam"></label>
+</div>
+<div class="row" style="margin-top:12px">
+<button class="pri" id="save">Opslaan</button>
+<button id="clear">Plek leegmaken</button>
+</div>
+<p class="sub">Een nieuwe naam is na een herstart ook in Home Assistant en Apple Home te zien.</p>
+</div>
+
+<div class="card">
+<h2>Systeem</h2>
+<div class="row" style="margin-top:8px">
+<button id="reboot">Herstarten</button>
+<button id="token">Token wijzigen</button>
+</div>
+</div>
+</main>
+
+<script>
+const $ = s => document.querySelector(s);
+let token = localStorage.getItem('octoToken') || '';
+let state = null;
+
+function askToken() {
+  const t = prompt('Token (OCTO_HTTP_TOKEN uit secrets.h)', token);
+  if (t !== null) { token = t.trim(); localStorage.setItem('octoToken', token); }
+}
+
+async function cmd(line) {
+  const r = await fetch('/cmd', {method: 'POST', headers: {'X-Octo-Token': token}, body: line});
+  const text = await r.text();
+  if (r.status === 401) { askToken(); throw new Error('token geweigerd'); }
+  return text;
+}
+
+async function run(line) {
+  try { $('#msg').textContent = (await cmd(line)).trim(); refresh(); }
+  catch (e) { $('#msg').textContent = 'Fout: ' + e.message; }
+}
+
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function bedCard(b) {
+  if (!b.configured) return `<div class="card"><h2>Bed ${b.index + 1}</h2><p class="sub">Niet ingesteld.</p></div>`;
+  const ready = b.state === 'ready', i = b.index, dis = ready ? '' : 'disabled';
+  const cal = b.calibrating;
+  const motor = (part, label, travel) => `
+    <div><h3>${label}</h3>
+    <div class="row">
+      <button ${dis} onclick="run('move ${i} ${part} up 2')">▲</button>
+      <button ${dis} onclick="run('move ${i} ${part} down 2')">▼</button>
+      <label>Looptijd (s)<input type="number" step="0.1" min="5" max="120" value="${travel}" id="t${i}${part}"></label>
+      <button onclick="run('travel ${i} ${part} ' + $('#t${i}${part}').value)">Bewaar</button>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button ${dis || (cal ? 'disabled' : '')} onclick="run('move ${i} ${part} down ' + (Math.min(${travel}, 120) + 5))">1. Helemaal omlaag</button>
+      <button ${dis || (cal ? 'disabled' : '')} onclick="run('calibrate ${i} ${part}')">2. Start meting</button>
+      <button class="pri" ${cal === part ? '' : 'disabled'} onclick="run('calibrate ${i} stop')">3. Bovenaan: stop</button>
+    </div></div>`;
+  return `<div class="card">
+    <div class="head"><h2><span class="dot ${ready ? 'ok' : ''}"></span>${esc(b.name)}</h2>
+    <span class="sub">${esc(b.mac)} · ${esc(b.state)}${ready ? ' · ' + b.rssi + ' dBm' : ''} · onderbrekingen ${b.drops}</span></div>
+    ${cal ? `<p><b>Meting ${cal === 'head' ? 'hoofd' : 'benen'}: ${b.calibrate_elapsed.toFixed(1)} s</b> — druk op stop als het bovenaan is.</p>` : ''}
+    <div class="row" style="margin-top:8px">
+      <button ${dis} onclick="run('stop ${i}')">■ Stop</button>
+      <button ${dis} onclick="run('light ${i} on')">Licht aan</button>
+      <button ${dis} onclick="run('light ${i} off')">Licht uit</button>
+    </div>
+    ${motor('head', 'Hoofd', b.head_travel)}
+    ${motor('legs', 'Benen', b.legs_travel)}
+    <ol class="steps"><li>Leg het onderdeel plat (stap 1).</li><li>Start de meting: het gaat omhoog.</li><li>Druk op stop zodra het helemaal bovenaan is; de tijd wordt de looptijd.</li></ol>
+  </div>`;
+}
+
+function fillMacs() {
+  const sel = $('#mac'), keep = sel.value;
+  const octo = state.scan.filter(s => s.octo || s.name === 'RC2');
+  const opts = octo.map(s => `<option value="${s.address}">${esc(s.name || '?')} ${s.address} (${s.rssi} dBm)</option>`);
+  for (const b of state.beds) if (b.configured && !octo.some(s => s.address === b.mac))
+    opts.push(`<option value="${b.mac}">${esc(b.name)} ${b.mac}</option>`);
+  sel.innerHTML = opts.join('') || '<option value="">geen Octo-bed gevonden</option>';
+  if ([...sel.options].some(o => o.value === keep)) sel.value = keep;
+}
+
+async function refresh() {
+  try {
+    state = JSON.parse(await cmd('json'));
+    $('#sys').textContent = `Uptime ${Math.floor(state.uptime / 60)} min · vrij geheugen ${Math.round(state.heap / 1024)} KB`;
+    // Don't redraw while a travel time is being typed
+    if (!$('#beds').contains(document.activeElement)) $('#beds').innerHTML = state.beds.map(bedCard).join('');
+    fillMacs();
+  } catch (e) { $('#sys').textContent = 'Geen verbinding: ' + e.message; }
+}
+
+$('#save').onclick = () => {
+  const pin = $('#pin').value.trim(), name = $('#name').value.trim(), mac = $('#mac').value;
+  if (!/^\d{4}$/.test(pin)) { $('#msg').textContent = 'De PIN heeft 4 cijfers.'; return; }
+  if (!mac) { $('#msg').textContent = 'Kies een bed.'; return; }
+  run(`bed set ${$('#slot').value} ${mac} ${pin} ${name}`);
+  $('#pin').value = '';
+};
+$('#clear').onclick = () => { if (confirm('Deze plek leegmaken?')) run(`bed clear ${$('#slot').value}`); };
+$('#reboot').onclick = () => { if (confirm('Herstarten?')) run('reboot'); };
+$('#token').onclick = () => { askToken(); refresh(); };
+
+if (!token) askToken();
+refresh();
+setInterval(() => { if (!document.hidden) refresh(); }, 2000);
+</script>
+</body>
+</html>

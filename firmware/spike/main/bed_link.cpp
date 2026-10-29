@@ -34,6 +34,8 @@ constexpr int64_t PIN_VERIFY_TIMEOUT_US = 8 * 1000000LL;
 constexpr int64_t PIN_REJECTED_BACKOFF_US = 60 * 1000000LL;
 constexpr int64_t CONNECT_SETTLE_US = 1 * 1000000LL;
 constexpr int32_t CONNECT_TIMEOUT_MS = 15000;
+// Backstop for a connect whose timeout event never arrives
+constexpr int64_t CONNECT_STUCK_US = (CONNECT_TIMEOUT_MS + 5000) * 1000LL;
 constexpr int64_t RECONNECT_DELAYS_US[] = {2000000, 5000000, 10000000, 20000000, 30000000, 60000000};
 constexpr uint16_t NO_CONN = 0xFFFF;
 constexpr int SCAN_CACHE_SIZE = 16;
@@ -74,6 +76,7 @@ struct Bed {
     bool write_no_rsp = true;
     int failures = 0;
     int64_t next_attempt_us = 0;
+    int64_t connect_started_us = 0;
     int64_t auth_started_us = 0;
     int64_t last_ack_us = 0;
     int64_t connected_since_us = 0;
@@ -384,7 +387,7 @@ void ensure_scanning() {
 // ------------------------------------------------------------------ GATT setup chain
 
 void gatt_failed(Bed& bed, const char* step, int status) {
-    ESP_LOGW(TAG, "Bed %d: %s failed (status %d)", index_of(&bed), step, status);
+    log_event("bed %d %s failed (status %d)", index_of(&bed), step, status);
     terminate(bed, step);
 }
 
@@ -587,10 +590,13 @@ int gap_event(ble_gap_event* event, void* arg) {
             bed.conn = event->connect.conn_handle;
             bed.state = State::Discovering;
             bed.svc_start = bed.svc_end = bed.chr_val = bed.chr_end = bed.cccd = 0;
-            ESP_LOGI(TAG, "Bed %d: connected, discovering", index_of(&bed));
+            log_event("bed %d link up, discovering", index_of(&bed));
             int rc = ble_gattc_exchange_mtu(bed.conn, on_mtu, nullptr);
             if (rc != 0) {
-                gatt_failed(bed, "MTU exchange", rc);
+                // Not needed for our packets: go straight to service discovery
+                log_event("bed %d MTU exchange not started (rc %d), continuing", index_of(&bed), rc);
+                ble_gatt_error no_error = {};
+                on_mtu(bed.conn, &no_error, BLE_ATT_MTU_DFLT, nullptr);
             }
             return 0;
         }
@@ -649,6 +655,12 @@ void manager_tick(ble_npl_event*) {
             terminate(bed, "no answer to the PIN");
         } else if (bed.state == State::Ready && now - bed.last_ack_us > LIVENESS_TIMEOUT_US) {
             terminate(bed, "keep-alive not acknowledged");
+        } else if (bed.state == State::Connecting && now - bed.connect_started_us > CONNECT_STUCK_US) {
+            log_event("bed %d connect never completed, cancelling", index_of(&bed));
+            ble_gap_conn_cancel();
+            bed.state = State::Idle;
+            connect_failed(bed);
+            release_connect_gate();
         }
     }
     if (synced && !connect_in_progress && now >= next_connect_allowed_us) {
@@ -669,9 +681,9 @@ void manager_tick(ble_npl_event*) {
                 connect_failed(bed);
                 continue;
             }
-            ESP_LOGI(TAG, "Bed %d '%s': connecting to %s (rssi %d)", i, bed.name, addr_string(bed.addr).c_str(),
-                     bed.rssi);
+            log_event("bed %d connecting (rssi %d)", i, bed.rssi);
             bed.state = State::Connecting;
+            bed.connect_started_us = now;
             connect_in_progress = true;
             break;
         }

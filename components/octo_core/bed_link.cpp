@@ -6,6 +6,7 @@
 #include <cstring>
 
 #include "esp_heap_caps.h"
+#include "esp_bt.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
@@ -770,6 +771,8 @@ void run_request(ble_npl_event* event) {
 
 void start() {
     store_load();
+    // BLE only: give the classic Bluetooth controller memory back to the heap
+    esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);
     ESP_ERROR_CHECK(nimble_port_init());
     ble_hs_cfg.sync_cb = on_sync;
     ble_hs_cfg.reset_cb = on_reset;
@@ -798,6 +801,17 @@ void run_in_host(const std::function<void()>& fn) {
     xSemaphoreTake(request.done, portMAX_DELAY);
     ble_npl_event_deinit(&request.event);  // return the pool block
     vSemaphoreDelete(request.done);
+}
+
+Info info(int index) {
+    Info result;
+    if (index >= 0 && index < MAX_BEDS) {
+        const Bed& bed = beds[index];
+        result.configured = bed.configured;
+        result.ready = bed.state == State::Ready;
+        result.name = bed.name;
+    }
+    return result;
 }
 
 bool configure(int index, const uint8_t mac[6], const std::string& pin, const std::string& name) {

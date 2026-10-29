@@ -17,5 +17,8 @@ secrets.yaml
 .DS_Store
 .vscode/
 
-# Wi-Fi credentials and HTTP token for the spike
-firmware/spike/main/secrets.h
+# Wi-Fi credentials and HTTP token (the bridge links to the spike's file)
+firmware/*/main/secrets.h
+
+# Build output captured to a file
+*.log

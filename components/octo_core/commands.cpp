@@ -13,6 +13,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "net.h"
+#include "nvs.h"
 
 namespace {
 
@@ -28,8 +29,18 @@ const char* HELP =
     "stop <0|1>                              stop the motors\n"
     "light <0|1> <on|off>                    under-bed light\n"
     "system                                  firmware slots, reset reason, network\n"
-    "revert                                  boot the other firmware slot (e.g. ESPHome)\n"
+    "revert                                  boot the other firmware slot\n"
     "reboot                                  restart\n";
+
+struct ExtraCommand {
+    const char* name;
+    const char* help_line;
+    CommandHandler handler;
+};
+
+constexpr int MAX_EXTRA_COMMANDS = 4;
+ExtraCommand extra_commands[MAX_EXTRA_COMMANDS];
+int extra_count = 0;
 
 bool parse_index(const std::string& text, int& index) {
     char* end = nullptr;
@@ -126,6 +137,16 @@ void restart_soon(void*) {
     esp_restart();
 }
 
+std::string nvs_text() {
+    nvs_stats_t stats = {};
+    if (nvs_get_stats(nullptr, &stats) != ESP_OK) {
+        return "nvs: unavailable\n";
+    }
+    return "nvs: " + std::to_string(stats.used_entries) + " of " + std::to_string(stats.total_entries) +
+           " entries used, " + std::to_string(stats.free_entries) + " free, " +
+           std::to_string(stats.namespace_count) + " namespaces\n";
+}
+
 std::string cmd_revert() {
     bed_link::run_in_host([] { bed_link::stop_all(); });
     std::string why;
@@ -138,6 +159,12 @@ std::string cmd_revert() {
 
 }  // namespace
 
+void add_command(const char* name, const char* help_line, CommandHandler handler) {
+    if (extra_count < MAX_EXTRA_COMMANDS) {
+        extra_commands[extra_count++] = {name, help_line, handler};
+    }
+}
+
 std::string run_command(const std::string& line) {
     Args args;
     std::istringstream stream(line);
@@ -145,7 +172,11 @@ std::string run_command(const std::string& line) {
         args.push_back(word);
     }
     if (args.empty() || args[0] == "help") {
-        return HELP;
+        std::string out = HELP;
+        for (int i = 0; i < extra_count; ++i) {
+            out += extra_commands[i].help_line;
+        }
+        return out;
     }
     const std::string& cmd = args[0];
     if (cmd == "status") {
@@ -167,12 +198,17 @@ std::string run_command(const std::string& line) {
     if (cmd == "move") return cmd_move(args);
     if (cmd == "stop") return cmd_stop(args);
     if (cmd == "light") return cmd_light(args);
-    if (cmd == "system") return boot_guard::describe() + net::describe();
+    if (cmd == "system") return boot_guard::describe() + nvs_text() + net::describe();
     if (cmd == "revert") return cmd_revert();
     if (cmd == "reboot") {
         bed_link::run_in_host([] { bed_link::stop_all(); });
         xTaskCreate(restart_soon, "restart", 2048, nullptr, 5, nullptr);
         return "rebooting\n";
+    }
+    for (int i = 0; i < extra_count; ++i) {
+        if (cmd == extra_commands[i].name) {
+            return extra_commands[i].handler(args);
+        }
     }
     return "unknown command, try 'help'\n";
 }
@@ -203,6 +239,12 @@ void console_start() {
                              "revert", "reboot"}) {
         esp_console_cmd_t cmd = {};
         cmd.command = name;
+        cmd.func = console_dispatch;
+        ESP_ERROR_CHECK(esp_console_cmd_register(&cmd));
+    }
+    for (int i = 0; i < extra_count; ++i) {
+        esp_console_cmd_t cmd = {};
+        cmd.command = extra_commands[i].name;
         cmd.func = console_dispatch;
         ESP_ERROR_CHECK(esp_console_cmd_register(&cmd));
     }

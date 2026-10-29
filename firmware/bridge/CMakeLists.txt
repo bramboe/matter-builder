@@ -14,6 +14,8 @@ set(EXTRA_COMPONENT_DIRS
     "${MATTER_SDK_PATH}/config/esp32/components"
     "${ESP_MATTER_PATH}/components")
 
+# Shown to controllers as the software version
+set(PROJECT_VER "0.1.0")
 project(octo_bridge)
 
 idf_build_set_property(CXX_COMPILE_OPTIONS "-std=gnu++17;-Os;-DCHIP_HAVE_CONFIG_H;-Wno-overloaded-virtual" APPEND)

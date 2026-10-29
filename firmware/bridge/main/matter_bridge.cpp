@@ -9,7 +9,10 @@
 #include <app/server/CommissioningWindowManager.h>
 #include <app/server/Server.h>
 #include <esp_matter.h>
+#include <esp_matter_providers.h>
 #include <platform/CHIPDeviceLayer.h>
+#include <platform/ESP32/ESP32Config.h>
+#include <platform/internal/GenericDeviceInstanceInfoProvider.h>
 #include <setup_payload/OnboardingCodesUtil.h>
 
 #include "bed_link.h"
@@ -41,6 +44,33 @@ constexpr int REACHABLE_EVERY_TICKS = 4;  // every 2 s
 constexpr uint16_t REPORT_STEP = 100;     // report position changes of 1 %
 
 const char* NVS_NAMESPACE = "octo_pos";
+
+// What controllers show as manufacturer and model. Vendor and product ID
+// stay the Matter test IDs (0xFFF1/0x8000) that the test certificates need.
+constexpr const char* VENDOR_NAME = "octo-matter";
+constexpr const char* PRODUCT_NAME = "Octo Bed Bridge";
+constexpr const char* HARDWARE = "ESP32";
+constexpr const char* BED_VENDOR = "Octo";
+constexpr const char* BED_PRODUCT = "Octo bed";
+
+class DeviceInfo : public chip::DeviceLayer::Internal::GenericDeviceInstanceInfoProvider<
+                       chip::DeviceLayer::Internal::ESP32Config> {
+public:
+    DeviceInfo() : GenericDeviceInstanceInfoProvider(chip::DeviceLayer::ConfigurationManagerImpl::GetDefaultInstance()) {}
+
+    CHIP_ERROR GetVendorName(char* buf, size_t size) override { return copy(VENDOR_NAME, buf, size); }
+    CHIP_ERROR GetProductName(char* buf, size_t size) override { return copy(PRODUCT_NAME, buf, size); }
+    CHIP_ERROR GetHardwareVersionString(char* buf, size_t size) override { return copy(HARDWARE, buf, size); }
+
+private:
+    static CHIP_ERROR copy(const char* text, char* buf, size_t size) {
+        VerifyOrReturnError(std::strlen(text) < size, CHIP_ERROR_BUFFER_TOO_SMALL);
+        std::strcpy(buf, text);
+        return CHIP_NO_ERROR;
+    }
+};
+
+DeviceInfo device_info;
 
 bool is_end(uint16_t position) {
     return position == FLAT || position == RAISED;
@@ -287,7 +317,10 @@ endpoint_t* add_bed_device(node_t* node, endpoint_t* aggregator, char* label) {
     config.bridged_device_basic_information.reachable = false;
     endpoint_t* ep = endpoint::bridged_node::create(node, &config, ENDPOINT_FLAG_BRIDGE, nullptr);
     cluster_t* info = cluster::get(ep, BridgedDeviceBasicInformation::Id);
-    cluster::bridged_device_basic_information::attribute::create_node_label(info, label, std::strlen(label));
+    namespace bdbi = cluster::bridged_device_basic_information::attribute;
+    bdbi::create_node_label(info, label, std::strlen(label));
+    bdbi::create_vendor_name(info, const_cast<char*>(BED_VENDOR), std::strlen(BED_VENDOR));
+    bdbi::create_product_name(info, const_cast<char*>(BED_PRODUCT), std::strlen(BED_PRODUCT));
     endpoint::set_parent_endpoint(ep, aggregator);
     return ep;
 }
@@ -300,9 +333,6 @@ void add_cover(node_t* node, endpoint_t* device, Cover& cover) {
     config.window_covering.features.position_aware_lift.current_position_lift_percent_100ths = cover.position;
     config.window_covering.features.position_aware_lift.target_position_lift_percent_100ths = cover.position;
     config.window_covering.delegate = &cover;
-    // Without "operational" controllers report a configuration problem
-    config.window_covering.config_status = static_cast<uint8_t>(
-        chip::to_underlying(WC::ConfigStatus::kOperational) | chip::to_underlying(WC::ConfigStatus::kLiftPositionAware));
     endpoint_t* ep = endpoint::window_covering::create(node, &config, ENDPOINT_FLAG_NONE, nullptr);
     endpoint::set_parent_endpoint(ep, device);
     cover.endpoint_id = endpoint::get_id(ep);
@@ -346,15 +376,30 @@ void start() {
         bed.light_endpoint = add_light(node, device);
     }
 
+    esp_matter::set_custom_device_instance_info_provider(&device_info);
     ESP_ERROR_CHECK(esp_matter::start(on_event));
 
     (void) chip::DeviceLayer::PlatformMgr().ScheduleWork([](intptr_t) {
-        // NodeLabel is stored in NVS and restored at start, which would keep an
-        // old name; the bed settings are the source of the name.
+        // NodeLabel and ConfigStatus are stored in NVS and restored at start,
+        // which would keep old values; set them from the bed settings.
+        // Without "operational" controllers report a configuration problem.
+        const chip::BitMask<WC::ConfigStatus> status(WC::ConfigStatus::kOperational,
+                                                     WC::ConfigStatus::kLiftPositionAware);
+        // The root NodeLabel is what Apple Home names the bridge ("Accessory" when empty),
+        // and it may have been renamed by a controller, so only fill it when empty.
+        esp_matter_attr_val_t root_label = esp_matter_invalid(nullptr);
+        attribute_t* node_label = attribute::get(0, BasicInformation::Id, BasicInformation::Attributes::NodeLabel::Id);
+        if (node_label != nullptr && attribute::get_val(node_label, &root_label) == ESP_OK &&
+            root_label.val.a.s == 0) {
+            esp_matter_attr_val_t name = esp_matter_char_str(const_cast<char*>(PRODUCT_NAME), std::strlen(PRODUCT_NAME));
+            attribute::update(0, BasicInformation::Id, BasicInformation::Attributes::NodeLabel::Id, &name);
+        }
         for (auto& bed : beds) {
             esp_matter_attr_val_t label = esp_matter_char_str(bed.label, std::strlen(bed.label));
             attribute::update(bed.device_endpoint, BridgedDeviceBasicInformation::Id,
                               BridgedDeviceBasicInformation::Attributes::NodeLabel::Id, &label);
+            WC::ConfigStatusSet(bed.head.endpoint_id, status);
+            WC::ConfigStatusSet(bed.feet.endpoint_id, status);
         }
         (void) chip::DeviceLayer::SystemLayer().StartTimer(chip::System::Clock::Milliseconds32(TICK_MS), tick,
                                                            nullptr);
@@ -411,12 +456,13 @@ std::string describe() {
     std::string beds_text;
     for (int i = 0; i < bed_link::MAX_BEDS; ++i) {
         const BedEndpoints& bed = beds[i];
-        char line[200];
+        char line[240];
         std::snprintf(line, sizeof(line),
-                      "bed %d '%s': endpoints device=%u head=%u legs=%u light=%u, %s, head %u%% raised, legs %u%% raised\n",
+                      "bed %d '%s': endpoints device=%u head=%u legs=%u light=%u, %s, head %u%% raised, legs %u%% raised, "
+                      "config status 0x%02x\n",
                       i, bed.label, bed.device_endpoint, bed.head.endpoint_id, bed.feet.endpoint_id, bed.light_endpoint,
                       bed.reachable ? "reachable" : "unreachable", (FLAT - bed.head.position) / 100,
-                      (FLAT - bed.feet.position) / 100);
+                      (FLAT - bed.feet.position) / 100, WC::ConfigStatusGet(bed.head.endpoint_id).Raw());
         beds_text += line;
     }
     chip::DeviceLayer::PlatformMgr().UnlockChipStack();

@@ -115,14 +115,14 @@ private:
     }
 };
 
+// One bridged device per bed; head, legs and light are its parts.
 struct BedEndpoints {
+    uint16_t device_endpoint = 0;  // carries the name and Reachable
     Cover head;
     Cover feet;
     uint16_t light_endpoint = 0;
     bool reachable = false;
-    char label_head[40] = {};
-    char label_feet[40] = {};
-    char label_light[40] = {};
+    char label[32] = {};
 };
 
 BedEndpoints beds[bed_link::MAX_BEDS];
@@ -201,11 +201,9 @@ void update_reachable() {
             continue;
         }
         bed.reachable = info[i].ready;
-        for (uint16_t endpoint : {bed.head.endpoint_id, bed.feet.endpoint_id, bed.light_endpoint}) {
-            esp_matter_attr_val_t value = esp_matter_bool(bed.reachable);
-            attribute::update(endpoint, BridgedDeviceBasicInformation::Id,
-                              BridgedDeviceBasicInformation::Attributes::Reachable::Id, &value);
-        }
+        esp_matter_attr_val_t value = esp_matter_bool(bed.reachable);
+        attribute::update(bed.device_endpoint, BridgedDeviceBasicInformation::Id,
+                          BridgedDeviceBasicInformation::Attributes::Reachable::Id, &value);
         ESP_LOGI(TAG, "Bed %d %s", i, bed.reachable ? "reachable" : "unreachable");
     }
 }
@@ -284,21 +282,17 @@ void on_event(const ChipDeviceEvent* event, intptr_t) {
     }
 }
 
-endpoint_t* bridged(node_t* node, endpoint_t* aggregator, char* label) {
+endpoint_t* add_bed_device(node_t* node, endpoint_t* aggregator, char* label) {
     endpoint::bridged_node::config_t config;
     config.bridged_device_basic_information.reachable = false;
     endpoint_t* ep = endpoint::bridged_node::create(node, &config, ENDPOINT_FLAG_BRIDGE, nullptr);
-    if (ep == nullptr) {
-        return nullptr;
-    }
     cluster_t* info = cluster::get(ep, BridgedDeviceBasicInformation::Id);
     cluster::bridged_device_basic_information::attribute::create_node_label(info, label, std::strlen(label));
     endpoint::set_parent_endpoint(ep, aggregator);
     return ep;
 }
 
-void add_cover(node_t* node, endpoint_t* aggregator, Cover& cover, char* label) {
-    endpoint_t* ep = bridged(node, aggregator, label);
+void add_cover(node_t* node, endpoint_t* device, Cover& cover) {
     endpoint::window_covering::config_t config;
     config.window_covering.feature_flags =
         cluster::window_covering::feature::lift::get_id() |
@@ -306,15 +300,19 @@ void add_cover(node_t* node, endpoint_t* aggregator, Cover& cover, char* label) 
     config.window_covering.features.position_aware_lift.current_position_lift_percent_100ths = cover.position;
     config.window_covering.features.position_aware_lift.target_position_lift_percent_100ths = cover.position;
     config.window_covering.delegate = &cover;
-    endpoint::window_covering::add(ep, &config);
+    // Without "operational" controllers report a configuration problem
+    config.window_covering.config_status = static_cast<uint8_t>(
+        chip::to_underlying(WC::ConfigStatus::kOperational) | chip::to_underlying(WC::ConfigStatus::kLiftPositionAware));
+    endpoint_t* ep = endpoint::window_covering::create(node, &config, ENDPOINT_FLAG_NONE, nullptr);
+    endpoint::set_parent_endpoint(ep, device);
     cover.endpoint_id = endpoint::get_id(ep);
     cover.SetEndpoint(cover.endpoint_id);
 }
 
-uint16_t add_light(node_t* node, endpoint_t* aggregator, char* label) {
-    endpoint_t* ep = bridged(node, aggregator, label);
+uint16_t add_light(node_t* node, endpoint_t* device) {
     endpoint::on_off_light::config_t config;
-    endpoint::on_off_light::add(ep, &config);
+    endpoint_t* ep = endpoint::on_off_light::create(node, &config, ENDPOINT_FLAG_NONE, nullptr);
+    endpoint::set_parent_endpoint(ep, device);
     return endpoint::get_id(ep);
 }
 
@@ -331,9 +329,7 @@ void start() {
         bed_link::Info info;
         bed_link::run_in_host([&] { info = bed_link::info(i); });
         const std::string name = info.configured && !info.name.empty() ? info.name : "Bed " + std::to_string(i + 1);
-        std::snprintf(bed.label_head, sizeof(bed.label_head), "%s hoofd", name.c_str());
-        std::snprintf(bed.label_feet, sizeof(bed.label_feet), "%s voeten", name.c_str());
-        std::snprintf(bed.label_light, sizeof(bed.label_light), "%s licht", name.c_str());
+        std::snprintf(bed.label, sizeof(bed.label), "%s", name.c_str());
 
         bed.head.bed = bed.feet.bed = i;
         bed.head.part = bed_link::Part::Head;
@@ -343,9 +339,11 @@ void start() {
         bed.head.load();
         bed.feet.load();
 
-        add_cover(node, aggregator, bed.head, bed.label_head);
-        add_cover(node, aggregator, bed.feet, bed.label_feet);
-        bed.light_endpoint = add_light(node, aggregator, bed.label_light);
+        endpoint_t* device = add_bed_device(node, aggregator, bed.label);
+        bed.device_endpoint = endpoint::get_id(device);
+        add_cover(node, device, bed.head);
+        add_cover(node, device, bed.feet);
+        bed.light_endpoint = add_light(node, device);
     }
 
     ESP_ERROR_CHECK(esp_matter::start(on_event));
@@ -354,6 +352,17 @@ void start() {
         (void) chip::DeviceLayer::SystemLayer().StartTimer(chip::System::Clock::Milliseconds32(TICK_MS), tick,
                                                            nullptr);
     });
+}
+
+std::string open_commissioning_window() {
+    chip::DeviceLayer::PlatformMgr().LockChipStack();
+    auto& manager = chip::Server::GetInstance().GetCommissioningWindowManager();
+    const CHIP_ERROR err = manager.IsCommissioningWindowOpen()
+                               ? CHIP_NO_ERROR
+                               : manager.OpenBasicCommissioningWindow(chip::System::Clock::Seconds32(300));
+    chip::DeviceLayer::PlatformMgr().UnlockChipStack();
+    return err == CHIP_NO_ERROR ? "commissioning window open for 5 minutes\n"
+                                : std::string("could not open the commissioning window: ") + err.AsString() + "\n";
 }
 
 std::string describe() {
@@ -372,10 +381,10 @@ std::string describe() {
     std::string beds_text;
     for (int i = 0; i < bed_link::MAX_BEDS; ++i) {
         const BedEndpoints& bed = beds[i];
-        char line[160];
+        char line[200];
         std::snprintf(line, sizeof(line),
-                      "bed %d: endpoints head=%u feet=%u light=%u, %s, head %u%% raised, feet %u%% raised\n", i,
-                      bed.head.endpoint_id, bed.feet.endpoint_id, bed.light_endpoint,
+                      "bed %d '%s': endpoints device=%u head=%u legs=%u light=%u, %s, head %u%% raised, legs %u%% raised\n",
+                      i, bed.label, bed.device_endpoint, bed.head.endpoint_id, bed.feet.endpoint_id, bed.light_endpoint,
                       bed.reachable ? "reachable" : "unreachable", (FLAT - bed.head.position) / 100,
                       (FLAT - bed.feet.position) / 100);
         beds_text += line;

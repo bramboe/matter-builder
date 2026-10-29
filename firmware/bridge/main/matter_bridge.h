@@ -1,11 +1,14 @@
-// Presents the beds as standard Matter devices behind an Aggregator.
+// Presents the beds as standard Matter devices behind an Aggregator. Each
+// bed is one bridged device (name and Reachable) whose parts are the head and
+// legs (Window Covering) and the light (On/Off Light), so Apple Home and Home
+// Assistant show one device per bed.
 //
 // Endpoints are created before the Matter stack starts, always in the same
-// order, so their IDs never change (Home Assistant keys its entities on them):
+// order, so their IDs never change (controllers key their entities on them):
 //
-//   0  root node             1  aggregator
-//   2  bed 0 head (cover)    3  bed 0 feet (cover)    4  bed 0 light
-//   5  bed 1 head (cover)    6  bed 1 feet (cover)    7  bed 1 light
+//   0  root node   1  aggregator
+//   2  bed 0       3  head   4  legs   5  light
+//   6  bed 1       7  head   8  legs   9  light
 //
 // Both bed slots always exist; an unconfigured or disconnected bed shows as
 // not reachable.
@@ -26,5 +29,8 @@ void start();
 
 // Text for the "matter" console command: pairing codes, fabrics, endpoints.
 std::string describe();
+
+// "matter open": let another controller pair for 5 minutes (multi-admin)
+std::string open_commissioning_window();
 
 }  // namespace matter_bridge

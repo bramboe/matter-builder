@@ -349,6 +349,13 @@ void start() {
     ESP_ERROR_CHECK(esp_matter::start(on_event));
 
     (void) chip::DeviceLayer::PlatformMgr().ScheduleWork([](intptr_t) {
+        // NodeLabel is stored in NVS and restored at start, which would keep an
+        // old name; the bed settings are the source of the name.
+        for (auto& bed : beds) {
+            esp_matter_attr_val_t label = esp_matter_char_str(bed.label, std::strlen(bed.label));
+            attribute::update(bed.device_endpoint, BridgedDeviceBasicInformation::Id,
+                              BridgedDeviceBasicInformation::Attributes::NodeLabel::Id, &label);
+        }
         (void) chip::DeviceLayer::SystemLayer().StartTimer(chip::System::Clock::Milliseconds32(TICK_MS), tick,
                                                            nullptr);
     });

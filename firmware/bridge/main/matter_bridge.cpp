@@ -9,6 +9,7 @@
 #include <app/clusters/mode-select-server/supported-modes-manager.h>
 #include <app/clusters/operational-state-server/operational-state-server.h>
 #include <app/clusters/window-covering-server/window-covering-server.h>
+#include <app/reporting/reporting.h>
 #include <app/server/CommissioningWindowManager.h>
 #include <app/server/Server.h>
 #include <esp_matter.h>
@@ -459,6 +460,17 @@ void update_from_links() {
         bed.head.follow(info[i].head, info[i].head_travel_s);
         bed.feet.follow(info[i].feet, info[i].feet_travel_s);
         bed.stop.set_running(info[i].moving);
+        // A bed added or renamed on the settings page: new name right away
+        const std::string name = info[i].configured && !info[i].name.empty() ? info[i].name : "Bed " + std::to_string(i + 1);
+        if (name != bed.label) {
+            std::snprintf(bed.label, sizeof(bed.label), "%s", name.c_str());
+            esp_matter_attr_val_t label = esp_matter_char_str(bed.label, std::strlen(bed.label));
+            attribute::update(bed.device_endpoint, BridgedDeviceBasicInformation::Id,
+                              BridgedDeviceBasicInformation::Attributes::NodeLabel::Id, &label);
+            build_modes(1 - i);  // the other bed's "Match <name>"
+            MatterReportingAttributeChangeCallback(beds[1 - i].device_endpoint, ModeSelect::Id,
+                                                   ModeSelect::Attributes::SupportedModes::Id);
+        }
         if (info[i].ready == bed.reachable) {
             continue;
         }

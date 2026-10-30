@@ -63,6 +63,7 @@ details[open] summary::after{transform:rotate(-135deg)}
 .qrwrap svg{width:148px;height:148px;border-radius:8px}
 .code{font-size:20px;letter-spacing:.04em;margin:2px 0 6px}
 pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--mute);margin:4px 0 8px}
+.head-actions{margin-left:auto;display:flex}
 .measure{margin:8px 0 0;font-weight:500;color:var(--primary)}
 .menu{position:absolute;right:8px;top:48px;min-width:200px;background:var(--card);border-radius:4px;box-shadow:0 4px 16px rgba(0,0,0,.25);padding:8px 0;display:none}
 .menu.open{display:block}
@@ -78,6 +79,7 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
 <symbol id="i-stop" viewBox="0 0 24 24"><path d="M18,18H6V6H18V18Z"/></symbol>
 <symbol id="i-bed" viewBox="0 0 24 24"><path d="M19,7H11V14H3V5H1V20H3V17H21V20H23V11A4,4 0 0,0 19,7M7,13A3,3 0 0,0 10,10A3,3 0 0,0 7,7A3,3 0 0,0 4,10A3,3 0 0,0 7,13Z"/></symbol>
 <symbol id="i-light" viewBox="0 0 24 24"><path d="M12,2A7,7 0 0,0 5,9C5,11.38 6.19,13.47 8,14.74V17A1,1 0 0,0 9,18H15A1,1 0 0,0 16,17V14.74C17.81,13.47 19,11.38 19,9A7,7 0 0,0 12,2M9,21A1,1 0 0,0 10,22H14A1,1 0 0,0 15,21V20H9V21Z"/></symbol>
+<symbol id="i-bt" viewBox="0 0 24 24"><path d="M14.88,16.29L13,18.17V14.41M13,5.83L14.88,7.71L13,9.58M17.71,7.71L12,2H11V9.58L6.41,5L5,6.41L10.59,12L5,17.58L6.41,19L11,14.41V22H12L17.71,16.29L13.41,12L17.71,7.71Z"/></symbol>
 <symbol id="i-menu" viewBox="0 0 24 24"><path d="M12,16A2,2 0 0,1 14,18A2,2 0 0,1 12,20A2,2 0 0,1 10,18A2,2 0 0,1 12,16M12,10A2,2 0 0,1 14,12A2,2 0 0,1 12,14A2,2 0 0,1 10,12A2,2 0 0,1 12,10M12,4A2,2 0 0,1 14,6A2,2 0 0,1 12,8A2,2 0 0,1 10,6A2,2 0 0,1 12,4Z"/></symbol>
 </svg>
 
@@ -91,23 +93,12 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
 </header>
 
 <main>
+<div id="discovered"></div>
 <div id="beds"></div>
 
 <div class="section">
   <div class="section-head"><h2>Instellingen</h2></div>
   <div class="grid">
-    <div class="card">
-      <h3>Bed instellen</h3>
-      <div class="sub">Zet de OCTO-app en andere bridges uit: een bed accepteert maar één verbinding. De PIN wordt alleen op de ESP opgeslagen.</div>
-      <div class="form">
-        <label class="field"><span>Plek</span><select id="slot"><option value="0">Bed 1</option><option value="1">Bed 2</option></select></label>
-        <label class="field"><span>Bed (Bluetooth)</span><select id="mac"></select></label>
-        <label class="field"><span>PIN</span><input id="pin" type="password" inputmode="numeric" maxlength="4" autocomplete="off"></label>
-        <label class="field"><span>Naam</span><input id="name" maxlength="23" placeholder="bijv. Sam"></label>
-      </div>
-      <div class="sub">Een nieuwe naam is na een herstart ook in Home Assistant en Apple Home te zien.</div>
-      <div class="features"><button class="warn" id="clear">Plek leegmaken</button><button class="pri" id="save">Opslaan</button></div>
-    </div>
     <div class="card">
       <h3>Matter</h3>
       <div class="qrwrap"><div id="qr"></div>
@@ -237,30 +228,70 @@ function calibrationCard(b) {
 }
 
 function bedSection(b) {
-  if (!b.configured) {
-    return `<div class="section"><div class="section-head"><h2>Bed ${b.index + 1}</h2><span class="badge"><i></i>Niet ingesteld</span></div></div>`;
-  }
+  if (!b.configured) return '';
   const ready = b.state === 'ready';
   const p = presets && presets.beds[b.index];
   const status = ready ? `Verbonden · ${b.rssi} dBm` : b.state;
   return `<div class="section">
     <div class="section-head"><h2>${esc(b.name)}</h2>
       <span class="badge"><i class="${ready ? 'ok' : ''}"></i>${esc(status)}</span>
-      <span class="sub">${esc(b.mac)} · onderbrekingen ${b.drops}</span></div>
+      <span class="sub">${esc(b.mac)} · onderbrekingen ${b.drops}</span>
+      <span class="head-actions"><button class="text" onclick="renameBed(${b.index}, '${esc(b.name).replace(/'/g, '')}')">Naam wijzigen</button>
+        <button class="warn" onclick="removeBed(${b.index}, '${esc(b.name).replace(/'/g, '')}')">Verwijderen</button></span></div>
     <div class="grid">
       ${motorTile(b, 'head', 'Hoofd', p && p.head)}${motorTile(b, 'legs', 'Benen', p && p.legs)}${lightTile(b)}
       ${presetCard(b, p)}${calibrationCard(b)}
     </div></div>`;
 }
 
-function fillMacs() {
-  const sel = $('#mac'), keep = sel.value;
-  const octo = state.scan.filter(s => s.octo || s.name === 'RC2');
-  const opts = octo.map(s => `<option value="${s.address}">${esc(s.name || '?')} ${s.address} (${s.rssi} dBm)</option>`);
-  for (const b of state.beds) if (b.configured && !octo.some(s => s.address === b.mac))
-    opts.push(`<option value="${b.mac}">${esc(b.name)} ${b.mac}</option>`);
-  sel.innerHTML = opts.join('') || '<option value="">Geen Octo-bed gevonden</option>';
-  if ([...sel.options].some(o => o.value === keep)) sel.value = keep;
+// Discovery, as in Home Assistant: Octo beds seen over Bluetooth that are
+// not added yet, each with "Toevoegen". A bed takes the first free slot.
+let adding = null;  // address of the bed whose add form is open
+
+function discoveredSection() {
+  const added = state.beds.filter(b => b.configured).map(b => b.mac);
+  const found = state.scan.filter(s => (s.octo || s.name === 'RC2') && s.seen < 120 && !added.includes(s.address))
+    .sort((a, b) => b.rssi - a.rssi);
+  const free = state.beds.find(b => !b.configured);
+  if (!found.length) {
+    return added.length ? '' : `<div class="section"><div class="section-head"><h2>Ontdekt</h2></div>
+      <div class="card"><div class="sub">Zoeken naar Octo-bedden… Zet de OCTO-app en andere bridges uit: een bed
+      is alleen zichtbaar als niets anders ermee verbonden is.</div></div></div>`;
+  }
+  return `<div class="section"><div class="section-head"><h2>Ontdekt</h2></div><div class="grid">${found.map(s => {
+    const form = adding === s.address ? `
+      <div class="form">
+        <label class="field"><span>Naam</span><input id="addName" maxlength="23" placeholder="bijv. Sam"></label>
+        <label class="field"><span>PIN van het bed</span><input id="addPin" type="password" inputmode="numeric" maxlength="4" autocomplete="off"></label>
+      </div>
+      <div class="sub">De PIN wordt alleen op de ESP opgeslagen.</div>
+      <div class="features"><button onclick="adding = null; refresh()">Annuleren</button>
+        <button class="pri" onclick="addBed('${s.address}')">Toevoegen</button></div>` : `
+      <div class="features"><button class="pri" ${free ? '' : 'disabled title="Maximaal 2 bedden"'}
+        onclick="adding = '${s.address}'; refresh()">Toevoegen</button></div>`;
+    return `<div class="card"><div class="tile"><div class="icon">${icon('bt')}</div>
+      <div class="info"><div class="name">Octo-bed${s.name ? ' (' + esc(s.name) + ')' : ''}</div>
+      <div class="state">${s.address} · ${s.rssi} dBm</div></div></div>${form}</div>`;
+  }).join('')}</div>${free ? '' : '<div class="sub" style="margin:8px 4px">Maximaal 2 bedden: verwijder er eerst één.</div>'}</div>`;
+}
+
+async function addBed(mac) {
+  const name = $('#addName').value.trim(), pin = $('#addPin').value.trim();
+  const free = state.beds.find(b => !b.configured);
+  if (!name) { toast('Geef het bed een naam.'); return; }
+  if (!/^\d{4}$/.test(pin)) { toast('De PIN heeft 4 cijfers.'); return; }
+  if (!free) { toast('Maximaal 2 bedden.'); return; }
+  adding = null;
+  await run(`bed set ${free.index} ${mac} ${pin} ${name}`);
+}
+
+function renameBed(i, old) {
+  const name = prompt('Nieuwe naam', old);
+  if (name && name.trim() && name.trim() !== old) run(`bed name ${i} ${name.trim()}`);
+}
+
+function removeBed(i, name) {
+  if (confirm(`${name} verwijderen? De bridge verbreekt de verbinding en vergeet de PIN.`)) run(`bed clear ${i}`);
 }
 
 async function refresh() {
@@ -277,7 +308,9 @@ async function refresh() {
     const focus = document.activeElement;
     if (!$('#beds').contains(focus) || focus.tagName !== 'INPUT')
       $('#beds').innerHTML = state.beds.map(bedSection).join('');
-    fillMacs();
+    // Keep an open add form as it is while typing
+    if (!adding) $('#discovered').innerHTML = discoveredSection();
+    else if (!$('#addName')) $('#discovered').innerHTML = discoveredSection();
   } catch (e) { $('#sys').textContent = 'Geen verbinding: ' + e.message; }
 }
 
@@ -308,14 +341,6 @@ async function removeFabric(index, vendor) {
   loadMatter();
 }
 
-$('#save').onclick = () => {
-  const pin = $('#pin').value.trim(), name = $('#name').value.trim(), mac = $('#mac').value;
-  if (!/^\d{4}$/.test(pin)) { toast('De PIN heeft 4 cijfers.'); return; }
-  if (!mac) { toast('Kies een bed.'); return; }
-  run(`bed set ${$('#slot').value} ${mac} ${pin} ${name}`);
-  $('#pin').value = '';
-};
-$('#clear').onclick = () => { if (confirm('Deze plek leegmaken?')) run(`bed clear ${$('#slot').value}`); };
 $('#menuBtn').onclick = e => { e.stopPropagation(); $('#menu').classList.toggle('open'); };
 document.addEventListener('click', () => $('#menu').classList.remove('open'));
 $('#reboot').onclick = () => { if (confirm('Herstarten?')) run('reboot'); };

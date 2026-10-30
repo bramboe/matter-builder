@@ -24,6 +24,7 @@ const char* HELP =
     "events                                  recent connection events\n"
     "scan                                    nearby BLE devices with a name or the Octo service\n"
     "bed set <0|1> <MAC> <PIN> [name]        configure a bed (PIN is never shown)\n"
+    "bed name <0|1> <name>                   rename a bed\n"
     "bed clear <0|1>                         forget a bed\n"
     "move <0|1> <head|legs|both> <up|down> <seconds>\n"
     "stop <0|1>                              stop the motors\n"
@@ -67,6 +68,15 @@ bool parse_mac(const std::string& text, uint8_t mac[6]) {
     return true;
 }
 
+// The words from `first` on, joined with spaces
+std::string rest(const Args& args, size_t first) {
+    std::string text;
+    for (size_t i = first; i < args.size(); ++i) {
+        text += (i > first ? " " : "") + args[i];
+    }
+    return text;
+}
+
 std::string cmd_bed(const Args& args) {
     int index;
     if (args.size() >= 5 && args[1] == "set" && parse_index(args[2], index)) {
@@ -74,22 +84,25 @@ std::string cmd_bed(const Args& args) {
         if (!parse_mac(args[3], mac)) {
             return "MAC must look like AA:BB:CC:DD:EE:01\n";
         }
-        std::string name;  // the rest of the line, so names may contain spaces
-        for (size_t i = 5; i < args.size(); ++i) {
-            name += (i > 5 ? " " : "") + args[i];
-        }
+        std::string name = rest(args, 5);  // names may contain spaces
         if (name.empty()) {
-            name = "Bed " + std::to_string(index);
+            name = "Bed " + std::to_string(index + 1);
         }
         bool ok = false;
         bed_link::run_in_host([&] { ok = bed_link::configure(index, mac, args[4], name); });
         return ok ? "stored\n" : "PIN must be 4 digits\n";
     }
+    if (args.size() >= 4 && args[1] == "name" && parse_index(args[2], index)) {
+        bool ok = false;
+        const std::string name = rest(args, 3);
+        bed_link::run_in_host([&] { ok = bed_link::rename(index, name); });
+        return ok ? "renamed\n" : "no bed in that slot\n";
+    }
     if (args.size() == 3 && args[1] == "clear" && parse_index(args[2], index)) {
         bed_link::run_in_host([&] { bed_link::clear(index); });
         return "cleared\n";
     }
-    return "usage: bed set <0|1> <MAC> <PIN> [name] | bed clear <0|1>\n";
+    return "usage: bed set <0|1> <MAC> <PIN> [name] | bed name <0|1> <name> | bed clear <0|1>\n";
 }
 
 // "legs" and "feet" are the same motor

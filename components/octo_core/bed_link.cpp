@@ -933,6 +933,15 @@ bool configure(int index, const uint8_t mac[6], const std::string& pin, const st
     return true;
 }
 
+bool rename(int index, const std::string& name) {
+    if (index < 0 || index >= MAX_BEDS || !beds[index].configured || name.empty()) {
+        return false;
+    }
+    std::snprintf(beds[index].name, sizeof(beds[index].name), "%s", name.c_str());
+    store_save(index);
+    return true;
+}
+
 void clear(int index) {
     if (index < 0 || index >= MAX_BEDS) {
         return;

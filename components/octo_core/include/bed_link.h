@@ -56,6 +56,8 @@ void on_calibrated(CalibratedCallback callback);
 // The functions below must run in the host task (use run_in_host).
 Info info(int index);
 bool configure(int index, const uint8_t mac[6], const std::string& pin, const std::string& name);
+// A new name without reconnecting; the PIN stays.
+bool rename(int index, const std::string& name);
 void clear(int index);
 // Drives a motor (or both) for the given time and returns the id of the new
 // run, or 0 when the bed is not ready. The other motor's run continues: in

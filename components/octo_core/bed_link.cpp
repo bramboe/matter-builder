@@ -825,6 +825,7 @@ Info info(int index) {
         const Bed& bed = beds[index];
         result.configured = bed.configured;
         result.ready = bed.state == State::Ready;
+        result.moving = !bed.move_cmd.empty();
         result.name = bed.name;
         result.head_travel_s = bed.head_travel_ds / 10.0f;
         result.feet_travel_s = bed.feet_travel_ds / 10.0f;

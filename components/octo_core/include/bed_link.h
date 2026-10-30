@@ -31,6 +31,7 @@ constexpr float MAX_TRAVEL_S = 120.0f;
 struct Info {
     bool configured = false;
     bool ready = false;  // connected and PIN accepted
+    bool moving = false; // a motor command is running
     std::string name;
     float head_travel_s = DEFAULT_TRAVEL_S;
     float feet_travel_s = DEFAULT_TRAVEL_S;

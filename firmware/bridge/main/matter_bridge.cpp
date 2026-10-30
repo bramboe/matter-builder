@@ -5,6 +5,7 @@
 #include <cstring>
 
 #include <app-common/zap-generated/attributes/Accessors.h>
+#include <app/clusters/operational-state-server/operational-state-server.h>
 #include <app/clusters/window-covering-server/window-covering-server.h>
 #include <app/server/CommissioningWindowManager.h>
 #include <app/server/Server.h>
@@ -23,6 +24,7 @@
 using namespace esp_matter;
 using namespace chip::app::Clusters;
 namespace WC = chip::app::Clusters::WindowCovering;
+namespace OS = chip::app::Clusters::OperationalState;
 
 namespace matter_bridge {
 
@@ -38,8 +40,7 @@ constexpr uint16_t RAISED = 0;
 // estimate is corrected whenever the bed goes fully up or flat.
 constexpr int64_t END_STOP_EXTRA_US = 3 * 1000000LL;
 constexpr uint32_t TICK_MS = 500;
-constexpr int REACHABLE_EVERY_TICKS = 4;  // every 2 s
-constexpr uint16_t REPORT_STEP = 100;     // report position changes of 1 %
+constexpr uint16_t REPORT_STEP = 100;  // report position changes of 1 %
 
 const char* NVS_NAMESPACE = "octo_pos";
 
@@ -143,18 +144,65 @@ private:
     }
 };
 
-// One bridged device per bed; head, legs and light are its parts.
+// The bed's stop button: an Operational State cluster that only accepts
+// Stop, which controllers such as Home Assistant show as a push button.
+// The state is Running while a motor command is active; the cluster ignores
+// Stop when the state is Stopped.
+class StopButton : public OS::Delegate {
+public:
+    int bed = 0;
+
+    chip::app::DataModel::Nullable<uint32_t> GetCountdownTime() override { return {}; }
+
+    CHIP_ERROR GetOperationalStateAtIndex(size_t index, OS::GenericOperationalState& state) override {
+        static constexpr OS::OperationalStateEnum STATES[] = {OS::OperationalStateEnum::kStopped,
+                                                              OS::OperationalStateEnum::kRunning};
+        VerifyOrReturnError(index < sizeof(STATES) / sizeof(STATES[0]), CHIP_ERROR_NOT_FOUND);
+        state = OS::GenericOperationalState(chip::to_underlying(STATES[index]));
+        return CHIP_NO_ERROR;
+    }
+
+    CHIP_ERROR GetOperationalPhaseAtIndex(size_t, chip::MutableCharSpan&) override { return CHIP_ERROR_NOT_FOUND; }
+
+    void HandlePauseStateCallback(OS::GenericOperationalError& err) override { refuse(err); }
+    void HandleResumeStateCallback(OS::GenericOperationalError& err) override { refuse(err); }
+    void HandleStartStateCallback(OS::GenericOperationalError& err) override { refuse(err); }
+    void HandleStopStateCallback(OS::GenericOperationalError& err) override;
+
+    void set_running(bool running) {
+        if (GetInstance() != nullptr) {
+            const auto state = running ? OS::OperationalStateEnum::kRunning : OS::OperationalStateEnum::kStopped;
+            (void) GetInstance()->SetOperationalState(chip::to_underlying(state));
+        }
+    }
+
+private:
+    static void refuse(OS::GenericOperationalError& err) {
+        err.Set(chip::to_underlying(OS::ErrorStateEnum::kCommandInvalidInState));
+    }
+};
+
+// One bridged device per bed; head, legs and light are its parts, the stop
+// button sits on the device itself.
 struct BedEndpoints {
-    uint16_t device_endpoint = 0;  // carries the name and Reachable
+    uint16_t device_endpoint = 0;  // carries the name, Reachable and the stop button
     Cover head;
     Cover feet;
+    StopButton stop;
     uint16_t light_endpoint = 0;
     bool reachable = false;
     char label[32] = {};
 };
 
 BedEndpoints beds[bed_link::MAX_BEDS];
-int tick_count = 0;
+
+void StopButton::HandleStopStateCallback(OS::GenericOperationalError& err) {
+    BedEndpoints& endpoints = beds[bed];
+    // Same as the stop of a cover: halts both motors of this bed
+    (void) endpoints.head.HandleStopMotion();
+    set_running(false);
+    err.Set(chip::to_underlying(OS::ErrorStateEnum::kNoError));
+}
 
 CHIP_ERROR Cover::HandleMovement(WC::WindowCoveringType type) {
     if (type != WC::WindowCoveringType::Lift) {
@@ -216,7 +264,7 @@ CHIP_ERROR Cover::HandleStopMotion() {
     return CHIP_NO_ERROR;
 }
 
-void update_reachable() {
+void update_from_links() {
     bed_link::Info info[bed_link::MAX_BEDS];
     bed_link::run_in_host([&] {
         for (int i = 0; i < bed_link::MAX_BEDS; ++i) {
@@ -230,6 +278,7 @@ void update_reachable() {
             bed.head.freeze();
             bed.feet.freeze();
         }
+        bed.stop.set_running(info[i].moving);
         if (info[i].ready == bed.reachable) {
             continue;
         }
@@ -267,9 +316,8 @@ void tick(chip::System::Layer* layer, void*) {
         track(bed.head, now);
         track(bed.feet, now);
     }
-    if (++tick_count % REACHABLE_EVERY_TICKS == 0) {
-        update_reachable();
-    }
+    // Every tick, so the stop button is accepted soon after a motor starts
+    update_from_links();
     (void) layer->StartTimer(chip::System::Clock::Milliseconds32(TICK_MS), tick, nullptr);
 }
 
@@ -315,7 +363,7 @@ void on_event(const ChipDeviceEvent* event, intptr_t) {
     }
 }
 
-endpoint_t* add_bed_device(node_t* node, endpoint_t* aggregator, char* label) {
+endpoint_t* add_bed_device(node_t* node, endpoint_t* aggregator, char* label, StopButton& stop) {
     endpoint::bridged_node::config_t config;
     config.bridged_device_basic_information.reachable = false;
     endpoint_t* ep = endpoint::bridged_node::create(node, &config, ENDPOINT_FLAG_BRIDGE, nullptr);
@@ -324,6 +372,13 @@ endpoint_t* add_bed_device(node_t* node, endpoint_t* aggregator, char* label) {
     bdbi::create_node_label(info, label, std::strlen(label));
     bdbi::create_vendor_name(info, const_cast<char*>(BED_VENDOR), std::strlen(BED_VENDOR));
     bdbi::create_product_name(info, const_cast<char*>(BED_PRODUCT), std::strlen(BED_PRODUCT));
+
+    cluster::operational_state::config_t stop_config;
+    stop_config.delegate = &stop;
+    cluster_t* stop_cluster = cluster::operational_state::create(ep, &stop_config, CLUSTER_FLAG_SERVER);
+    cluster::operational_state::command::create_stop(stop_cluster);
+    cluster::operational_state::command::create_operational_command_response(stop_cluster);
+
     endpoint::set_parent_endpoint(ep, aggregator);
     return ep;
 }
@@ -379,7 +434,7 @@ void start() {
         const std::string name = info.configured && !info.name.empty() ? info.name : "Bed " + std::to_string(i + 1);
         std::snprintf(bed.label, sizeof(bed.label), "%s", name.c_str());
 
-        bed.head.bed = bed.feet.bed = i;
+        bed.head.bed = bed.feet.bed = bed.stop.bed = i;
         bed.head.part = bed_link::Part::Head;
         bed.feet.part = bed_link::Part::Feet;
         bed.head.sibling = &bed.feet;
@@ -387,7 +442,7 @@ void start() {
         bed.head.load();
         bed.feet.load();
 
-        endpoint_t* device = add_bed_device(node, aggregator, bed.label);
+        endpoint_t* device = add_bed_device(node, aggregator, bed.label, bed.stop);
         bed.device_endpoint = endpoint::get_id(device);
         add_cover(node, device, bed.head);
         add_cover(node, device, bed.feet);

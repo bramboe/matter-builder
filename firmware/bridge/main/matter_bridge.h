@@ -11,16 +11,19 @@
 //   6  bed 1       7  head   8  legs   9  light
 //
 // Both bed slots always exist; an unconfigured or disconnected bed shows as
-// not reachable.
+// not reachable. The bed device itself also carries a stop button
+// (Operational State, Stop only) and a preset choice (Mode Select: flat,
+// presets 1-3, match the other bed, save the current position as a preset).
 //
 // Covers use Matter's "percent closed": 0 % = fully raised, 100 % = flat.
 // Home Assistant shows that as position 100 = raised, 0 = flat. The bed does
-// not report its position, so it is estimated from the drive time, like the
-// octo_bed integration does.
+// not report its position, so it is estimated from the time each motor was
+// driven, like the octo_bed integration does.
 
 #pragma once
 
 #include <string>
+#include <vector>
 
 namespace matter_bridge {
 
@@ -37,5 +40,11 @@ std::string open_commissioning_window();
 // the bridge, e.g. to drop one that was removed without unpairing
 std::string fabrics_text();
 std::string remove_fabric(unsigned index);
+
+// The "preset" console command (also used by the settings page):
+//   preset list                        saved presets and positions as JSON
+//   preset <bed> <flat|1|2|3|match>    move to a preset or the other bed
+//   preset <bed> save <1|2|3>          store the current position
+std::string preset_command(const std::vector<std::string>& args);
 
 }  // namespace matter_bridge

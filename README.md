@@ -10,9 +10,12 @@ Opvolger van de Home Assistant-integratie
 geport en wordt met golden vectors gelijk gehouden.
 
 > **Status: F2.** De bridge (`firmware/bridge`) draait: beide bedden als Matter-apparaten
-> met hoofd, benen, licht en een stopknop, en een instellingenpagina op de ESP.
-> De stopknop is een Operational State-cluster dat alleen Stop accepteert; Home Assistant
-> toont dat als drukknop (Apple Home toont hem niet). Zie [docs/ontwerp.md](docs/ontwerp.md).
+> met hoofd, benen, licht, een stopknop en een presetkeuze, en een instellingenpagina op de ESP.
+> De stopknop is een Operational State-cluster dat alleen Stop accepteert, de presetkeuze een
+> Mode Select (plat, stand 1-3, zelfde als het andere bed, huidige stand bewaren); Home Assistant
+> toont ze als drukknop en keuzelijst, Apple Home toont ze niet. Hoofd en benen bewegen samen
+> als ze dezelfde kant op gaan, anders na elkaar. "Beide" (per bed en voor beide bedden) zijn
+> groepen in Home Assistant. Zie [docs/ontwerp.md](docs/ontwerp.md).
 
 ## Terug naar ESPHome
 

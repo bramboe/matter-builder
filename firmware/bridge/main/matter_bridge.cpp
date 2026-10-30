@@ -2,9 +2,11 @@
 
 #include <cinttypes>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 #include <app-common/zap-generated/attributes/Accessors.h>
+#include <app/clusters/mode-select-server/supported-modes-manager.h>
 #include <app/clusters/operational-state-server/operational-state-server.h>
 #include <app/clusters/window-covering-server/window-covering-server.h>
 #include <app/server/CommissioningWindowManager.h>
@@ -18,13 +20,13 @@
 
 #include "bed_link.h"
 #include "esp_log.h"
-#include "esp_timer.h"
 #include "nvs.h"
 
 using namespace esp_matter;
 using namespace chip::app::Clusters;
 namespace WC = chip::app::Clusters::WindowCovering;
 namespace OS = chip::app::Clusters::OperationalState;
+namespace MS = chip::app::Clusters::ModeSelect;
 
 namespace matter_bridge {
 
@@ -38,7 +40,7 @@ constexpr uint16_t RAISED = 0;
 
 // Targets at either end drive a little longer, into the end stop, so the
 // estimate is corrected whenever the bed goes fully up or flat.
-constexpr int64_t END_STOP_EXTRA_US = 3 * 1000000LL;
+constexpr float END_STOP_EXTRA_S = 3.0f;
 constexpr uint32_t TICK_MS = 500;
 constexpr uint16_t REPORT_STEP = 100;  // report position changes of 1 %
 
@@ -51,6 +53,17 @@ constexpr const char* PRODUCT_NAME = "Octo Bed Bridge";
 constexpr const char* HARDWARE = "ESP32";
 constexpr const char* BED_VENDOR = "Octo";
 constexpr const char* BED_PRODUCT = "Octo bed";
+
+// The preset choice (Mode Select) acts once and then returns to MODE_NONE,
+// so the same choice can be made again.
+constexpr int PRESET_SLOTS = 3;
+constexpr uint8_t MODE_NONE = 0;
+constexpr uint8_t MODE_FLAT = 1;
+constexpr uint8_t MODE_PRESET = 2;  // presets 1-3: modes 2-4
+constexpr uint8_t MODE_MATCH = 5;   // move to the other bed's position
+constexpr uint8_t MODE_SAVE = 6;    // save as preset 1-3: modes 6-8
+constexpr int MODE_COUNT = 9;
+constexpr const char* PRESET_DESCRIPTION = "Preset";
 
 class DeviceInfo : public chip::DeviceLayer::Internal::GenericDeviceInstanceInfoProvider<
                        chip::DeviceLayer::Internal::ESP32Config> {
@@ -75,46 +88,55 @@ bool is_end(uint16_t position) {
     return position == FLAT || position == RAISED;
 }
 
+bool nvs_get(const char* key, uint32_t& value) {
+    nvs_handle_t handle;
+    if (nvs_open(NVS_NAMESPACE, NVS_READONLY, &handle) != ESP_OK) {
+        return false;
+    }
+    const bool ok = nvs_get_u32(handle, key, &value) == ESP_OK;
+    nvs_close(handle);
+    return ok;
+}
+
+void nvs_put(const char* key, uint32_t value) {
+    nvs_handle_t handle;
+    if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &handle) == ESP_OK) {
+        nvs_set_u32(handle, key, value);
+        nvs_commit(handle);
+        nvs_close(handle);
+    }
+}
+
 // One motor (head or feet) of one bed, exposed as a Window Covering.
 class Cover : public WC::Delegate {
 public:
     int bed = 0;
     bed_link::Part part = bed_link::Part::Head;
     uint16_t endpoint_id = 0;
-    uint16_t position = FLAT;  // last known Lift100ths
-    Cover* sibling = nullptr;  // the other motor of the same bed
-
-    bool moving = false;
-    uint16_t from = FLAT;
-    uint16_t to = FLAT;
-    int64_t started_us = 0;
-    int64_t travel_us = 0;  // time to reach `to` at full speed
-    int64_t run_us = 0;     // travel plus the end-stop extra
+    uint16_t position = FLAT;  // last published Lift100ths
+    uint16_t current = FLAT;   // latest estimate, also between reports
 
     CHIP_ERROR HandleMovement(WC::WindowCoveringType type) override;
     CHIP_ERROR HandleStopMotion() override;
 
-    uint16_t estimate(int64_t now) const {
-        if (!moving || travel_us <= 0 || now - started_us >= travel_us) {
-            return moving ? to : position;
-        }
-        const int64_t delta = static_cast<int64_t>(to) - from;
-        return static_cast<uint16_t>(from + delta * (now - started_us) / travel_us);
-    }
+    // Drive towards goal; false when the bed is not ready.
+    bool move_to(uint16_t goal);
 
-    // Stop tracking a motion at its estimated position and make that the target.
-    void freeze() {
-        if (!moving) {
-            return;
-        }
-        position = estimate(esp_timer_get_time());
-        moving = false;
+    // Follow the motor's latest run, including runs started elsewhere (the
+    // settings page, calibration), and publish the estimated position.
+    void follow(const bed_link::RunInfo& run, float full_s);
+
+    // A position known for certain, e.g. the top after calibration.
+    void set_known(uint16_t value) {
+        following = false;
+        current = position = value;
         publish();
-        WC::Attributes::TargetPositionLiftPercent100ths::Set(endpoint_id, position);
+        set_target(value);
         save();
     }
 
     void publish() { WC::LiftPositionSet(endpoint_id, position); }
+    void set_target(uint16_t value) { WC::Attributes::TargetPositionLiftPercent100ths::Set(endpoint_id, value); }
 
     void save() const {
         nvs_handle_t handle;
@@ -130,13 +152,18 @@ public:
         if (nvs_open(NVS_NAMESPACE, NVS_READONLY, &handle) == ESP_OK) {
             uint16_t value;
             if (nvs_get_u16(handle, key(), &value) == ESP_OK && value <= FLAT) {
-                position = value;
+                current = position = value;
             }
             nvs_close(handle);
         }
     }
 
 private:
+    uint32_t run_id = 0;  // the bed_link run being followed
+    bool following = false;
+    uint16_t from = FLAT;  // position when that run started
+    int32_t goal = -1;     // where a run started here ends; -1 for runs started elsewhere
+
     const char* key() const {
         static char text[8];
         std::snprintf(text, sizeof(text), "p%d%c", bed, part == bed_link::Part::Head ? 'h' : 'f');
@@ -182,26 +209,126 @@ private:
     }
 };
 
-// One bridged device per bed; head, legs and light are its parts, the stop
-// button sits on the device itself.
+// One bridged device per bed; head, legs and light are its parts. The stop
+// button and the preset choice sit on the device itself.
 struct BedEndpoints {
-    uint16_t device_endpoint = 0;  // carries the name, Reachable and the stop button
+    uint16_t device_endpoint = 0;  // name, Reachable, stop button, presets
     Cover head;
     Cover feet;
     StopButton stop;
     uint16_t light_endpoint = 0;
     bool reachable = false;
     char label[32] = {};
+
+    // Preset choice labels and options, read by the Mode Select server
+    char mode_labels[MODE_COUNT][40] = {};
+    MS::Structs::ModeOptionStruct::Type modes[MODE_COUNT];
+    size_t mode_count = 0;
 };
 
 BedEndpoints beds[bed_link::MAX_BEDS];
 
-void StopButton::HandleStopStateCallback(OS::GenericOperationalError& err) {
-    BedEndpoints& endpoints = beds[bed];
-    // Same as the stop of a cover: halts both motors of this bed
-    (void) endpoints.head.HandleStopMotion();
-    set_running(false);
-    err.Set(chip::to_underlying(OS::ErrorStateEnum::kNoError));
+int bed_of_device(chip::EndpointId endpoint_id) {
+    for (int i = 0; i < bed_link::MAX_BEDS; ++i) {
+        if (beds[i].device_endpoint == endpoint_id) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+class PresetModes : public MS::SupportedModesManager {
+public:
+    ModeOptionsProvider getModeOptionsProvider(chip::EndpointId endpoint_id) const override {
+        const int index = bed_of_device(endpoint_id);
+        if (index < 0) {
+            return ModeOptionsProvider();
+        }
+        const BedEndpoints& bed = beds[index];
+        return ModeOptionsProvider(bed.modes, bed.modes + bed.mode_count);
+    }
+
+    chip::Protocols::InteractionModel::Status getModeOptionByMode(
+        chip::EndpointId endpoint_id, uint8_t mode,
+        const MS::Structs::ModeOptionStruct::Type** option) const override {
+        const ModeOptionsProvider provider = getModeOptionsProvider(endpoint_id);
+        for (auto* it = provider.begin(); it != provider.end(); ++it) {
+            if (it->mode == mode) {
+                *option = it;
+                return chip::Protocols::InteractionModel::Status::Success;
+            }
+        }
+        return chip::Protocols::InteractionModel::Status::InvalidCommand;
+    }
+};
+
+PresetModes preset_modes;
+
+bool Cover::move_to(uint16_t target) {
+    const uint16_t start = current;
+    if (target == start && !is_end(target)) {
+        set_target(target);
+        return true;
+    }
+    // At an end the motor still drives into the end stop, to correct drift
+    const bool up = target < start || (target == start && target == RAISED);
+    const int32_t distance = up ? start - target : target - start;
+    const int index = bed;
+    const bed_link::Part motor = part;
+    uint32_t id = 0;
+    bed_link::run_in_host([&] {
+        // The calibrated full travel time of this motor
+        const bed_link::Info info = bed_link::info(index);
+        const float full_s = motor == bed_link::Part::Head ? info.head_travel_s : info.feet_travel_s;
+        const float run_s = full_s * distance / FLAT + (is_end(target) ? END_STOP_EXTRA_S : 0.0f);
+        id = bed_link::move(index, motor, up, run_s);
+    });
+    if (id == 0) {
+        ESP_LOGW(TAG, "Bed %d not ready, movement refused", bed);
+        set_target(position);
+        return false;
+    }
+    run_id = id;
+    following = true;
+    from = start;
+    goal = target;
+    set_target(target);
+    return true;
+}
+
+void Cover::follow(const bed_link::RunInfo& run, float full_s) {
+    if (run.id != 0 && run.id != run_id) {
+        // Started elsewhere: it starts from the current estimate
+        run_id = run.id;
+        following = true;
+        from = current;
+        goal = -1;
+        set_target(run.up ? RAISED : FLAT);
+    }
+    if (!following || full_s <= 0.0f) {
+        return;
+    }
+    const int32_t moved = static_cast<int32_t>(run.done_s / full_s * FLAT);
+    int32_t estimate = run.up ? from - moved : from + moved;
+    estimate = estimate < RAISED ? RAISED : estimate > FLAT ? FLAT : estimate;
+    if (!run.moving) {
+        // Done, stopped or the link dropped
+        following = false;
+        if (run.finished && goal >= 0) {
+            estimate = goal;
+        }
+        current = position = static_cast<uint16_t>(estimate);
+        publish();  // current == target: the cluster reports "stopped"
+        set_target(position);
+        save();
+        return;
+    }
+    current = static_cast<uint16_t>(estimate);
+    const int diff = static_cast<int>(current) - position;
+    if (diff >= REPORT_STEP || diff <= -REPORT_STEP) {
+        position = current;
+        publish();
+    }
 }
 
 CHIP_ERROR Cover::HandleMovement(WC::WindowCoveringType type) {
@@ -213,55 +340,107 @@ CHIP_ERROR Cover::HandleMovement(WC::WindowCoveringType type) {
     if (target.IsNull()) {
         return CHIP_NO_ERROR;
     }
-    const int64_t now = esp_timer_get_time();
-    // A new command replaces the bed's current motor command, so whatever
-    // the bed was doing stops here.
-    const uint16_t start = estimate(now);
-    moving = false;
-    position = start;
-    sibling->freeze();
-
-    const uint16_t goal = target.Value();
-    if (goal == start && !is_end(goal)) {
-        publish();
-        return CHIP_NO_ERROR;
-    }
-    const bool up = goal < start;  // fewer hundredths closed = higher
-    const int64_t distance = up ? start - goal : goal - start;
-    const int index = bed;
-    const bed_link::Part motor = part;
-    bool ok = false;
-    int64_t travel = 0;
-    int64_t run = 0;
-    bed_link::run_in_host([&] {
-        // The calibrated full travel time of this motor
-        const bed_link::Info info = bed_link::info(index);
-        const float full_s = motor == bed_link::Part::Head ? info.head_travel_s : info.feet_travel_s;
-        travel = static_cast<int64_t>(full_s * 1000000.0f) * distance / FLAT;
-        run = travel + (is_end(goal) ? END_STOP_EXTRA_US : 0);
-        ok = bed_link::move(index, motor, up, static_cast<float>(run) / 1000000.0f);
-    });
-    if (!ok) {
-        ESP_LOGW(TAG, "Bed %d not ready, movement refused", bed);
-        WC::Attributes::TargetPositionLiftPercent100ths::Set(endpoint_id, position);
-        return CHIP_ERROR_INCORRECT_STATE;
-    }
-    moving = true;
-    from = start;
-    to = goal;
-    started_us = now;
-    travel_us = travel;
-    run_us = run;
-    return CHIP_NO_ERROR;
+    // The other motor keeps going; bed_link combines or queues the two
+    return move_to(target.Value()) ? CHIP_NO_ERROR : CHIP_ERROR_INCORRECT_STATE;
 }
 
 CHIP_ERROR Cover::HandleStopMotion() {
+    // Only this motor; the position is settled on the next tick
+    const int index = bed;
+    const bed_link::Part motor = part;
+    bed_link::run_in_host([&] { bed_link::stop(index, motor); });
+    return CHIP_NO_ERROR;
+}
+
+void StopButton::HandleStopStateCallback(OS::GenericOperationalError& err) {
     const int index = bed;
     bed_link::run_in_host([&] { bed_link::stop(index); });
-    // The stop command halts both motors of this bed
-    freeze();
-    sibling->freeze();
-    return CHIP_NO_ERROR;
+    set_running(false);
+    err.Set(chip::to_underlying(OS::ErrorStateEnum::kNoError));
+}
+
+// Presets: head and feet position, stored as (head << 16) | feet.
+const char* preset_key(int index, int slot) {
+    static char text[8];
+    std::snprintf(text, sizeof(text), "s%d%d", index, slot);
+    return text;
+}
+
+bool preset_get(int index, int slot, uint16_t& head, uint16_t& feet) {
+    uint32_t value;
+    if (!nvs_get(preset_key(index, slot), value)) {
+        return false;
+    }
+    head = static_cast<uint16_t>(value >> 16);
+    feet = static_cast<uint16_t>(value & 0xFFFF);
+    return head <= FLAT && feet <= FLAT;
+}
+
+void preset_save(int index, int slot) {
+    const BedEndpoints& bed = beds[index];
+    nvs_put(preset_key(index, slot), (static_cast<uint32_t>(bed.head.current) << 16) | bed.feet.current);
+    ESP_LOGI(TAG, "Bed %d preset %d saved", index, slot);
+}
+
+bool move_bed(int index, uint16_t head, uint16_t feet) {
+    BedEndpoints& bed = beds[index];
+    return bed.head.move_to(head) && bed.feet.move_to(feet);
+}
+
+// Carry out a preset choice. Runs in the Matter thread.
+bool apply_mode(int index, uint8_t mode) {
+    if (mode == MODE_FLAT) {
+        return move_bed(index, FLAT, FLAT);
+    }
+    if (mode >= MODE_PRESET && mode < MODE_PRESET + PRESET_SLOTS) {
+        uint16_t head;
+        uint16_t feet;
+        if (!preset_get(index, mode - MODE_PRESET + 1, head, feet)) {
+            ESP_LOGW(TAG, "Bed %d preset %d is empty", index, mode - MODE_PRESET + 1);
+            return false;
+        }
+        return move_bed(index, head, feet);
+    }
+    if (mode == MODE_MATCH) {
+        const BedEndpoints& other = beds[1 - index];
+        return move_bed(index, other.head.current, other.feet.current);
+    }
+    if (mode >= MODE_SAVE && mode < MODE_SAVE + PRESET_SLOTS) {
+        preset_save(index, mode - MODE_SAVE + 1);
+        return true;
+    }
+    return mode == MODE_NONE;
+}
+
+void reset_mode(intptr_t index) {
+    esp_matter_attr_val_t none = esp_matter_uint8(MODE_NONE);
+    attribute::update(beds[index].device_endpoint, ModeSelect::Id, ModeSelect::Attributes::CurrentMode::Id, &none);
+}
+
+void add_mode(BedEndpoints& bed, uint8_t mode, const char* format, const char* text = "") {
+    char* label = bed.mode_labels[bed.mode_count];
+    std::snprintf(label, sizeof(bed.mode_labels[0]), format, text);
+    auto& option = bed.modes[bed.mode_count++];
+    option.label = chip::CharSpan(label, std::strlen(label));
+    option.mode = mode;
+}
+
+void build_modes(int index) {
+    BedEndpoints& bed = beds[index];
+    bed.mode_count = 0;
+    add_mode(bed, MODE_NONE, "-");
+    add_mode(bed, MODE_FLAT, "Flat");
+    for (int slot = 1; slot <= PRESET_SLOTS; ++slot) {
+        char text[4];
+        std::snprintf(text, sizeof(text), "%d", slot);
+        add_mode(bed, MODE_PRESET + slot - 1, "Preset %s", text);
+    }
+    add_mode(bed, MODE_MATCH, "Match %s", beds[1 - index].label);
+    for (int slot = 1; slot <= PRESET_SLOTS; ++slot) {
+        char text[4];
+        std::snprintf(text, sizeof(text), "%d", slot);
+        add_mode(bed, MODE_SAVE + slot - 1, "Save as preset %s", text);
+    }
 }
 
 void update_from_links() {
@@ -273,11 +452,8 @@ void update_from_links() {
     });
     for (int i = 0; i < bed_link::MAX_BEDS; ++i) {
         BedEndpoints& bed = beds[i];
-        if (!info[i].ready) {
-            // bed_link stops the motors when the link drops
-            bed.head.freeze();
-            bed.feet.freeze();
-        }
+        bed.head.follow(info[i].head, info[i].head_travel_s);
+        bed.feet.follow(info[i].feet, info[i].feet_travel_s);
         bed.stop.set_running(info[i].moving);
         if (info[i].ready == bed.reachable) {
             continue;
@@ -290,33 +466,8 @@ void update_from_links() {
     }
 }
 
-void track(Cover& cover, int64_t now) {
-    if (!cover.moving) {
-        return;
-    }
-    if (now - cover.started_us >= cover.run_us) {
-        cover.moving = false;
-        cover.position = cover.to;
-        cover.publish();  // current == target: the cluster reports "stopped"
-        cover.save();
-        return;
-    }
-    const uint16_t estimate = cover.estimate(now);
-    const int diff = static_cast<int>(estimate) - cover.position;
-    if (diff >= REPORT_STEP || diff <= -REPORT_STEP) {
-        cover.position = estimate;
-        cover.publish();
-    }
-}
-
 // Runs in the Matter thread, so attributes can be set directly.
 void tick(chip::System::Layer* layer, void*) {
-    const int64_t now = esp_timer_get_time();
-    for (auto& bed : beds) {
-        track(bed.head, now);
-        track(bed.feet, now);
-    }
-    // Every tick, so the stop button is accepted soon after a motor starts
     update_from_links();
     (void) layer->StartTimer(chip::System::Clock::Milliseconds32(TICK_MS), tick, nullptr);
 }
@@ -333,7 +484,22 @@ int light_owner(uint16_t endpoint_id) {
 esp_err_t on_attribute(attribute::callback_type_t type, uint16_t endpoint_id, uint32_t cluster_id,
                        uint32_t attribute_id, esp_matter_attr_val_t* val, void*) {
     // PRE_UPDATE so a write is refused while the bed is not connected
-    if (type != attribute::PRE_UPDATE || cluster_id != OnOff::Id || attribute_id != OnOff::Attributes::OnOff::Id) {
+    if (type != attribute::PRE_UPDATE) {
+        return ESP_OK;
+    }
+    if (cluster_id == ModeSelect::Id && attribute_id == ModeSelect::Attributes::CurrentMode::Id) {
+        const int index = bed_of_device(endpoint_id);
+        if (index < 0 || val->val.u8 == MODE_NONE) {
+            return ESP_OK;
+        }
+        if (!apply_mode(index, val->val.u8)) {
+            ESP_LOGW(TAG, "Bed %d preset choice %u failed", index, val->val.u8);
+        }
+        // Back to "-" so the same choice can be made again
+        (void) chip::DeviceLayer::PlatformMgr().ScheduleWork(reset_mode, index);
+        return ESP_OK;
+    }
+    if (cluster_id != OnOff::Id || attribute_id != OnOff::Attributes::OnOff::Id) {
         return ESP_OK;
     }
     const int index = light_owner(endpoint_id);
@@ -363,21 +529,27 @@ void on_event(const ChipDeviceEvent* event, intptr_t) {
     }
 }
 
-endpoint_t* add_bed_device(node_t* node, endpoint_t* aggregator, char* label, StopButton& stop) {
+endpoint_t* add_bed_device(node_t* node, endpoint_t* aggregator, BedEndpoints& bed) {
     endpoint::bridged_node::config_t config;
     config.bridged_device_basic_information.reachable = false;
     endpoint_t* ep = endpoint::bridged_node::create(node, &config, ENDPOINT_FLAG_BRIDGE, nullptr);
     cluster_t* info = cluster::get(ep, BridgedDeviceBasicInformation::Id);
     namespace bdbi = cluster::bridged_device_basic_information::attribute;
-    bdbi::create_node_label(info, label, std::strlen(label));
+    bdbi::create_node_label(info, bed.label, std::strlen(bed.label));
     bdbi::create_vendor_name(info, const_cast<char*>(BED_VENDOR), std::strlen(BED_VENDOR));
     bdbi::create_product_name(info, const_cast<char*>(BED_PRODUCT), std::strlen(BED_PRODUCT));
 
     cluster::operational_state::config_t stop_config;
-    stop_config.delegate = &stop;
+    stop_config.delegate = &bed.stop;
     cluster_t* stop_cluster = cluster::operational_state::create(ep, &stop_config, CLUSTER_FLAG_SERVER);
     cluster::operational_state::command::create_stop(stop_cluster);
     cluster::operational_state::command::create_operational_command_response(stop_cluster);
+
+    cluster::mode_select::config_t mode_config;
+    std::snprintf(mode_config.description, sizeof(mode_config.description), "%s", PRESET_DESCRIPTION);
+    mode_config.current_mode = MODE_NONE;
+    mode_config.delegate = &preset_modes;
+    cluster::mode_select::create(ep, &mode_config, CLUSTER_FLAG_SERVER);
 
     endpoint::set_parent_endpoint(ep, aggregator);
     return ep;
@@ -410,12 +582,7 @@ void on_calibrated(int index, bed_link::Part part, float) {
     const intptr_t arg = index * 2 + (part == bed_link::Part::Head ? 0 : 1);
     (void) chip::DeviceLayer::PlatformMgr().ScheduleWork([](intptr_t value) {
         BedEndpoints& bed = beds[value / 2];
-        Cover& cover = value % 2 == 0 ? bed.head : bed.feet;
-        cover.moving = false;
-        cover.position = RAISED;
-        cover.publish();
-        WC::Attributes::TargetPositionLiftPercent100ths::Set(cover.endpoint_id, RAISED);
-        cover.save();
+        (value % 2 == 0 ? bed.head : bed.feet).set_known(RAISED);
     }, arg);
 }
 
@@ -433,16 +600,18 @@ void start() {
         bed_link::run_in_host([&] { info = bed_link::info(i); });
         const std::string name = info.configured && !info.name.empty() ? info.name : "Bed " + std::to_string(i + 1);
         std::snprintf(bed.label, sizeof(bed.label), "%s", name.c_str());
+    }
 
+    for (int i = 0; i < bed_link::MAX_BEDS; ++i) {
+        BedEndpoints& bed = beds[i];
         bed.head.bed = bed.feet.bed = bed.stop.bed = i;
         bed.head.part = bed_link::Part::Head;
         bed.feet.part = bed_link::Part::Feet;
-        bed.head.sibling = &bed.feet;
-        bed.feet.sibling = &bed.head;
         bed.head.load();
         bed.feet.load();
+        build_modes(i);  // needs both labels
 
-        endpoint_t* device = add_bed_device(node, aggregator, bed.label, bed.stop);
+        endpoint_t* device = add_bed_device(node, aggregator, bed);
         bed.device_endpoint = endpoint::get_id(device);
         add_cover(node, device, bed.head);
         add_cover(node, device, bed.feet);
@@ -468,16 +637,73 @@ void start() {
             esp_matter_attr_val_t name = esp_matter_char_str(const_cast<char*>(PRODUCT_NAME), std::strlen(PRODUCT_NAME));
             attribute::update(0, BasicInformation::Id, BasicInformation::Attributes::NodeLabel::Id, &name);
         }
-        for (auto& bed : beds) {
+        for (int i = 0; i < bed_link::MAX_BEDS; ++i) {
+            BedEndpoints& bed = beds[i];
             esp_matter_attr_val_t label = esp_matter_char_str(bed.label, std::strlen(bed.label));
             attribute::update(bed.device_endpoint, BridgedDeviceBasicInformation::Id,
                               BridgedDeviceBasicInformation::Attributes::NodeLabel::Id, &label);
             WC::ConfigStatusSet(bed.head.endpoint_id, status);
             WC::ConfigStatusSet(bed.feet.endpoint_id, status);
+            reset_mode(i);
         }
         (void) chip::DeviceLayer::SystemLayer().StartTimer(chip::System::Clock::Milliseconds32(TICK_MS), tick,
                                                            nullptr);
     });
+}
+
+std::string preset_command(const std::vector<std::string>& args) {
+    if (args.size() == 2 && args[1] == "list") {
+        std::string out = "{\"beds\":[";
+        chip::DeviceLayer::PlatformMgr().LockChipStack();
+        for (int i = 0; i < bed_link::MAX_BEDS; ++i) {
+            const BedEndpoints& bed = beds[i];
+            char text[64];
+            std::snprintf(text, sizeof(text), "%s{\"head\":%u,\"legs\":%u,\"presets\":[", i ? "," : "",
+                          (FLAT - bed.head.current) / 100, (FLAT - bed.feet.current) / 100);
+            out += text;
+            for (int slot = 1; slot <= PRESET_SLOTS; ++slot) {
+                uint16_t head;
+                uint16_t feet;
+                if (preset_get(i, slot, head, feet)) {
+                    std::snprintf(text, sizeof(text), "{\"head\":%u,\"legs\":%u}", (FLAT - head) / 100,
+                                  (FLAT - feet) / 100);
+                } else {
+                    std::snprintf(text, sizeof(text), "null");
+                }
+                out += text;
+                out += slot < PRESET_SLOTS ? "," : "]}";
+            }
+        }
+        chip::DeviceLayer::PlatformMgr().UnlockChipStack();
+        return out + "]}\n";
+    }
+    if (args.size() < 3) {
+        return "usage: preset list | preset <0|1> <flat|1|2|3|match> | preset <0|1> save <1|2|3>\n";
+    }
+    const int index = std::atoi(args[1].c_str());
+    if (index < 0 || index >= bed_link::MAX_BEDS || (args[1] != "0" && args[1] != "1")) {
+        return "bed must be 0 or 1\n";
+    }
+    uint8_t mode = MODE_NONE;
+    const int slot = args.size() > 3 ? std::atoi(args[3].c_str()) : std::atoi(args[2].c_str());
+    if (args[2] == "flat") {
+        mode = MODE_FLAT;
+    } else if (args[2] == "match") {
+        mode = MODE_MATCH;
+    } else if (args[2] == "save" && args.size() == 4 && slot >= 1 && slot <= PRESET_SLOTS) {
+        mode = MODE_SAVE + slot - 1;
+    } else if (args.size() == 3 && slot >= 1 && slot <= PRESET_SLOTS) {
+        mode = MODE_PRESET + slot - 1;
+    } else {
+        return "usage: preset list | preset <0|1> <flat|1|2|3|match> | preset <0|1> save <1|2|3>\n";
+    }
+    chip::DeviceLayer::PlatformMgr().LockChipStack();
+    const bool ok = apply_mode(index, mode);
+    chip::DeviceLayer::PlatformMgr().UnlockChipStack();
+    if (!ok) {
+        return mode >= MODE_PRESET && mode < MODE_MATCH ? "preset is empty or bed not ready\n" : "bed not ready\n";
+    }
+    return mode >= MODE_SAVE ? "saved\n" : "OK\n";
 }
 
 std::string open_commissioning_window() {

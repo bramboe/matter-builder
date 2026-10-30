@@ -40,6 +40,8 @@ extern "C" void app_main() {
     bed_link::start();
     matter_bridge::start();
     net::start();
+    add_command("preset", "preset list | preset <0|1> <flat|1-3|match> | preset <0|1> save <1-3>\n",
+                matter_bridge::preset_command);
     add_command("matter", "matter [open|fabrics|remove <n>]        pairing codes, endpoints; pairing window; controllers\n", cmd_matter);
     console_start();
     ESP_LOGI("main", "octo-matter bridge running; type 'help'");

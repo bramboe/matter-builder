@@ -54,6 +54,20 @@ const char* state_name(State state) {
     return "?";
 }
 
+// One motor's movement. Both motors move together when they go the same
+// way; in opposite directions the earlier run goes first, because one
+// command cannot drive the motors in opposite directions.
+struct Run {
+    uint32_t id = 0;  // 0: never moved; higher ids were requested later
+    bool pending = false;
+    bool up = false;
+    bool driving = false;  // part of the last command sent
+    int64_t remaining_us = 0;
+    int64_t done_us = 0;  // time actually driven
+};
+
+uint32_t last_run_id = 0;
+
 struct Bed {
     bool configured = false;
     uint8_t mac[6] = {};  // display order, e.g. AA:BB:CC:DD:EE:01
@@ -97,9 +111,11 @@ struct Bed {
     bool has_rgbw = false;
     bool has_synchro = false;
 
-    // Motion
-    octo::Bytes move_cmd;
-    int64_t move_until_us = 0;
+    // Motion: one run per motor, driven by motion_tick
+    Run head_run;
+    Run feet_run;
+    bool motion_sent = false;  // a motor command went out since the last stop
+    int64_t last_motion_us = 0;
 
     // Statistics for the 24 h stability test
     uint32_t connects = 0;
@@ -142,6 +158,16 @@ const ble_uuid16_t UUID_COMMAND = uuid16(0xFFE1);
 const ble_uuid16_t UUID_CCCD = uuid16(0x2902);
 
 int64_t now_us() { return esp_timer_get_time(); }
+
+// Forget all movement, e.g. when the link drops: the bed stops by itself
+// once the repeated commands stop.
+void end_runs(Bed& bed) {
+    for (Run* run : {&bed.head_run, &bed.feet_run}) {
+        run->pending = false;
+        run->driving = false;
+    }
+    bed.motion_sent = false;
+}
 
 std::string mac_string(const uint8_t mac[6]) {
     char buf[18];
@@ -638,7 +664,7 @@ int gap_event(ble_gap_event* event, void* arg) {
             bed->last_disconnect_reason = event->disconnect.reason;
             bed->state = State::Idle;
             bed->conn = NO_CONN;
-            bed->move_cmd.clear();
+            end_runs(*bed);
             bed->seen = false;  // wait for a fresh advertisement
             ensure_scanning();
             return 0;
@@ -709,19 +735,49 @@ void manager_tick(ble_npl_event*) {
     ble_npl_callout_reset(&manager_co, ble_npl_time_ms_to_ticks32(MANAGER_INTERVAL_MS));
 }
 
+// Book the time driven since the last command on the runs it drove.
+void account(Bed& bed, int64_t now) {
+    const int64_t elapsed = now - bed.last_motion_us;
+    bed.last_motion_us = now;
+    for (Run* run : {&bed.head_run, &bed.feet_run}) {
+        if (run->driving) {
+            run->done_us += elapsed;
+            run->remaining_us -= elapsed;
+            run->pending = run->remaining_us > 0;
+        }
+        run->driving = false;
+    }
+}
+
 void motion_tick(ble_npl_event*) {
     bool active = false;
     const int64_t now = now_us();
     for (auto& bed : beds) {
-        if (bed.move_cmd.empty()) {
+        Run& head = bed.head_run;
+        Run& feet = bed.feet_run;
+        account(bed, now);
+        if (bed.state != State::Ready) {
+            end_runs(bed);
             continue;
         }
-        if (now >= bed.move_until_us || bed.state != State::Ready) {
-            bed.move_cmd.clear();
-            write(bed, octo::motor_stop());
+        bool drive_head = head.pending;
+        bool drive_feet = feet.pending;
+        if (drive_head && drive_feet && head.up != feet.up) {
+            (head.id < feet.id ? drive_feet : drive_head) = false;
+        }
+        if (!drive_head && !drive_feet) {
+            if (bed.motion_sent) {
+                bed.motion_sent = false;
+                write(bed, octo::motor_stop());
+            }
             continue;
         }
-        write(bed, bed.move_cmd);
+        const uint8_t mask = (drive_head ? octo::MOTOR_HEAD : 0) | (drive_feet ? octo::MOTOR_FEET : 0);
+        const bool up = drive_head ? head.up : feet.up;
+        write(bed, up ? octo::motor_up(mask) : octo::motor_down(mask));
+        head.driving = drive_head;
+        feet.driving = drive_feet;
+        bed.motion_sent = true;
         active = true;
     }
     if (active) {
@@ -819,13 +875,27 @@ void run_in_host(const std::function<void()>& fn) {
     vSemaphoreDelete(request.done);
 }
 
+RunInfo run_info(const Run& run, int64_t last_motion_us) {
+    RunInfo info;
+    info.id = run.id;
+    info.moving = run.pending;
+    info.up = run.up;
+    // Include the time since the last command while the motor is driven
+    const int64_t done = run.done_us + (run.driving ? now_us() - last_motion_us : 0);
+    info.done_s = done / 1000000.0f;
+    info.finished = !run.pending && run.remaining_us <= 0;
+    return info;
+}
+
 Info info(int index) {
     Info result;
     if (index >= 0 && index < MAX_BEDS) {
         const Bed& bed = beds[index];
         result.configured = bed.configured;
         result.ready = bed.state == State::Ready;
-        result.moving = !bed.move_cmd.empty();
+        result.moving = bed.head_run.pending || bed.feet_run.pending;
+        result.head = run_info(bed.head_run, bed.last_motion_us);
+        result.feet = run_info(bed.feet_run, bed.last_motion_us);
         result.name = bed.name;
         result.head_travel_s = bed.head_travel_ds / 10.0f;
         result.feet_travel_s = bed.feet_travel_ds / 10.0f;
@@ -862,33 +932,52 @@ void clear(int index) {
     store_save(index);
 }
 
-bool move(int index, Part part, bool up, float seconds) {
-    if (index < 0 || index >= MAX_BEDS || beds[index].state != State::Ready) {
-        return false;
+uint32_t move(int index, Part part, bool up, float seconds) {
+    if (index < 0 || index >= MAX_BEDS || beds[index].state != State::Ready || seconds <= 0) {
+        return 0;
     }
-    const uint8_t mask = part == Part::Head ? octo::MOTOR_HEAD
-                         : part == Part::Feet ? octo::MOTOR_FEET
-                                              : octo::MOTOR_BOTH;
     Bed& bed = beds[index];
-    bed.move_cmd = up ? octo::motor_up(mask) : octo::motor_down(mask);
-    bed.move_until_us = now_us() + static_cast<int64_t>(seconds * 1000000.0f);
+    const uint32_t id = ++last_run_id;
+    account(bed, now_us());  // so the time driven by a replaced run is not lost
+    for (Run* run : {&bed.head_run, &bed.feet_run}) {
+        if ((run == &bed.head_run ? Part::Head : Part::Feet) == part || part == Part::Both) {
+            run->id = id;
+            run->pending = true;
+            run->up = up;
+            run->driving = false;
+            run->remaining_us = static_cast<int64_t>(seconds * 1000000.0f);
+            run->done_us = 0;
+        }
+    }
     motion_tick(nullptr);
-    return true;
+    return id;
 }
 
-bool stop(int index) {
+bool stop(int index, Part part) {
     if (index < 0 || index >= MAX_BEDS) {
         return false;
     }
-    beds[index].move_cmd.clear();
-    return write(beds[index], octo::motor_stop());
+    Bed& bed = beds[index];
+    if (bed.calibrating && (part == Part::Both || part == bed.calibrate_part)) {
+        // A stop from anywhere ends a calibration without saving it
+        bed.calibrating = false;
+        log_event("bed %d calibration cancelled", index);
+    }
+    account(bed, now_us());
+    if (part != Part::Both) {
+        // The other motor keeps going: the next command drives only that one
+        (part == Part::Head ? bed.head_run : bed.feet_run).pending = false;
+        motion_tick(nullptr);
+        return true;
+    }
+    end_runs(bed);
+    return write(bed, octo::motor_stop());
 }
 
 void stop_all() {
-    for (auto& bed : beds) {
-        if (!bed.move_cmd.empty()) {
-            bed.move_cmd.clear();
-            write(bed, octo::motor_stop());
+    for (int i = 0; i < MAX_BEDS; ++i) {
+        if (beds[i].head_run.pending || beds[i].feet_run.pending) {
+            stop(i);
         }
     }
 }
@@ -933,8 +1022,8 @@ float calibrate_stop(int index) {
         return -1.0f;
     }
     Bed& bed = beds[index];
-    stop(index);
     bed.calibrating = false;
+    stop(index);
     const float seconds = (now_us() - bed.calibrate_started_us) / 1000000.0f;
     if (seconds < MIN_TRAVEL_S || seconds >= MAX_TRAVEL_S) {
         log_event("bed %d calibration discarded (%.1f s)", index, seconds);

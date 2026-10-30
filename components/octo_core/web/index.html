@@ -66,6 +66,7 @@ label{display:flex;flex-direction:column;gap:3px;font-size:13px;color:var(--mute
 const $ = s => document.querySelector(s);
 let token = localStorage.getItem('octoToken') || '';
 let state = null;
+let presets = null;
 
 function askToken() {
   const t = prompt('Token (OCTO_HTTP_TOKEN uit secrets.h)', token);
@@ -112,10 +113,32 @@ function bedCard(b) {
       <button ${dis} onclick="run('light ${i} on')">Licht aan</button>
       <button ${dis} onclick="run('light ${i} off')">Licht uit</button>
     </div>
+    ${presetRow(b)}
     ${motor('head', 'Hoofd', b.head_travel)}
     ${motor('legs', 'Benen', b.legs_travel)}
     <ol class="steps"><li>Leg het onderdeel plat (stap 1).</li><li>Start de meting: het gaat omhoog.</li><li>Druk op stop zodra het helemaal bovenaan is; de tijd wordt de looptijd.</li></ol>
   </div>`;
+}
+
+// Presets exist only on the Matter bridge ("preset list" fails on the spike)
+function presetRow(b) {
+  const p = presets && presets.beds[b.index];
+  if (!p) return '';
+  const i = b.index, dis = b.state === 'ready' ? '' : 'disabled';
+  const other = state.beds[1 - i];
+  const slot = n => {
+    const s = p.presets[n - 1];
+    const tip = s ? `hoofd ${s.head}%, benen ${s.legs}%` : 'leeg';
+    return `<button ${dis || (s ? '' : 'disabled')} title="${tip}" onclick="run('preset ${i} ${n}')">Stand ${n}</button>`;
+  };
+  const save = n => `<button onclick="if (confirm('Huidige stand bewaren als stand ${n}?')) run('preset ${i} save ${n}')">${n}</button>`;
+  return `<h3>Standen · nu hoofd ${p.head}%, benen ${p.legs}%</h3>
+    <div class="row">
+      <button ${dis} onclick="run('preset ${i} flat')">Plat</button>
+      ${slot(1)}${slot(2)}${slot(3)}
+      ${other && other.configured ? `<button ${dis} onclick="run('preset ${i} match')">Zelfde als ${esc(other.name)}</button>` : ''}
+    </div>
+    <div class="row" style="margin-top:8px"><span class="sub">Huidige stand bewaren als</span>${save(1)}${save(2)}${save(3)}</div>`;
 }
 
 function fillMacs() {
@@ -131,6 +154,7 @@ function fillMacs() {
 async function refresh() {
   try {
     state = JSON.parse(await cmd('json'));
+    try { presets = JSON.parse(await cmd('preset list')); } catch (e) { presets = null; }
     $('#sys').textContent = `Uptime ${Math.floor(state.uptime / 60)} min · vrij geheugen ${Math.round(state.heap / 1024)} KB`;
     // Don't redraw while a travel time is being typed
     if (!$('#beds').contains(document.activeElement)) $('#beds').innerHTML = state.beds.map(bedCard).join('');

@@ -28,10 +28,21 @@ constexpr float DEFAULT_TRAVEL_S = 30.0f;
 constexpr float MIN_TRAVEL_S = 5.0f;
 constexpr float MAX_TRAVEL_S = 120.0f;
 
+// A motor's latest run, for tracking its position.
+struct RunInfo {
+    uint32_t id = 0;  // changes with every new run; 0 when never moved
+    bool moving = false;
+    bool up = false;
+    float done_s = 0.0f;    // time driven so far
+    bool finished = false;  // ran its full time instead of being stopped
+};
+
 struct Info {
     bool configured = false;
     bool ready = false;  // connected and PIN accepted
     bool moving = false; // a motor command is running
+    RunInfo head;
+    RunInfo feet;
     std::string name;
     float head_travel_s = DEFAULT_TRAVEL_S;
     float feet_travel_s = DEFAULT_TRAVEL_S;
@@ -46,8 +57,12 @@ void on_calibrated(CalibratedCallback callback);
 Info info(int index);
 bool configure(int index, const uint8_t mac[6], const std::string& pin, const std::string& name);
 void clear(int index);
-bool move(int index, Part part, bool up, float seconds);
-bool stop(int index);
+// Drives a motor (or both) for the given time and returns the id of the new
+// run, or 0 when the bed is not ready. The other motor's run continues: in
+// the same direction both move together, otherwise one after the other.
+uint32_t move(int index, Part part, bool up, float seconds);
+// Stops one motor, or both; a stop also ends a calibration of that motor.
+bool stop(int index, Part part = Part::Both);
 void stop_all();
 bool light(int index, bool on);
 

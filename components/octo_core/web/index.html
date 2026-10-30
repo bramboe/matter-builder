@@ -160,6 +160,7 @@ const TEXT = {
     pairFirst: 'Not paired yet. Scan the code in Home Assistant (Add Matter device) or in Apple Home.',
     disconnect: 'Disconnect', confirmDisconnect: v => `Disconnect ${v}? The beds disappear there until you pair again.`,
     confirmRestart: 'Restart?', hours: 'h',
+    waiting: 'Connecting to the bed…', waitingHelp: 'Keep the bed in range and turn off the OCTO app and other bridges: a bed accepts only one connection. The controls appear once the bed has accepted the PIN.', pinRefused: 'The bed refused the PIN. Remove the bed and add it again with the right PIN.',
   },
   nl: {
     title: 'Octo bedden', changePassword: 'Wachtwoord wijzigen', restart: 'Herstarten', language: 'Taal',
@@ -191,6 +192,7 @@ const TEXT = {
     pairFirst: 'Nog niet gekoppeld. Scan de code in Home Assistant (Matter-apparaat toevoegen) of in Apple Home.',
     disconnect: 'Loskoppelen', confirmDisconnect: v => `${v} loskoppelen? De bedden verdwijnen daar tot je opnieuw koppelt.`,
     confirmRestart: 'Herstarten?', hours: 'u',
+    waiting: 'Verbinden met het bed…', waitingHelp: 'Houd het bed binnen bereik en zet de OCTO-app en andere bridges uit: een bed accepteert maar één verbinding. De bediening verschijnt zodra het bed de PIN heeft geaccepteerd.', pinRefused: 'Het bed weigerde de PIN. Verwijder het bed en voeg het opnieuw toe met de juiste PIN.',
   },
   de: {
     title: 'Octo-Betten', changePassword: 'Passwort ändern', restart: 'Neu starten', language: 'Sprache',
@@ -222,6 +224,7 @@ const TEXT = {
     pairFirst: 'Noch nicht gekoppelt. Scannen Sie den Code in Home Assistant (Matter-Gerät hinzufügen) oder in Apple Home.',
     disconnect: 'Trennen', confirmDisconnect: v => `${v} trennen? Die Betten verschwinden dort, bis Sie erneut koppeln.`,
     confirmRestart: 'Neu starten?', hours: 'Std.',
+    waiting: 'Verbinde mit dem Bett…', waitingHelp: 'Halten Sie das Bett in Reichweite und schalten Sie die OCTO-App und andere Bridges aus: Ein Bett akzeptiert nur eine Verbindung. Die Bedienung erscheint, sobald das Bett die PIN akzeptiert hat.', pinRefused: 'Das Bett hat die PIN abgelehnt. Entfernen Sie das Bett und fügen Sie es mit der richtigen PIN erneut hinzu.',
   },
   es: {
     title: 'Camas Octo', changePassword: 'Cambiar contraseña', restart: 'Reiniciar', language: 'Idioma',
@@ -253,6 +256,7 @@ const TEXT = {
     pairFirst: 'Aún no vinculado. Escanee el código en Home Assistant (Añadir dispositivo Matter) o en Apple Home.',
     disconnect: 'Desvincular', confirmDisconnect: v => `¿Desvincular ${v}? Las camas desaparecen allí hasta que vuelva a vincular.`,
     confirmRestart: '¿Reiniciar?', hours: 'h',
+    waiting: 'Conectando con la cama…', waitingHelp: 'Mantenga la cama al alcance y apague la app OCTO y otros puentes: una cama solo acepta una conexión. Los controles aparecen cuando la cama haya aceptado el PIN.', pinRefused: 'La cama rechazó el PIN. Elimine la cama y vuelva a añadirla con el PIN correcto.',
   },
 };
 let lang = 'en';
@@ -379,13 +383,17 @@ function bedSection(b) {
   return `<div class="section">
     <div class="section-head"><h2>${esc(b.name)}</h2>
       <span class="badge"><i class="${ready ? 'ok' : ''}"></i>${esc(status)}</span>
-      <span class="sub">${esc(b.mac)} · ${t('drops', b.drops)}</span>
+      <span class="sub">${esc(b.mac)}${b.verified ? ' · ' + t('drops', b.drops) : ''}</span>
       <span class="head-actions"><button class="text" onclick="renameBed(${b.index}, '${quote(b.name)}')">${t('rename')}</button>
         <button class="warn" onclick="removeBed(${b.index}, '${quote(b.name)}')">${t('remove')}</button></span></div>
-    <div class="grid">
+    ${!b.verified ? `<div class="grid"><div class="card">
+      <div class="tile"><div class="icon">${icon('bt')}</div>
+        <div class="info"><div class="name">${t('waiting')}</div><div class="state">${esc(b.mac)}</div></div></div>
+      <div class="sub" style="margin-top:10px">${b.pin_rejects ? t('pinRefused') : t('waitingHelp')}</div>
+    </div></div></div>` : `<div class="grid">
       ${motorTile(b, 'head', t('head'), p && p.head)}${motorTile(b, 'legs', t('legs'), p && p.legs)}${lightTile(b)}
       ${presetCard(b, p)}${calibrationCard(b)}
-    </div></div>`;
+    </div></div>`}`;
 }
 
 // Discovery, as in Home Assistant: Octo beds seen over Bluetooth that are

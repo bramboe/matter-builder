@@ -73,6 +73,7 @@ uint32_t last_run_id = 0;
 
 struct Bed {
     bool configured = false;
+    bool verified = false;  // the bed has accepted this PIN at least once
     uint8_t mac[6] = {};  // display order, e.g. AA:BB:CC:DD:EE:01
     char pin[5] = {};
     char name[24] = {};
@@ -261,6 +262,8 @@ void store_save(int index) {
         nvs_set_u16(nvs, key, bed.head_travel_ds);
         std::snprintf(key, sizeof(key), "b%dtf", index);
         nvs_set_u16(nvs, key, bed.feet_travel_ds);
+        std::snprintf(key, sizeof(key), "b%dok", index);
+        nvs_set_u8(nvs, key, bed.verified ? 1 : 0);
     } else {
         nvs_erase_key(nvs, key);
         std::snprintf(key, sizeof(key), "b%dpin", index);
@@ -299,6 +302,10 @@ void store_load() {
         nvs_get_u16(nvs, key, &bed.head_travel_ds);  // keeps the default if absent
         std::snprintf(key, sizeof(key), "b%dtf", i);
         nvs_get_u16(nvs, key, &bed.feet_travel_ds);
+        uint8_t verified = 0;
+        std::snprintf(key, sizeof(key), "b%dok", i);
+        nvs_get_u8(nvs, key, &verified);
+        bed.verified = verified != 0;
         bed.configured = true;
         ESP_LOGI(TAG, "Bed %d '%s' %s loaded", i, bed.name, mac_string(bed.mac).c_str());
     }
@@ -590,6 +597,10 @@ void on_notify(Bed& bed, const uint8_t* data, size_t len) {
             bed.connected_since_us = now_us();
             bed.connects++;
             log_event("bed %d '%s' ready (rssi %d)", index_of(&bed), bed.name, bed.rssi);
+            if (!bed.verified) {
+                bed.verified = true;
+                store_save(index_of(&bed));
+            }
             if (!bed.features_done) {
                 write(bed, octo::get_features());
             }
@@ -1079,12 +1090,13 @@ std::string state_json() {
         appendf(out,
                 "%s{\"index\":%d,\"configured\":%s,\"name\":%s,\"mac\":\"%s\",\"state\":\"%s\",\"rssi\":%d,"
                 "\"head_travel\":%.1f,\"legs_travel\":%.1f,\"calibrating\":%s,\"calibrate_elapsed\":%.1f,"
-                "\"drops\":%" PRIu32 "}",
+                "\"drops\":%" PRIu32 ",\"verified\":%s,\"pin_rejects\":%" PRIu32 "}",
                 i ? "," : "", i, bed.configured ? "true" : "false", json_string(bed.name).c_str(),
                 bed.configured ? mac_string(bed.mac).c_str() : "", state_name(bed.state), bed.rssi,
                 bed.head_travel_ds / 10.0, bed.feet_travel_ds / 10.0,
                 !bed.calibrating ? "null" : bed.calibrate_part == Part::Head ? "\"head\"" : "\"legs\"",
-                bed.calibrating ? (now - bed.calibrate_started_us) / 1000000.0 : 0.0, bed.disconnects);
+                bed.calibrating ? (now - bed.calibrate_started_us) / 1000000.0 : 0.0, bed.disconnects,
+                bed.verified ? "true" : "false", bed.pin_rejects);
     }
     out += "],\"scan\":[";
     for (int i = 0; i < scan_cache_used; ++i) {

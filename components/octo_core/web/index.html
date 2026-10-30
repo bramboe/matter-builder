@@ -10,6 +10,7 @@
 --ok:#43a047;--bad:#db4437;--light:#ff9800;--chip:rgba(0,154,199,.15);--radius:12px}
 @media (prefers-color-scheme:dark){:root{--bg:#111;--card:#1c1c1c;--fg:#e1e1e1;--mute:#9b9b9b;--line:#2f2f2f;--fill:#2a2a2a;--chip:rgba(0,154,199,.25)}}
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 Roboto,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
 svg{width:24px;height:24px;fill:currentColor;flex:none}
 header{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:12px;min-height:56px;padding:0 4px 0 16px;background:var(--bg)}
@@ -96,6 +97,18 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
 </header>
 
 <main>
+<div class="section" id="login" hidden>
+  <div class="card" style="max-width:420px;margin:40px auto 0">
+    <h3 data-t="loginTitle"></h3>
+    <div class="sub" data-t="loginHelp"></div>
+    <form id="loginForm" class="form" style="grid-template-columns:1fr">
+      <label class="field"><span data-t="password"></span><input id="password" type="password" autocomplete="current-password"></label>
+      <div class="sub" id="loginError" style="color:var(--bad)"></div>
+      <div class="features" style="margin-top:0"><button class="pri" type="submit" data-t="login"></button></div>
+    </form>
+  </div>
+</div>
+<div id="app">
 <div id="discovered"></div>
 <div id="beds"></div>
 
@@ -123,6 +136,7 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
     </div>
   </div>
 </div>
+</div>
 </main>
 <div id="toast"></div>
 
@@ -131,7 +145,8 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
 // the page and the preset names in Home Assistant use the same one.
 const TEXT = {
   en: {
-    title: 'Octo beds', changePassword: 'Change password', restart: 'Restart', language: 'Language',
+    title: 'Octo beds',
+    loginTitle: 'Sign in', loginHelp: 'Enter the password of this bridge (OCTO_HTTP_TOKEN in secrets.h).', password: 'Password', login: 'Sign in', wrongPassword: 'Wrong password.', stateIdle: 'Not connected', stateBusy: 'Connecting…', weakSignal: 'Weak signal: place the bridge closer to the bed.', changePassword: 'Change password', restart: 'Restart', language: 'Language',
     settings: 'Settings', pairingCode: 'Pairing code', openWindow: 'Open pairing window',
     deviceNetwork: 'Device and network', device: 'Device', vidPid: 'Vendor / product ID',
     testIds: 'Test IDs of the Matter standard', system: 'System', freeMemory: 'Free memory', uptime: 'Running',
@@ -163,7 +178,8 @@ const TEXT = {
     waiting: 'Connecting to the bed…', waitingHelp: 'Keep the bed in range and turn off the OCTO app and other bridges: a bed accepts only one connection. The controls appear once the bed has accepted the PIN.', pinRefused: 'The bed refused the PIN. Remove the bed and add it again with the right PIN.',
   },
   nl: {
-    title: 'Octo bedden', changePassword: 'Wachtwoord wijzigen', restart: 'Herstarten', language: 'Taal',
+    title: 'Octo bedden',
+    loginTitle: 'Inloggen', loginHelp: 'Vul het wachtwoord van deze bridge in (OCTO_HTTP_TOKEN in secrets.h).', password: 'Wachtwoord', login: 'Inloggen', wrongPassword: 'Onjuist wachtwoord.', stateIdle: 'Niet verbonden', stateBusy: 'Verbinden…', weakSignal: 'Zwak signaal: zet de bridge dichter bij het bed.', changePassword: 'Wachtwoord wijzigen', restart: 'Herstarten', language: 'Taal',
     settings: 'Instellingen', pairingCode: 'Koppelcode', openWindow: 'Koppelvenster openen',
     deviceNetwork: 'Apparaat en netwerk', device: 'Apparaat', vidPid: 'Vendor-/product-ID',
     testIds: "Test-ID's van de Matter-standaard", system: 'Systeem', freeMemory: 'Vrij geheugen', uptime: 'Actief',
@@ -195,7 +211,8 @@ const TEXT = {
     waiting: 'Verbinden met het bed…', waitingHelp: 'Houd het bed binnen bereik en zet de OCTO-app en andere bridges uit: een bed accepteert maar één verbinding. De bediening verschijnt zodra het bed de PIN heeft geaccepteerd.', pinRefused: 'Het bed weigerde de PIN. Verwijder het bed en voeg het opnieuw toe met de juiste PIN.',
   },
   de: {
-    title: 'Octo-Betten', changePassword: 'Passwort ändern', restart: 'Neu starten', language: 'Sprache',
+    title: 'Octo-Betten',
+    loginTitle: 'Anmelden', loginHelp: 'Geben Sie das Passwort dieser Bridge ein (OCTO_HTTP_TOKEN in secrets.h).', password: 'Passwort', login: 'Anmelden', wrongPassword: 'Falsches Passwort.', stateIdle: 'Nicht verbunden', stateBusy: 'Verbinde…', weakSignal: 'Schwaches Signal: Stellen Sie die Bridge näher ans Bett.', changePassword: 'Passwort ändern', restart: 'Neu starten', language: 'Sprache',
     settings: 'Einstellungen', pairingCode: 'Kopplungscode', openWindow: 'Kopplungsfenster öffnen',
     deviceNetwork: 'Gerät und Netzwerk', device: 'Gerät', vidPid: 'Hersteller-/Produkt-ID',
     testIds: 'Test-IDs des Matter-Standards', system: 'System', freeMemory: 'Freier Speicher', uptime: 'Laufzeit',
@@ -227,7 +244,8 @@ const TEXT = {
     waiting: 'Verbinde mit dem Bett…', waitingHelp: 'Halten Sie das Bett in Reichweite und schalten Sie die OCTO-App und andere Bridges aus: Ein Bett akzeptiert nur eine Verbindung. Die Bedienung erscheint, sobald das Bett die PIN akzeptiert hat.', pinRefused: 'Das Bett hat die PIN abgelehnt. Entfernen Sie das Bett und fügen Sie es mit der richtigen PIN erneut hinzu.',
   },
   es: {
-    title: 'Camas Octo', changePassword: 'Cambiar contraseña', restart: 'Reiniciar', language: 'Idioma',
+    title: 'Camas Octo',
+    loginTitle: 'Iniciar sesión', loginHelp: 'Introduzca la contraseña de este puente (OCTO_HTTP_TOKEN en secrets.h).', password: 'Contraseña', login: 'Entrar', wrongPassword: 'Contraseña incorrecta.', stateIdle: 'No conectada', stateBusy: 'Conectando…', weakSignal: 'Señal débil: acerque el puente a la cama.', changePassword: 'Cambiar contraseña', restart: 'Reiniciar', language: 'Idioma',
     settings: 'Ajustes', pairingCode: 'Código de vinculación', openWindow: 'Abrir ventana de vinculación',
     deviceNetwork: 'Dispositivo y red', device: 'Dispositivo', vidPid: 'ID de fabricante / producto',
     testIds: 'IDs de prueba del estándar Matter', system: 'Sistema', freeMemory: 'Memoria libre', uptime: 'Activo',
@@ -287,18 +305,28 @@ function toast(text) {
   toastTimer = setTimeout(() => el.classList.remove('show'), 3500);
 }
 
-function askToken() {
-  const value = prompt(t('passwordPrompt'), token);
-  if (value !== null) {
-    token = value.trim();
-    try { localStorage.setItem('octoToken', token); } catch (e) {}
-  }
+// Sign-in card instead of a browser prompt; shown until the password works
+let signedIn = false;
+function showLogin(error) {
+  signedIn = false;
+  $('#login').hidden = false;
+  $('#app').hidden = true;
+  $('#loginError').textContent = error ? t('wrongPassword') : '';
+  $('#password').value = '';
+  $('#password').focus();
+}
+function signedInOk() {
+  if (signedIn) return;
+  signedIn = true;
+  $('#login').hidden = true;
+  $('#app').hidden = false;
 }
 
 async function cmd(line) {
   const r = await fetch('/cmd', {method: 'POST', headers: {'X-Octo-Token': token}, body: line});
   const text = await r.text();
-  if (r.status === 401) { askToken(); throw new Error(t('passwordRefused')); }
+  if (r.status === 401) { showLogin(!!token); throw new Error(t('passwordRefused')); }
+  signedInOk();
   return text;
 }
 
@@ -379,7 +407,7 @@ function bedSection(b) {
   if (!b.configured) return '';
   const ready = b.state === 'ready';
   const p = presets && presets.beds[b.index];
-  const status = ready ? t('connected', b.rssi) : b.state;
+  const status = ready ? t('connected', b.rssi) : b.state === 'idle' ? t('stateIdle') : t('stateBusy');
   return `<div class="section">
     <div class="section-head"><h2>${esc(b.name)}</h2>
       <span class="badge"><i class="${ready ? 'ok' : ''}"></i>${esc(status)}</span>
@@ -390,6 +418,7 @@ function bedSection(b) {
       <div class="tile"><div class="icon">${icon('bt')}</div>
         <div class="info"><div class="name">${t('waiting')}</div><div class="state">${esc(b.mac)}</div></div></div>
       <div class="sub" style="margin-top:10px">${b.pin_rejects ? t('pinRefused') : t('waitingHelp')}</div>
+      ${b.rssi && b.rssi < -88 ? `<div class="sub" style="margin-top:6px;color:var(--bad)">${t('weakSignal')}</div>` : ''}
     </div></div></div>` : `<div class="grid">
       ${motorTile(b, 'head', t('head'), p && p.head)}${motorTile(b, 'legs', t('legs'), p && p.legs)}${lightTile(b)}
       ${presetCard(b, p)}${calibrationCard(b)}
@@ -422,7 +451,8 @@ function discoveredSection() {
         onclick="adding = '${s.address}'; refresh()">${t('add')}</button></div>`;
     return `<div class="card"><div class="tile"><div class="icon">${icon('bt')}</div>
       <div class="info"><div class="name">${t('octoBed')}${s.name ? ' (' + esc(s.name) + ')' : ''}</div>
-      <div class="state">${s.address} · ${s.rssi} dBm</div></div></div>${form}</div>`;
+      <div class="state">${s.address} · ${s.rssi} dBm</div></div></div>
+      ${s.rssi < -88 ? `<div class="sub" style="margin-top:8px;color:var(--bad)">${t('weakSignal')}</div>` : ''}${form}</div>`;
   }).join('')}</div>${free ? '' : `<div class="sub" style="margin:8px 4px">${t('maxBedsHelp')}</div>`}</div>`;
 }
 
@@ -501,7 +531,11 @@ $('#menuBtn').onclick = e => { e.stopPropagation(); $('#menu').classList.toggle(
 $('#menu').onclick = e => e.stopPropagation();
 document.addEventListener('click', () => $('#menu').classList.remove('open'));
 $('#reboot').onclick = () => { if (confirm(t('confirmRestart'))) run('reboot'); };
-$('#token').onclick = () => { askToken(); refresh(); loadMatter(); };
+$('#token').onclick = () => {
+  token = '';
+  try { localStorage.removeItem('octoToken'); } catch (e) {}
+  showLogin(false);
+};
 $('#openWindow').onclick = async () => { await run('matter open'); loadMatter(); };
 $('#lang').onchange = async () => {
   lang = $('#lang').value;
@@ -514,12 +548,18 @@ $('#lang').onchange = async () => {
 
 applyLanguage();
 $('#sys').textContent = t('connecting');
-if (!token) askToken();
-loadLanguage();
-refresh();
-loadMatter();
-setInterval(() => { if (!document.hidden) refresh(); }, 2000);
-setInterval(() => { if (!document.hidden) loadMatter(); }, 15000);
+$('#loginForm').onsubmit = e => {
+  e.preventDefault();
+  token = $('#password').value.trim();
+  try { localStorage.setItem('octoToken', token); } catch (err) {}
+  loadLanguage();
+  refresh();
+  loadMatter();
+};
+if (!token) showLogin(false);
+else { loadLanguage(); refresh(); loadMatter(); }
+setInterval(() => { if (!document.hidden && signedIn) refresh(); }, 2000);
+setInterval(() => { if (!document.hidden && signedIn) loadMatter(); }, 15000);
 </script>
 </body>
 </html>

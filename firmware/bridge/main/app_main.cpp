@@ -12,6 +12,10 @@
 #include "net.h"
 #include "nvs_flash.h"
 
+#if CONFIG_OPENTHREAD_ENABLED
+#include <platform/ESP32/OpenthreadLauncher.h>
+#endif
+
 namespace {
 
 std::string cmd_matter(const std::vector<std::string>& args) {
@@ -38,6 +42,16 @@ extern "C" void app_main() {
 
     boot_guard::early();
     bed_link::start();
+#if CONFIG_OPENTHREAD_ENABLED
+    // OpenThread on the chip's own 802.15.4 radio, sharing it with BLE
+    esp_openthread_platform_config_t thread_config = {};
+    thread_config.radio_config.radio_mode = RADIO_MODE_NATIVE;
+    thread_config.host_config.host_connection_mode = HOST_CONNECTION_MODE_NONE;
+    thread_config.port_config.storage_partition_name = "nvs";
+    thread_config.port_config.netif_queue_size = 10;
+    thread_config.port_config.task_queue_size = 10;
+    set_openthread_platform_config(&thread_config);
+#endif
     matter_bridge::start();
     net::start();
     add_command("preset", "preset list | preset <0|1> <flat|1-3|match> | preset <0|1> save <1-3>\n",

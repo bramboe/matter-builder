@@ -8,6 +8,7 @@
 #include "esp_heap_caps.h"
 #include "esp_bt.h"
 #include "esp_log.h"
+#include "soc/soc_caps.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
@@ -843,8 +844,10 @@ void run_request(ble_npl_event* event) {
 
 void start() {
     store_load();
+#if SOC_BT_CLASSIC_SUPPORTED
     // BLE only: give the classic Bluetooth controller memory back to the heap
     esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);
+#endif
     ESP_ERROR_CHECK(nimble_port_init());
     ble_hs_cfg.sync_cb = on_sync;
     ble_hs_cfg.reset_cb = on_reset;

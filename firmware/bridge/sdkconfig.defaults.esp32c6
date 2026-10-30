@@ -1,0 +1,33 @@
+# Octo Matter bridge on an ESP32-C6: Matter over Thread instead of Wi-Fi.
+# Applied on top of sdkconfig.defaults when the target is esp32c6. Build in
+# its own directory so the classic ESP32 build stays as it is:
+#   idf.py -B build-c6 -D SDKCONFIG=sdkconfig.c6 set-target esp32c6 build
+CONFIG_IDF_TARGET="esp32c6"
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
+
+# A new device: its own partition table with room to grow (installed over USB)
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions_c6.csv"
+
+# Thread on the chip's own 802.15.4 radio, as a minimal end device: it does
+# not route for others, which leaves more radio time for the bed links.
+# The network comes from OCTO_THREAD_DATASET in secrets.h; Matter is then
+# commissioned over Thread, so CHIPoBLE stays off (sdkconfig.defaults).
+CONFIG_OPENTHREAD_ENABLED=y
+CONFIG_OPENTHREAD_FTD=n
+CONFIG_OPENTHREAD_MTD=y
+CONFIG_OPENTHREAD_SRP_CLIENT=y
+CONFIG_OPENTHREAD_DNS_CLIENT=y
+CONFIG_OPENTHREAD_CLI=n
+CONFIG_OPENTHREAD_LOG_LEVEL_DYNAMIC=n
+CONFIG_OPENTHREAD_LOG_LEVEL_NOTE=y
+CONFIG_ENABLE_WIFI_STATION=n
+CONFIG_ESP_COEX_SW_COEXIST_ENABLE=y
+
+# IPv6 comes from OpenThread, not from router advertisements on Wi-Fi
+CONFIG_LWIP_IPV6_AUTOCONFIG=n
+CONFIG_LWIP_IPV6_NUM_ADDRESSES=8
+CONFIG_LWIP_MULTICAST_PING=y
+CONFIG_LWIP_HOOK_IP6_ROUTE_NONE=y
+CONFIG_LWIP_HOOK_ND6_GET_GW_NONE=y
+CONFIG_USE_MINIMAL_MDNS=n
+CONFIG_ENABLE_EXTENDED_DISCOVERY=y

@@ -135,6 +135,7 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
     </div>
     <div class="card">
       <h3 data-t="system"></h3>
+      <div class="row"><div class="label"><span data-t="network"></span><div class="sub" id="pageUrl"></div></div><div id="netKind">–</div></div>
       <div class="row"><div class="label" data-t="freeMemory"></div><div id="heap">–</div></div>
       <div class="row"><div class="label" data-t="uptime"></div><div id="uptime">–</div></div>
     </div>
@@ -150,6 +151,7 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
 const TEXT = {
   en: {
     title: 'Octo beds',
+    network: 'Network', thread: 'Thread', wifi: 'Wi-Fi',
     pairLater: 'Add a bed first. The pairing code shows up here once a bed is connected, so the beds reach Home Assistant and Apple Home with their names.',
     loginTitle: 'Sign in', loginHelp: 'Enter the password of this bridge (OCTO_HTTP_TOKEN in secrets.h).', password: 'Password', login: 'Sign in', wrongPassword: 'Wrong password.', stateIdle: 'Not connected', stateBusy: 'Connecting…', weakSignal: 'Weak signal: place the bridge closer to the bed.', changePassword: 'Change password', restart: 'Restart', language: 'Language',
     settings: 'Settings', pairingCode: 'Pairing code', openWindow: 'Open pairing window',
@@ -184,6 +186,7 @@ const TEXT = {
   },
   nl: {
     title: 'Octo bedden',
+    network: 'Netwerk', thread: 'Thread', wifi: 'Wi-Fi',
     pairLater: 'Voeg eerst een bed toe. De koppelcode verschijnt hier zodra een bed verbonden is, zodat de bedden met hun naam in Home Assistant en Apple Home komen.',
     loginTitle: 'Inloggen', loginHelp: 'Vul het wachtwoord van deze bridge in (OCTO_HTTP_TOKEN in secrets.h).', password: 'Wachtwoord', login: 'Inloggen', wrongPassword: 'Onjuist wachtwoord.', stateIdle: 'Niet verbonden', stateBusy: 'Verbinden…', weakSignal: 'Zwak signaal: zet de bridge dichter bij het bed.', changePassword: 'Wachtwoord wijzigen', restart: 'Herstarten', language: 'Taal',
     settings: 'Instellingen', pairingCode: 'Koppelcode', openWindow: 'Koppelvenster openen',
@@ -218,6 +221,7 @@ const TEXT = {
   },
   de: {
     title: 'Octo-Betten',
+    network: 'Netzwerk', thread: 'Thread', wifi: 'WLAN',
     pairLater: 'Fügen Sie zuerst ein Bett hinzu. Der Kopplungscode erscheint hier, sobald ein Bett verbunden ist, damit die Betten mit ihrem Namen in Home Assistant und Apple Home ankommen.',
     loginTitle: 'Anmelden', loginHelp: 'Geben Sie das Passwort dieser Bridge ein (OCTO_HTTP_TOKEN in secrets.h).', password: 'Passwort', login: 'Anmelden', wrongPassword: 'Falsches Passwort.', stateIdle: 'Nicht verbunden', stateBusy: 'Verbinde…', weakSignal: 'Schwaches Signal: Stellen Sie die Bridge näher ans Bett.', changePassword: 'Passwort ändern', restart: 'Neu starten', language: 'Sprache',
     settings: 'Einstellungen', pairingCode: 'Kopplungscode', openWindow: 'Kopplungsfenster öffnen',
@@ -252,6 +256,7 @@ const TEXT = {
   },
   es: {
     title: 'Camas Octo',
+    network: 'Red', thread: 'Thread', wifi: 'Wi-Fi',
     pairLater: 'Añada primero una cama. El código de vinculación aparece aquí cuando una cama esté conectada, para que las camas lleguen a Home Assistant y Apple Home con su nombre.',
     loginTitle: 'Iniciar sesión', loginHelp: 'Introduzca la contraseña de este puente (OCTO_HTTP_TOKEN en secrets.h).', password: 'Contraseña', login: 'Entrar', wrongPassword: 'Contraseña incorrecta.', stateIdle: 'No conectada', stateBusy: 'Conectando…', weakSignal: 'Señal débil: acerque el puente a la cama.', changePassword: 'Cambiar contraseña', restart: 'Reiniciar', language: 'Idioma',
     settings: 'Ajustes', pairingCode: 'Código de vinculación', openWindow: 'Abrir ventana de vinculación',
@@ -502,7 +507,13 @@ function removeBed(i, name) {
   if (confirm(t('confirmRemove', name))) run(`bed clear ${i}`);
 }
 
+// One request at a time: over Thread an answer can take longer than the
+// poll interval, and overlapping polls only queue up on the bridge
+let refreshing = false, loadingMatter = false;
+
 async function refresh() {
+  if (refreshing) return;
+  refreshing = true;
   try {
     state = JSON.parse(await cmd('json'));
     try { presets = JSON.parse(await cmd('preset list')); } catch (e) { presets = null; }
@@ -520,12 +531,16 @@ async function refresh() {
     if (!adding || !$('#addName')) $('#discovered').innerHTML = discoveredSection();
     updatePairing();
   } catch (e) { $('#sys').textContent = t('noConnection') + ': ' + e.message; }
+  finally { refreshing = false; }
 }
 
 // Pairing code, QR, commissioning window and paired controllers
 async function loadMatter() {
+  if (loadingMatter) return;
+  loadingMatter = true;
   let m;
   try { m = JSON.parse(await cmd('matter json')); } catch (e) { return; }
+  finally { loadingMatter = false; }
   matter = m;
   updatePairing();
   $('#manual').textContent = m.manual.replace(/^(\d{4})(\d{3})(\d{4})$/, '$1-$2-$3') || '–';
@@ -541,6 +556,12 @@ async function loadMatter() {
   $('#product').textContent = `${m.product} ${m.version}`;
   $('#ids').textContent = `${m.vid} / ${m.pid}`;
   $('#network').textContent = m.network.trim();
+  // "thread: attached, role child, …" or "wifi: connected, ip …, rssi -60, …"
+  const net = m.network.trim().split('\n')[0];
+  const role = (net.match(/role (\w+)/) || [])[1], rssi = (net.match(/rssi (-?\d+)/) || [])[1];
+  $('#netKind').textContent = net.startsWith('thread') ? t('thread') + (role ? ' · ' + role : '')
+    : net.startsWith('wifi') ? t('wifi') + (rssi ? ` · ${rssi} dBm` : '') : '–';
+  $('#pageUrl').textContent = location.host;
 }
 
 async function removeFabric(index, vendor) {
@@ -588,8 +609,8 @@ $('#loginForm').onsubmit = e => {
 };
 if (!token) showLogin(false);
 else { loadLanguage(); refresh(); loadMatter(); }
-setInterval(() => { if (!document.hidden && signedIn) refresh(); }, 2000);
-setInterval(() => { if (!document.hidden && signedIn) loadMatter(); }, 15000);
+setInterval(() => { if (!document.hidden && signedIn) refresh(); }, 3000);
+setInterval(() => { if (!document.hidden && signedIn) loadMatter(); }, 30000);
 </script>
 </body>
 </html>

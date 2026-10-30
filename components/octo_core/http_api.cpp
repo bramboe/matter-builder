@@ -1,11 +1,13 @@
 #include "http_api.h"
 
+#include <cstdio>
 #include <cstring>
 #include <memory>
 
 #include "bed_link.h"
 #include "boot_guard.h"
 #include "commands.h"
+#include "esp_app_desc.h"
 #include "esp_http_server.h"
 #include "esp_log.h"
 #include "esp_ota_ops.h"
@@ -57,13 +59,32 @@ esp_err_t handle_cmd(httpd_req_t* req) {
 
 // The settings page (web/index.html, embedded at build time). It holds no
 // secrets: everything it does goes through /cmd with the token.
-extern const char index_html_start[] asm("_binary_index_html_start");
-extern const char index_html_end[] asm("_binary_index_html_end");
+extern const char index_html_start[] asm("_binary_index_html_gz_start");
+extern const char index_html_end[] asm("_binary_index_html_gz_end");
+
+// The page changes only with the firmware, so the firmware's hash is its
+// ETag: a browser that has it gets "304 Not Modified" instead of the page.
+const char* page_etag() {
+    static char etag[20];
+    if (etag[0] == '\0') {
+        const uint8_t* sha = esp_app_get_description()->app_elf_sha256;
+        std::snprintf(etag, sizeof(etag), "\"%02x%02x%02x%02x%02x%02x\"", sha[0], sha[1], sha[2], sha[3], sha[4], sha[5]);
+    }
+    return etag;
+}
 
 esp_err_t handle_index(httpd_req_t* req) {
-    httpd_resp_set_type(req, "text/html; charset=utf-8");
+    char seen[24] = {};
     httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
-    return httpd_resp_send(req, index_html_start, index_html_end - index_html_start - 1);
+    httpd_resp_set_hdr(req, "ETag", page_etag());
+    if (httpd_req_get_hdr_value_str(req, "If-None-Match", seen, sizeof(seen)) == ESP_OK &&
+        std::strcmp(seen, page_etag()) == 0) {
+        httpd_resp_set_status(req, "304 Not Modified");
+        return httpd_resp_send(req, nullptr, 0);
+    }
+    httpd_resp_set_type(req, "text/html; charset=utf-8");
+    httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
+    return httpd_resp_send(req, index_html_start, index_html_end - index_html_start);
 }
 
 void restart_task(void*) {
@@ -141,7 +162,10 @@ void start(const char* token) {
     config.stack_size = 6144;
     config.recv_wait_timeout = 15;
     config.send_wait_timeout = 15;
-    config.max_open_sockets = 3;
+    // Browsers keep several connections open; close the oldest idle one
+    // instead of letting new requests wait for a free slot
+    config.max_open_sockets = 5;
+    config.lru_purge_enable = true;
     if (httpd_start(&server, &config) != ESP_OK) {
         ESP_LOGE(TAG, "HTTP server failed to start");
         return;

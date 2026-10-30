@@ -427,8 +427,14 @@ void ensure_scanning() {
         return;
     }
     ble_gap_disc_params params = {};
+#if SOC_IEEE802154_SUPPORTED
+    // Thread shares the radio: scan 10 % of the time, which still finds a
+    // bed advertising every ~100 ms within a few seconds
+    params.itvl = 0x1E0;   // 300 ms
+#else
     params.itvl = 0x60;    // 60 ms
-    params.window = 0x30;  // 30 ms: leave air time for the links (and later Wi-Fi)
+#endif
+    params.window = 0x30;  // 30 ms: leave air time for the links and the network
     params.passive = 0;    // active: the bed's name is in the scan response
     params.filter_duplicates = 0;
     int rc = ble_gap_disc(own_addr_type, BLE_HS_FOREVER, &params, gap_event, nullptr);

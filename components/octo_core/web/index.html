@@ -64,7 +64,8 @@ details[open] summary::after{transform:rotate(-135deg)}
 .qrwrap svg{width:148px;height:148px;border-radius:8px}
 .code{font-size:20px;letter-spacing:.04em;margin:2px 0 6px}
 pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--mute);margin:4px 0 8px}
-.head-actions{margin-left:auto;display:flex}
+.bed-menu{position:relative}
+.bed-menu .menu{left:0;right:auto;top:40px;z-index:3}
 .measure{margin:8px 0 0;font-weight:500;color:var(--primary)}
 .menu{position:absolute;right:8px;top:48px;min-width:200px;background:var(--card);border-radius:4px;box-shadow:0 4px 16px rgba(0,0,0,.25);padding:8px 0;display:none}
 .menu.open{display:block}
@@ -117,11 +118,14 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
   <div class="grid">
     <div class="card">
       <h3>Matter</h3>
+      <div class="sub" id="pairLater" data-t="pairLater" hidden></div>
+      <div id="pairing" hidden>
       <div class="qrwrap"><div id="qr"></div>
         <div><div class="sub" data-t="pairingCode"></div><div class="code" id="manual">–</div>
           <div class="sub" id="window"></div>
           <button class="text" id="openWindow" style="padding:0;margin-top:4px" data-t="openWindow"></button></div></div>
       <div class="sub" id="pairHelp" style="margin-top:10px"></div>
+      </div>
       <div id="fabrics" style="margin-top:8px"></div>
       <details><summary data-t="deviceNetwork"></summary>
         <div class="row"><div class="label" data-t="device"></div><div id="product" class="sub">–</div></div>
@@ -146,6 +150,7 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
 const TEXT = {
   en: {
     title: 'Octo beds',
+    pairLater: 'Add a bed first. The pairing code shows up here once a bed is connected, so the beds reach Home Assistant and Apple Home with their names.',
     loginTitle: 'Sign in', loginHelp: 'Enter the password of this bridge (OCTO_HTTP_TOKEN in secrets.h).', password: 'Password', login: 'Sign in', wrongPassword: 'Wrong password.', stateIdle: 'Not connected', stateBusy: 'Connecting…', weakSignal: 'Weak signal: place the bridge closer to the bed.', changePassword: 'Change password', restart: 'Restart', language: 'Language',
     settings: 'Settings', pairingCode: 'Pairing code', openWindow: 'Open pairing window',
     deviceNetwork: 'Device and network', device: 'Device', vidPid: 'Vendor / product ID',
@@ -179,6 +184,7 @@ const TEXT = {
   },
   nl: {
     title: 'Octo bedden',
+    pairLater: 'Voeg eerst een bed toe. De koppelcode verschijnt hier zodra een bed verbonden is, zodat de bedden met hun naam in Home Assistant en Apple Home komen.',
     loginTitle: 'Inloggen', loginHelp: 'Vul het wachtwoord van deze bridge in (OCTO_HTTP_TOKEN in secrets.h).', password: 'Wachtwoord', login: 'Inloggen', wrongPassword: 'Onjuist wachtwoord.', stateIdle: 'Niet verbonden', stateBusy: 'Verbinden…', weakSignal: 'Zwak signaal: zet de bridge dichter bij het bed.', changePassword: 'Wachtwoord wijzigen', restart: 'Herstarten', language: 'Taal',
     settings: 'Instellingen', pairingCode: 'Koppelcode', openWindow: 'Koppelvenster openen',
     deviceNetwork: 'Apparaat en netwerk', device: 'Apparaat', vidPid: 'Vendor-/product-ID',
@@ -212,6 +218,7 @@ const TEXT = {
   },
   de: {
     title: 'Octo-Betten',
+    pairLater: 'Fügen Sie zuerst ein Bett hinzu. Der Kopplungscode erscheint hier, sobald ein Bett verbunden ist, damit die Betten mit ihrem Namen in Home Assistant und Apple Home ankommen.',
     loginTitle: 'Anmelden', loginHelp: 'Geben Sie das Passwort dieser Bridge ein (OCTO_HTTP_TOKEN in secrets.h).', password: 'Passwort', login: 'Anmelden', wrongPassword: 'Falsches Passwort.', stateIdle: 'Nicht verbunden', stateBusy: 'Verbinde…', weakSignal: 'Schwaches Signal: Stellen Sie die Bridge näher ans Bett.', changePassword: 'Passwort ändern', restart: 'Neu starten', language: 'Sprache',
     settings: 'Einstellungen', pairingCode: 'Kopplungscode', openWindow: 'Kopplungsfenster öffnen',
     deviceNetwork: 'Gerät und Netzwerk', device: 'Gerät', vidPid: 'Hersteller-/Produkt-ID',
@@ -245,6 +252,7 @@ const TEXT = {
   },
   es: {
     title: 'Camas Octo',
+    pairLater: 'Añada primero una cama. El código de vinculación aparece aquí cuando una cama esté conectada, para que las camas lleguen a Home Assistant y Apple Home con su nombre.',
     loginTitle: 'Iniciar sesión', loginHelp: 'Introduzca la contraseña de este puente (OCTO_HTTP_TOKEN en secrets.h).', password: 'Contraseña', login: 'Entrar', wrongPassword: 'Contraseña incorrecta.', stateIdle: 'No conectada', stateBusy: 'Conectando…', weakSignal: 'Señal débil: acerque el puente a la cama.', changePassword: 'Cambiar contraseña', restart: 'Reiniciar', language: 'Idioma',
     settings: 'Ajustes', pairingCode: 'Código de vinculación', openWindow: 'Abrir ventana de vinculación',
     deviceNetwork: 'Dispositivo y red', device: 'Dispositivo', vidPid: 'ID de fabricante / producto',
@@ -295,7 +303,15 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':
 const quote = s => esc(s).replace(/'/g, '');
 let token = '';
 try { token = localStorage.getItem('octoToken') || ''; } catch (e) {}
-let state = null, presets = null, toastTimer = 0;
+let state = null, presets = null, matter = null, toastTimer = 0;
+
+// Pair only once a bed is connected (or the bridge is paired already), so
+// controllers get the beds with their names instead of "Bed 1"
+function updatePairing() {
+  const show = !!matter && (matter.fabrics.length > 0 || (!!state && state.beds.some(b => b.verified)));
+  $('#pairing').hidden = !show;
+  $('#pairLater').hidden = show || !matter;
+}
 
 function toast(text) {
   const el = $('#toast');
@@ -412,8 +428,11 @@ function bedSection(b) {
     <div class="section-head"><h2>${esc(b.name)}</h2>
       <span class="badge"><i class="${ready ? 'ok' : ''}"></i>${esc(status)}</span>
       <span class="sub">${esc(b.mac)}${b.verified ? ' · ' + t('drops', b.drops) : ''}</span>
-      <span class="head-actions"><button class="text" onclick="renameBed(${b.index}, '${quote(b.name)}')">${t('rename')}</button>
-        <button class="warn" onclick="removeBed(${b.index}, '${quote(b.name)}')">${t('remove')}</button></span></div>
+      <span class="bed-menu"><button class="icon-btn" aria-label="Menu" onclick="toggleBedMenu(event, ${b.index})">${icon('menu')}</button>
+        <div class="menu" id="bedMenu${b.index}">
+          <button onclick="renameBed(${b.index}, '${quote(b.name)}')">${t('rename')}</button>
+          <button style="color:var(--bad)" onclick="removeBed(${b.index}, '${quote(b.name)}')">${t('remove')}</button>
+        </div></span></div>
     ${!b.verified ? `<div class="grid"><div class="card">
       <div class="tile"><div class="icon">${icon('bt')}</div>
         <div class="info"><div class="name">${t('waiting')}</div><div class="state">${esc(b.mac)}</div></div></div>
@@ -466,6 +485,14 @@ async function addBed(mac) {
   await run(`bed set ${free.index} ${mac} ${pin} ${name}`);
 }
 
+function toggleBedMenu(e, i) {
+  e.stopPropagation();
+  const menu = $('#bedMenu' + i), open = !menu.classList.contains('open');
+  closeMenus();
+  menu.classList.toggle('open', open);
+}
+const closeMenus = () => document.querySelectorAll('.menu.open').forEach(m => m.classList.remove('open'));
+
 function renameBed(i, old) {
   const name = prompt(t('newName'), old);
   if (name && name.trim() && name.trim() !== old) run(`bed name ${i} ${name.trim()}`);
@@ -487,10 +514,11 @@ async function refresh() {
       : Math.floor(state.uptime / 3600) + ' ' + t('hours') + ' ' + Math.floor(state.uptime % 3600 / 60) + ' min';
     // Don't redraw while a travel time is being typed
     const focus = document.activeElement;
-    if (!$('#beds').contains(focus) || focus.tagName !== 'INPUT')
+    if ((!$('#beds').contains(focus) || focus.tagName !== 'INPUT') && !$('#beds .menu.open'))
       $('#beds').innerHTML = state.beds.map(bedSection).join('');
     // Keep an open add form as it is while typing
     if (!adding || !$('#addName')) $('#discovered').innerHTML = discoveredSection();
+    updatePairing();
   } catch (e) { $('#sys').textContent = t('noConnection') + ': ' + e.message; }
 }
 
@@ -498,6 +526,8 @@ async function refresh() {
 async function loadMatter() {
   let m;
   try { m = JSON.parse(await cmd('matter json')); } catch (e) { return; }
+  matter = m;
+  updatePairing();
   $('#manual').textContent = m.manual.replace(/^(\d{4})(\d{3})(\d{4})$/, '$1-$2-$3') || '–';
   const n = m.qr_size;
   $('#qr').innerHTML = n ? `<svg viewBox="-2 -2 ${n + 4} ${n + 4}" shape-rendering="crispEdges" role="img" aria-label="${esc(m.qr)}">
@@ -529,7 +559,7 @@ async function loadLanguage() {
 
 $('#menuBtn').onclick = e => { e.stopPropagation(); $('#menu').classList.toggle('open'); };
 $('#menu').onclick = e => e.stopPropagation();
-document.addEventListener('click', () => $('#menu').classList.remove('open'));
+document.addEventListener('click', closeMenus);
 $('#reboot').onclick = () => { if (confirm(t('confirmRestart'))) run('reboot'); };
 $('#token').onclick = () => {
   token = '';

@@ -68,7 +68,24 @@ constexpr uint8_t MODE_PRESET = 2;  // presets 1-3: modes 2-4
 constexpr uint8_t MODE_MATCH = 5;   // move to the other bed's position
 constexpr uint8_t MODE_SAVE = 6;    // save as preset 1-3: modes 6-8
 constexpr int MODE_COUNT = 9;
-constexpr const char* PRESET_DESCRIPTION = "Preset";
+
+// The preset choice in the language set on the settings page ("language")
+struct Language {
+    const char* code;
+    const char* description;  // the entity name in Home Assistant
+    const char* flat;
+    const char* preset;  // %s: slot
+    const char* match;   // %s: the other bed
+    const char* save;    // %s: slot
+};
+constexpr Language LANGUAGES[] = {
+    {"en", "Preset", "Flat", "Preset %s", "Match %s", "Save as preset %s"},
+    {"nl", "Stand", "Plat", "Stand %s", "Zelfde als %s", "Bewaar als stand %s"},
+    {"de", "Position", "Flach", "Position %s", "Wie %s", "Als Position %s speichern"},
+    {"es", "Posici\u00f3n", "Plano", "Posici\u00f3n %s", "Igual que %s", "Guardar como posici\u00f3n %s"},
+};
+constexpr int LANGUAGE_COUNT = sizeof(LANGUAGES) / sizeof(LANGUAGES[0]);
+int language = 0;
 
 class DeviceInfo : public chip::DeviceLayer::Internal::GenericDeviceInstanceInfoProvider<
                        chip::DeviceLayer::Internal::ESP32Config> {
@@ -431,20 +448,28 @@ void add_mode(BedEndpoints& bed, uint8_t mode, const char* format, const char* t
 }
 
 void build_modes(int index) {
+    const Language& text = LANGUAGES[language];
     BedEndpoints& bed = beds[index];
     bed.mode_count = 0;
     add_mode(bed, MODE_NONE, "-");
-    add_mode(bed, MODE_FLAT, "Flat");
+    add_mode(bed, MODE_FLAT, text.flat);
     for (int slot = 1; slot <= PRESET_SLOTS; ++slot) {
-        char text[4];
-        std::snprintf(text, sizeof(text), "%d", slot);
-        add_mode(bed, MODE_PRESET + slot - 1, "Preset %s", text);
+        char number[4];
+        std::snprintf(number, sizeof(number), "%d", slot);
+        add_mode(bed, MODE_PRESET + slot - 1, text.preset, number);
     }
-    add_mode(bed, MODE_MATCH, "Match %s", beds[1 - index].label);
+    add_mode(bed, MODE_MATCH, text.match, beds[1 - index].label);
     for (int slot = 1; slot <= PRESET_SLOTS; ++slot) {
-        char text[4];
-        std::snprintf(text, sizeof(text), "%d", slot);
-        add_mode(bed, MODE_SAVE + slot - 1, "Save as preset %s", text);
+        char number[4];
+        std::snprintf(number, sizeof(number), "%d", slot);
+        add_mode(bed, MODE_SAVE + slot - 1, text.save, number);
+    }
+}
+
+void load_language() {
+    uint32_t value;
+    if (nvs_get("lang", value) && value < LANGUAGE_COUNT) {
+        language = static_cast<int>(value);
     }
 }
 
@@ -562,7 +587,7 @@ endpoint_t* add_bed_device(node_t* node, endpoint_t* aggregator, BedEndpoints& b
     cluster::operational_state::command::create_operational_command_response(stop_cluster);
 
     cluster::mode_select::config_t mode_config;
-    std::snprintf(mode_config.description, sizeof(mode_config.description), "%s", PRESET_DESCRIPTION);
+    std::snprintf(mode_config.description, sizeof(mode_config.description), "%s", LANGUAGES[language].description);
     mode_config.current_mode = MODE_NONE;
     mode_config.delegate = &preset_modes;
     cluster::mode_select::create(ep, &mode_config, CLUSTER_FLAG_SERVER);
@@ -609,6 +634,7 @@ void start() {
     node_t* node = node::create(&node_config, on_attribute, on_identify);
     endpoint::aggregator::config_t aggregator_config;
     endpoint_t* aggregator = endpoint::aggregator::create(node, &aggregator_config, ENDPOINT_FLAG_NONE, nullptr);
+    load_language();
 
     for (int i = 0; i < bed_link::MAX_BEDS; ++i) {
         BedEndpoints& bed = beds[i];
@@ -666,6 +692,31 @@ void start() {
         (void) chip::DeviceLayer::SystemLayer().StartTimer(chip::System::Clock::Milliseconds32(TICK_MS), tick,
                                                            nullptr);
     });
+}
+
+std::string language_command(const std::vector<std::string>& args) {
+    if (args.size() == 1) {
+        return std::string(LANGUAGES[language].code) + "\n";
+    }
+    for (int i = 0; i < LANGUAGE_COUNT; ++i) {
+        if (args.size() == 2 && args[1] == LANGUAGES[i].code) {
+            nvs_put("lang", static_cast<uint32_t>(i));
+            chip::DeviceLayer::PlatformMgr().LockChipStack();
+            language = i;
+            for (int b = 0; b < bed_link::MAX_BEDS; ++b) {
+                build_modes(b);
+                esp_matter_attr_val_t description = esp_matter_char_str(
+                    const_cast<char*>(LANGUAGES[i].description), std::strlen(LANGUAGES[i].description));
+                attribute::update(beds[b].device_endpoint, ModeSelect::Id, ModeSelect::Attributes::Description::Id,
+                                  &description);
+                MatterReportingAttributeChangeCallback(beds[b].device_endpoint, ModeSelect::Id,
+                                                       ModeSelect::Attributes::SupportedModes::Id);
+            }
+            chip::DeviceLayer::PlatformMgr().UnlockChipStack();
+            return std::string(LANGUAGES[i].code) + "\n";
+        }
+    }
+    return "usage: language [en|nl|de|es]\n";
 }
 
 std::string preset_command(const std::vector<std::string>& args) {

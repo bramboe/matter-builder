@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="nl">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Octo bedden</title>
+<title>Octo beds</title>
 <style>
 /* Colours, radii and spacing follow the Home Assistant frontend */
 :root{--primary:#009ac7;--bg:#f0f0f0;--card:#fff;--fg:#141414;--mute:#727272;--line:#e0e0e0;--fill:#f5f5f5;
@@ -84,11 +84,14 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
 </svg>
 
 <header>
-  <h1>Octo bedden <div class="sub" id="sys">Verbinden…</div></h1>
+  <h1><span data-t="title"></span> <div class="sub" id="sys"></div></h1>
   <button class="icon-btn" id="menuBtn" aria-label="Menu"><svg><use href="#i-menu"/></svg></button>
   <div class="menu" id="menu">
-    <button id="token">Wachtwoord wijzigen</button>
-    <button id="reboot">Herstarten</button>
+    <button id="token" data-t="changePassword"></button>
+    <button id="reboot" data-t="restart"></button>
+    <div class="row" style="padding:0 16px;min-height:44px"><div class="label sub" data-t="language"></div>
+      <select id="lang" class="field" style="padding:4px 8px"><option value="en">English</option>
+        <option value="nl">Nederlands</option><option value="de">Deutsch</option><option value="es">Español</option></select></div>
   </div>
 </header>
 
@@ -97,26 +100,26 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
 <div id="beds"></div>
 
 <div class="section">
-  <div class="section-head"><h2>Instellingen</h2></div>
+  <div class="section-head"><h2 data-t="settings"></h2></div>
   <div class="grid">
     <div class="card">
       <h3>Matter</h3>
       <div class="qrwrap"><div id="qr"></div>
-        <div><div class="sub">Koppelcode</div><div class="code" id="manual">–</div>
+        <div><div class="sub" data-t="pairingCode"></div><div class="code" id="manual">–</div>
           <div class="sub" id="window"></div>
-          <button class="text" id="openWindow" style="padding:0;margin-top:4px">Koppelvenster openen</button></div></div>
+          <button class="text" id="openWindow" style="padding:0;margin-top:4px" data-t="openWindow"></button></div></div>
       <div class="sub" id="pairHelp" style="margin-top:10px"></div>
       <div id="fabrics" style="margin-top:8px"></div>
-      <details><summary>Apparaat en netwerk</summary>
-        <div class="row"><div class="label">Apparaat</div><div id="product" class="sub">–</div></div>
-        <div class="row"><div class="label">Vendor-/product-ID<div class="sub">Test-ID's van de Matter-standaard</div></div><div id="ids" class="sub">–</div></div>
+      <details><summary data-t="deviceNetwork"></summary>
+        <div class="row"><div class="label" data-t="device"></div><div id="product" class="sub">–</div></div>
+        <div class="row"><div class="label"><span data-t="vidPid"></span><div class="sub" data-t="testIds"></div></div><div id="ids" class="sub">–</div></div>
         <pre id="network"></pre>
       </details>
     </div>
     <div class="card">
-      <h3>Systeem</h3>
-      <div class="row"><div class="label">Vrij geheugen</div><div id="heap">–</div></div>
-      <div class="row"><div class="label">Actief</div><div id="uptime">–</div></div>
+      <h3 data-t="system"></h3>
+      <div class="row"><div class="label" data-t="freeMemory"></div><div id="heap">–</div></div>
+      <div class="row"><div class="label" data-t="uptime"></div><div id="uptime">–</div></div>
     </div>
   </div>
 </div>
@@ -124,25 +127,166 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
 <div id="toast"></div>
 
 <script>
+// Texts per language. The language is stored on the bridge ("language"), so
+// the page and the preset names in Home Assistant use the same one.
+const TEXT = {
+  en: {
+    title: 'Octo beds', changePassword: 'Change password', restart: 'Restart', language: 'Language',
+    settings: 'Settings', pairingCode: 'Pairing code', openWindow: 'Open pairing window',
+    deviceNetwork: 'Device and network', device: 'Device', vidPid: 'Vendor / product ID',
+    testIds: 'Test IDs of the Matter standard', system: 'System', freeMemory: 'Free memory', uptime: 'Running',
+    connecting: 'Connecting…', bedsConnected: (r, c) => `${r} of ${c} beds connected`, noBeds: 'No bed added yet',
+    noConnection: 'No connection', passwordPrompt: 'Password (OCTO_HTTP_TOKEN in secrets.h)',
+    passwordRefused: 'password refused', error: 'Error',
+    flat: 'Flat', fullyRaised: 'Fully raised', raised: v => `${v}% raised`,
+    up: 'Up', stop: 'Stop', down: 'Down', head: 'Head', legs: 'Legs', light: 'Light', underBed: 'Bed light',
+    off: 'Off', on: 'On', presets: 'Presets', preset: n => `Preset ${n}`, notSaved: 'Not saved yet',
+    match: n => `Match ${n}`, headLegs: (h, l) => `Head ${h}%, legs ${l}%`, saveCurrent: 'Save current position',
+    confirmSave: n => `Save the current position as preset ${n}?`,
+    calibration: 'Calibration',
+    calibrationHelp: 'The position is worked out from the travel time. Measure it per motor: fully down, start the measurement and stop as soon as the part is at the top.',
+    travelTime: 'Travel time from flat to fully raised', seconds: 'Seconds', save: 'Save',
+    travelsAndMeasure: 'Travel times and measuring', measuring: (p, s) => `Measuring ${p}: ${s} s`,
+    step1: '1. Fully down', step2: '2. Start measuring', step3: '3. At the top: stop',
+    connected: r => `Connected · ${r} dBm`, drops: n => `drops ${n}`, rename: 'Rename', remove: 'Remove',
+    discovered: 'Discovered',
+    searching: 'Looking for Octo beds… Turn off the OCTO app and other bridges: a bed only shows up while nothing else is connected to it.',
+    octoBed: 'Octo bed', name: 'Name', namePlaceholder: 'e.g. Sam', bedPin: 'PIN of the bed',
+    pinStored: 'The PIN is only stored on the ESP.', cancel: 'Cancel', add: 'Add', maxBeds: 'At most 2 beds',
+    maxBedsHelp: 'At most 2 beds: remove one first.', giveName: 'Give the bed a name.', pinDigits: 'The PIN has 4 digits.',
+    newName: 'New name', confirmRemove: n => `Remove ${n}? The bridge disconnects and forgets the PIN.`,
+    windowOpen: 'Pairing window open', windowClosed: 'Pairing window closed',
+    pairExtra: 'For another controller (e.g. Apple Home): open the pairing window and scan the code within 5 minutes.',
+    pairFirst: 'Not paired yet. Scan the code in Home Assistant (Add Matter device) or in Apple Home.',
+    disconnect: 'Disconnect', confirmDisconnect: v => `Disconnect ${v}? The beds disappear there until you pair again.`,
+    confirmRestart: 'Restart?', hours: 'h',
+  },
+  nl: {
+    title: 'Octo bedden', changePassword: 'Wachtwoord wijzigen', restart: 'Herstarten', language: 'Taal',
+    settings: 'Instellingen', pairingCode: 'Koppelcode', openWindow: 'Koppelvenster openen',
+    deviceNetwork: 'Apparaat en netwerk', device: 'Apparaat', vidPid: 'Vendor-/product-ID',
+    testIds: "Test-ID's van de Matter-standaard", system: 'Systeem', freeMemory: 'Vrij geheugen', uptime: 'Actief',
+    connecting: 'Verbinden…', bedsConnected: (r, c) => `${r} van ${c} bedden verbonden`, noBeds: 'Nog geen bed toegevoegd',
+    noConnection: 'Geen verbinding', passwordPrompt: 'Wachtwoord (OCTO_HTTP_TOKEN in secrets.h)',
+    passwordRefused: 'wachtwoord geweigerd', error: 'Fout',
+    flat: 'Plat', fullyRaised: 'Helemaal omhoog', raised: v => `${v}% omhoog`,
+    up: 'Omhoog', stop: 'Stop', down: 'Omlaag', head: 'Hoofd', legs: 'Benen', light: 'Licht', underBed: 'Bedverlichting',
+    off: 'Uit', on: 'Aan', presets: 'Standen', preset: n => `Stand ${n}`, notSaved: 'Nog niet bewaard',
+    match: n => `Zelfde als ${n}`, headLegs: (h, l) => `Hoofd ${h}%, benen ${l}%`, saveCurrent: 'Huidige stand bewaren',
+    confirmSave: n => `Huidige stand bewaren als stand ${n}?`,
+    calibration: 'Kalibratie',
+    calibrationHelp: 'De stand wordt berekend uit de looptijd. Meet die per motor: helemaal omlaag, start de meting en stop zodra het onderdeel bovenaan is.',
+    travelTime: 'Looptijd van plat tot helemaal omhoog', seconds: 'Seconden', save: 'Bewaar',
+    travelsAndMeasure: 'Looptijden en meten', measuring: (p, s) => `Meting ${p}: ${s} s`,
+    step1: '1. Helemaal omlaag', step2: '2. Start meting', step3: '3. Bovenaan: stop',
+    connected: r => `Verbonden · ${r} dBm`, drops: n => `onderbrekingen ${n}`, rename: 'Naam wijzigen', remove: 'Verwijderen',
+    discovered: 'Ontdekt',
+    searching: 'Zoeken naar Octo-bedden… Zet de OCTO-app en andere bridges uit: een bed is alleen zichtbaar als niets anders ermee verbonden is.',
+    octoBed: 'Octo-bed', name: 'Naam', namePlaceholder: 'bijv. Sam', bedPin: 'PIN van het bed',
+    pinStored: 'De PIN wordt alleen op de ESP opgeslagen.', cancel: 'Annuleren', add: 'Toevoegen', maxBeds: 'Maximaal 2 bedden',
+    maxBedsHelp: 'Maximaal 2 bedden: verwijder er eerst één.', giveName: 'Geef het bed een naam.', pinDigits: 'De PIN heeft 4 cijfers.',
+    newName: 'Nieuwe naam', confirmRemove: n => `${n} verwijderen? De bridge verbreekt de verbinding en vergeet de PIN.`,
+    windowOpen: 'Koppelvenster open', windowClosed: 'Koppelvenster gesloten',
+    pairExtra: 'Voor een extra controller (bijv. Apple Home): open het koppelvenster en scan de code binnen 5 minuten.',
+    pairFirst: 'Nog niet gekoppeld. Scan de code in Home Assistant (Matter-apparaat toevoegen) of in Apple Home.',
+    disconnect: 'Loskoppelen', confirmDisconnect: v => `${v} loskoppelen? De bedden verdwijnen daar tot je opnieuw koppelt.`,
+    confirmRestart: 'Herstarten?', hours: 'u',
+  },
+  de: {
+    title: 'Octo-Betten', changePassword: 'Passwort ändern', restart: 'Neu starten', language: 'Sprache',
+    settings: 'Einstellungen', pairingCode: 'Kopplungscode', openWindow: 'Kopplungsfenster öffnen',
+    deviceNetwork: 'Gerät und Netzwerk', device: 'Gerät', vidPid: 'Hersteller-/Produkt-ID',
+    testIds: 'Test-IDs des Matter-Standards', system: 'System', freeMemory: 'Freier Speicher', uptime: 'Laufzeit',
+    connecting: 'Verbinde…', bedsConnected: (r, c) => `${r} von ${c} Betten verbunden`, noBeds: 'Noch kein Bett hinzugefügt',
+    noConnection: 'Keine Verbindung', passwordPrompt: 'Passwort (OCTO_HTTP_TOKEN in secrets.h)',
+    passwordRefused: 'Passwort abgelehnt', error: 'Fehler',
+    flat: 'Flach', fullyRaised: 'Ganz hoch', raised: v => `${v}% hoch`,
+    up: 'Hoch', stop: 'Stopp', down: 'Runter', head: 'Kopf', legs: 'Beine', light: 'Licht', underBed: 'Bettbeleuchtung',
+    off: 'Aus', on: 'An', presets: 'Positionen', preset: n => `Position ${n}`, notSaved: 'Noch nicht gespeichert',
+    match: n => `Wie ${n}`, headLegs: (h, l) => `Kopf ${h}%, Beine ${l}%`, saveCurrent: 'Aktuelle Position speichern',
+    confirmSave: n => `Aktuelle Position als Position ${n} speichern?`,
+    calibration: 'Kalibrierung',
+    calibrationHelp: 'Die Position wird aus der Laufzeit berechnet. Messen Sie sie je Motor: ganz runter, Messung starten und stoppen, sobald das Teil oben ist.',
+    travelTime: 'Laufzeit von flach bis ganz hoch', seconds: 'Sekunden', save: 'Speichern',
+    travelsAndMeasure: 'Laufzeiten und Messen', measuring: (p, s) => `Messung ${p}: ${s} s`,
+    step1: '1. Ganz runter', step2: '2. Messung starten', step3: '3. Oben: stopp',
+    connected: r => `Verbunden · ${r} dBm`, drops: n => `Unterbrechungen ${n}`, rename: 'Umbenennen', remove: 'Entfernen',
+    discovered: 'Entdeckt',
+    searching: 'Suche nach Octo-Betten… Schalten Sie die OCTO-App und andere Bridges aus: Ein Bett ist nur sichtbar, solange nichts anderes damit verbunden ist.',
+    octoBed: 'Octo-Bett', name: 'Name', namePlaceholder: 'z. B. Sam', bedPin: 'PIN des Bettes',
+    pinStored: 'Die PIN wird nur auf dem ESP gespeichert.', cancel: 'Abbrechen', add: 'Hinzufügen', maxBeds: 'Höchstens 2 Betten',
+    maxBedsHelp: 'Höchstens 2 Betten: entfernen Sie zuerst eins.', giveName: 'Geben Sie dem Bett einen Namen.', pinDigits: 'Die PIN hat 4 Ziffern.',
+    newName: 'Neuer Name', confirmRemove: n => `${n} entfernen? Die Bridge trennt die Verbindung und vergisst die PIN.`,
+    windowOpen: 'Kopplungsfenster offen', windowClosed: 'Kopplungsfenster geschlossen',
+    pairExtra: 'Für einen weiteren Controller (z. B. Apple Home): Kopplungsfenster öffnen und den Code innerhalb von 5 Minuten scannen.',
+    pairFirst: 'Noch nicht gekoppelt. Scannen Sie den Code in Home Assistant (Matter-Gerät hinzufügen) oder in Apple Home.',
+    disconnect: 'Trennen', confirmDisconnect: v => `${v} trennen? Die Betten verschwinden dort, bis Sie erneut koppeln.`,
+    confirmRestart: 'Neu starten?', hours: 'Std.',
+  },
+  es: {
+    title: 'Camas Octo', changePassword: 'Cambiar contraseña', restart: 'Reiniciar', language: 'Idioma',
+    settings: 'Ajustes', pairingCode: 'Código de vinculación', openWindow: 'Abrir ventana de vinculación',
+    deviceNetwork: 'Dispositivo y red', device: 'Dispositivo', vidPid: 'ID de fabricante / producto',
+    testIds: 'IDs de prueba del estándar Matter', system: 'Sistema', freeMemory: 'Memoria libre', uptime: 'Activo',
+    connecting: 'Conectando…', bedsConnected: (r, c) => `${r} de ${c} camas conectadas`, noBeds: 'Aún no hay camas',
+    noConnection: 'Sin conexión', passwordPrompt: 'Contraseña (OCTO_HTTP_TOKEN en secrets.h)',
+    passwordRefused: 'contraseña rechazada', error: 'Error',
+    flat: 'Plano', fullyRaised: 'Totalmente arriba', raised: v => `${v}% arriba`,
+    up: 'Subir', stop: 'Parar', down: 'Bajar', head: 'Cabeza', legs: 'Piernas', light: 'Luz', underBed: 'Luz de la cama',
+    off: 'Apagar', on: 'Encender', presets: 'Posiciones', preset: n => `Posición ${n}`, notSaved: 'Aún no guardada',
+    match: n => `Igual que ${n}`, headLegs: (h, l) => `Cabeza ${h}%, piernas ${l}%`, saveCurrent: 'Guardar posición actual',
+    confirmSave: n => `¿Guardar la posición actual como posición ${n}?`,
+    calibration: 'Calibración',
+    calibrationHelp: 'La posición se calcula a partir del tiempo de recorrido. Mídalo por motor: totalmente abajo, inicie la medición y pare en cuanto la parte llegue arriba.',
+    travelTime: 'Tiempo de plano a totalmente arriba', seconds: 'Segundos', save: 'Guardar',
+    travelsAndMeasure: 'Tiempos y medición', measuring: (p, s) => `Midiendo ${p}: ${s} s`,
+    step1: '1. Totalmente abajo', step2: '2. Iniciar medición', step3: '3. Arriba: parar',
+    connected: r => `Conectada · ${r} dBm`, drops: n => `cortes ${n}`, rename: 'Cambiar nombre', remove: 'Eliminar',
+    discovered: 'Descubiertas',
+    searching: 'Buscando camas Octo… Apague la app OCTO y otros puentes: una cama solo aparece mientras nada más está conectado a ella.',
+    octoBed: 'Cama Octo', name: 'Nombre', namePlaceholder: 'p. ej. Sam', bedPin: 'PIN de la cama',
+    pinStored: 'El PIN solo se guarda en el ESP.', cancel: 'Cancelar', add: 'Añadir', maxBeds: 'Como máximo 2 camas',
+    maxBedsHelp: 'Como máximo 2 camas: elimine una primero.', giveName: 'Ponga un nombre a la cama.', pinDigits: 'El PIN tiene 4 cifras.',
+    newName: 'Nuevo nombre', confirmRemove: n => `¿Eliminar ${n}? El puente se desconecta y olvida el PIN.`,
+    windowOpen: 'Ventana de vinculación abierta', windowClosed: 'Ventana de vinculación cerrada',
+    pairExtra: 'Para otro controlador (p. ej. Apple Home): abra la ventana de vinculación y escanee el código en 5 minutos.',
+    pairFirst: 'Aún no vinculado. Escanee el código en Home Assistant (Añadir dispositivo Matter) o en Apple Home.',
+    disconnect: 'Desvincular', confirmDisconnect: v => `¿Desvincular ${v}? Las camas desaparecen allí hasta que vuelva a vincular.`,
+    confirmRestart: '¿Reiniciar?', hours: 'h',
+  },
+};
+let lang = 'en';
+try { lang = localStorage.getItem('octoLang') || (navigator.language || 'en').slice(0, 2); } catch (e) {}
+if (!TEXT[lang]) lang = 'en';
+const t = (key, ...args) => { const v = TEXT[lang][key] ?? TEXT.en[key]; return typeof v === 'function' ? v(...args) : v; };
+
+function applyLanguage() {
+  document.documentElement.lang = lang;
+  document.title = t('title');
+  document.querySelectorAll('[data-t]').forEach(el => { el.textContent = t(el.dataset.t); });
+  $('#lang').value = lang;
+}
+
 const $ = s => document.querySelector(s);
 const icon = n => `<svg><use href="#i-${n}"/></svg>`;
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const quote = s => esc(s).replace(/'/g, '');
 let token = '';
 try { token = localStorage.getItem('octoToken') || ''; } catch (e) {}
 let state = null, presets = null, toastTimer = 0;
 
 function toast(text) {
-  const t = $('#toast');
-  t.textContent = text;
-  t.classList.add('show');
+  const el = $('#toast');
+  el.textContent = text;
+  el.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove('show'), 3500);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3500);
 }
 
 function askToken() {
-  const t = prompt('Wachtwoord (OCTO_HTTP_TOKEN in secrets.h)', token);
-  if (t !== null) {
-    token = t.trim();
+  const value = prompt(t('passwordPrompt'), token);
+  if (value !== null) {
+    token = value.trim();
     try { localStorage.setItem('octoToken', token); } catch (e) {}
   }
 }
@@ -150,17 +294,17 @@ function askToken() {
 async function cmd(line) {
   const r = await fetch('/cmd', {method: 'POST', headers: {'X-Octo-Token': token}, body: line});
   const text = await r.text();
-  if (r.status === 401) { askToken(); throw new Error('wachtwoord geweigerd'); }
+  if (r.status === 401) { askToken(); throw new Error(t('passwordRefused')); }
   return text;
 }
 
 async function run(line) {
   try { toast((await cmd(line)).trim() || 'OK'); refresh(); }
-  catch (e) { toast('Fout: ' + e.message); }
+  catch (e) { toast(t('error') + ': ' + e.message); }
 }
 
 // Shown the Home Assistant way: 0 % flat, 100 % fully raised
-const pos = v => v === undefined ? '' : v === 0 ? 'Plat' : v >= 100 ? 'Helemaal omhoog' : v + '% omhoog';
+const pos = v => v === undefined ? '' : v === 0 ? t('flat') : v >= 100 ? t('fullyRaised') : t('raised', v);
 
 function motorTile(b, part, label, value) {
   const i = b.index, dis = b.state === 'ready' ? '' : 'disabled';
@@ -168,9 +312,9 @@ function motorTile(b, part, label, value) {
     <div class="tile"><div class="icon">${icon('bed')}</div>
       <div class="info"><div class="name">${label}</div><div class="state">${pos(value)}</div></div></div>
     <div class="features">
-      <button ${dis} title="Omhoog" onclick="run('move ${i} ${part} up 2')">${icon('up')}</button>
-      <button ${dis} title="Stop" onclick="run('stop ${i}')">${icon('stop')}</button>
-      <button ${dis} title="Omlaag" onclick="run('move ${i} ${part} down 2')">${icon('down')}</button>
+      <button ${dis} title="${t('up')}" onclick="run('move ${i} ${part} up 2')">${icon('up')}</button>
+      <button ${dis} title="${t('stop')}" onclick="run('stop ${i}')">${icon('stop')}</button>
+      <button ${dis} title="${t('down')}" onclick="run('move ${i} ${part} down 2')">${icon('down')}</button>
     </div></div>`;
 }
 
@@ -178,10 +322,10 @@ function lightTile(b) {
   const i = b.index, dis = b.state === 'ready' ? '' : 'disabled';
   return `<div class="card">
     <div class="tile"><div class="icon light">${icon('light')}</div>
-      <div class="info"><div class="name">Licht</div><div class="state">Bedverlichting</div></div></div>
+      <div class="info"><div class="name">${t('light')}</div><div class="state">${t('underBed')}</div></div></div>
     <div class="features">
-      <button ${dis} onclick="run('light ${i} off')">Uit</button>
-      <button ${dis} onclick="run('light ${i} on')">Aan</button>
+      <button ${dis} onclick="run('light ${i} off')">${t('off')}</button>
+      <button ${dis} onclick="run('light ${i} on')">${t('on')}</button>
     </div></div>`;
 }
 
@@ -192,38 +336,38 @@ function presetCard(b, p) {
   const other = state.beds[1 - i];
   const slot = n => {
     const s = p.presets[n - 1];
-    return `<button ${dis || (s ? '' : 'disabled')} title="${s ? `Hoofd ${s.head}%, benen ${s.legs}%` : 'Nog niet bewaard'}" onclick="run('preset ${i} ${n}')">Stand ${n}</button>`;
+    return `<button ${dis || (s ? '' : 'disabled')} title="${s ? t('headLegs', s.head, s.legs) : t('notSaved')}" onclick="run('preset ${i} ${n}')">${t('preset', n)}</button>`;
   };
   return `<div class="card">
-    <h3>Standen</h3>
+    <h3>${t('presets')}</h3>
     <div class="chips">
-      <button ${dis} onclick="run('preset ${i} flat')">Plat</button>${slot(1)}${slot(2)}${slot(3)}
-      ${other && other.configured ? `<button ${dis} onclick="run('preset ${i} match')">Zelfde als ${esc(other.name)}</button>` : ''}
+      <button ${dis} onclick="run('preset ${i} flat')">${t('flat')}</button>${slot(1)}${slot(2)}${slot(3)}
+      ${other && other.configured ? `<button ${dis} onclick="run('preset ${i} match')">${t('match', esc(other.name))}</button>` : ''}
     </div>
-    <div class="row" style="margin-top:8px"><div class="label">Huidige stand bewaren<div class="sub">Hoofd ${p.head}%, benen ${p.legs}%</div></div>
-      ${[1, 2, 3].map(n => `<button class="text" onclick="if (confirm('Huidige stand bewaren als stand ${n}?')) run('preset ${i} save ${n}')">${n}</button>`).join('')}
+    <div class="row" style="margin-top:8px"><div class="label">${t('saveCurrent')}<div class="sub">${t('headLegs', p.head, p.legs)}</div></div>
+      ${[1, 2, 3].map(n => `<button class="text" onclick="if (confirm('${quote(t('confirmSave', n))}')) run('preset ${i} save ${n}')">${n}</button>`).join('')}
     </div></div>`;
 }
 
 function calibrationCard(b) {
   const i = b.index, dis = b.state === 'ready' ? '' : 'disabled', cal = b.calibrating;
   const motor = (part, label, travel) => `
-    <div class="row"><div class="label">${label}<div class="sub">Looptijd van plat tot helemaal omhoog</div></div>
-      <label class="field short"><span>Seconden</span><input type="number" step="0.1" min="5" max="120" value="${travel}" id="t${i}${part}"></label>
-      <button class="text" onclick="run('travel ${i} ${part} ' + $('#t${i}${part}').value)">Bewaar</button></div>
+    <div class="row"><div class="label">${label}<div class="sub">${t('travelTime')}</div></div>
+      <label class="field short"><span>${t('seconds')}</span><input type="number" step="0.1" min="5" max="120" value="${travel}" id="t${i}${part}"></label>
+      <button class="text" onclick="run('travel ${i} ${part} ' + $('#t${i}${part}').value)">${t('save')}</button></div>
     <div class="steps">
-      <button ${dis || (cal ? 'disabled' : '')} onclick="run('move ${i} ${part} down ' + (Math.min(${travel}, 120) + 5))">1. Helemaal omlaag</button>
-      <button ${dis || (cal ? 'disabled' : '')} onclick="run('calibrate ${i} ${part}')">2. Start meting</button>
-      <button class="pri" ${cal === part ? '' : 'disabled'} onclick="run('calibrate ${i} stop')">3. Bovenaan: stop</button>
+      <button ${dis || (cal ? 'disabled' : '')} onclick="run('move ${i} ${part} down ' + (Math.min(${travel}, 120) + 5))">${t('step1')}</button>
+      <button ${dis || (cal ? 'disabled' : '')} onclick="run('calibrate ${i} ${part}')">${t('step2')}</button>
+      <button class="pri" ${cal === part ? '' : 'disabled'} onclick="run('calibrate ${i} stop')">${t('step3')}</button>
     </div>`;
   // Keep the panel open across redraws, and open it while measuring
   const open = cal || (document.getElementById('cal' + i) || {}).open ? 'open' : '';
   return `<div class="card">
-    <h3>Kalibratie</h3>
-    <div class="sub">De stand wordt berekend uit de looptijd. Meet die per motor: helemaal omlaag, start de meting en stop zodra het onderdeel bovenaan is.</div>
-    ${cal ? `<div class="measure">Meting ${cal === 'head' ? 'hoofd' : 'benen'}: ${b.calibrate_elapsed.toFixed(1)} s</div>` : ''}
-    <details id="cal${i}" ${open}><summary>Looptijden en meten</summary>
-      ${motor('head', 'Hoofd', b.head_travel)}${motor('legs', 'Benen', b.legs_travel)}
+    <h3>${t('calibration')}</h3>
+    <div class="sub">${t('calibrationHelp')}</div>
+    ${cal ? `<div class="measure">${t('measuring', t(cal === 'head' ? 'head' : 'legs').toLowerCase(), b.calibrate_elapsed.toFixed(1))}</div>` : ''}
+    <details id="cal${i}" ${open}><summary>${t('travelsAndMeasure')}</summary>
+      ${motor('head', t('head'), b.head_travel)}${motor('legs', t('legs'), b.legs_travel)}
     </details></div>`;
 }
 
@@ -231,21 +375,21 @@ function bedSection(b) {
   if (!b.configured) return '';
   const ready = b.state === 'ready';
   const p = presets && presets.beds[b.index];
-  const status = ready ? `Verbonden · ${b.rssi} dBm` : b.state;
+  const status = ready ? t('connected', b.rssi) : b.state;
   return `<div class="section">
     <div class="section-head"><h2>${esc(b.name)}</h2>
       <span class="badge"><i class="${ready ? 'ok' : ''}"></i>${esc(status)}</span>
-      <span class="sub">${esc(b.mac)} · onderbrekingen ${b.drops}</span>
-      <span class="head-actions"><button class="text" onclick="renameBed(${b.index}, '${esc(b.name).replace(/'/g, '')}')">Naam wijzigen</button>
-        <button class="warn" onclick="removeBed(${b.index}, '${esc(b.name).replace(/'/g, '')}')">Verwijderen</button></span></div>
+      <span class="sub">${esc(b.mac)} · ${t('drops', b.drops)}</span>
+      <span class="head-actions"><button class="text" onclick="renameBed(${b.index}, '${quote(b.name)}')">${t('rename')}</button>
+        <button class="warn" onclick="removeBed(${b.index}, '${quote(b.name)}')">${t('remove')}</button></span></div>
     <div class="grid">
-      ${motorTile(b, 'head', 'Hoofd', p && p.head)}${motorTile(b, 'legs', 'Benen', p && p.legs)}${lightTile(b)}
+      ${motorTile(b, 'head', t('head'), p && p.head)}${motorTile(b, 'legs', t('legs'), p && p.legs)}${lightTile(b)}
       ${presetCard(b, p)}${calibrationCard(b)}
     </div></div>`;
 }
 
 // Discovery, as in Home Assistant: Octo beds seen over Bluetooth that are
-// not added yet, each with "Toevoegen". A bed takes the first free slot.
+// not added yet, each with "Add". A bed takes the first free slot.
 let adding = null;  // address of the bed whose add form is open
 
 function discoveredSection() {
@@ -254,44 +398,43 @@ function discoveredSection() {
     .sort((a, b) => b.rssi - a.rssi);
   const free = state.beds.find(b => !b.configured);
   if (!found.length) {
-    return added.length ? '' : `<div class="section"><div class="section-head"><h2>Ontdekt</h2></div>
-      <div class="card"><div class="sub">Zoeken naar Octo-bedden… Zet de OCTO-app en andere bridges uit: een bed
-      is alleen zichtbaar als niets anders ermee verbonden is.</div></div></div>`;
+    return added.length ? '' : `<div class="section"><div class="section-head"><h2>${t('discovered')}</h2></div>
+      <div class="card"><div class="sub">${t('searching')}</div></div></div>`;
   }
-  return `<div class="section"><div class="section-head"><h2>Ontdekt</h2></div><div class="grid">${found.map(s => {
+  return `<div class="section"><div class="section-head"><h2>${t('discovered')}</h2></div><div class="grid">${found.map(s => {
     const form = adding === s.address ? `
       <div class="form">
-        <label class="field"><span>Naam</span><input id="addName" maxlength="23" placeholder="bijv. Sam"></label>
-        <label class="field"><span>PIN van het bed</span><input id="addPin" type="password" inputmode="numeric" maxlength="4" autocomplete="off"></label>
+        <label class="field"><span>${t('name')}</span><input id="addName" maxlength="23" placeholder="${t('namePlaceholder')}"></label>
+        <label class="field"><span>${t('bedPin')}</span><input id="addPin" type="password" inputmode="numeric" maxlength="4" autocomplete="off"></label>
       </div>
-      <div class="sub">De PIN wordt alleen op de ESP opgeslagen.</div>
-      <div class="features"><button onclick="adding = null; refresh()">Annuleren</button>
-        <button class="pri" onclick="addBed('${s.address}')">Toevoegen</button></div>` : `
-      <div class="features"><button class="pri" ${free ? '' : 'disabled title="Maximaal 2 bedden"'}
-        onclick="adding = '${s.address}'; refresh()">Toevoegen</button></div>`;
+      <div class="sub">${t('pinStored')}</div>
+      <div class="features"><button onclick="adding = null; refresh()">${t('cancel')}</button>
+        <button class="pri" onclick="addBed('${s.address}')">${t('add')}</button></div>` : `
+      <div class="features"><button class="pri" ${free ? '' : `disabled title="${t('maxBeds')}"`}
+        onclick="adding = '${s.address}'; refresh()">${t('add')}</button></div>`;
     return `<div class="card"><div class="tile"><div class="icon">${icon('bt')}</div>
-      <div class="info"><div class="name">Octo-bed${s.name ? ' (' + esc(s.name) + ')' : ''}</div>
+      <div class="info"><div class="name">${t('octoBed')}${s.name ? ' (' + esc(s.name) + ')' : ''}</div>
       <div class="state">${s.address} · ${s.rssi} dBm</div></div></div>${form}</div>`;
-  }).join('')}</div>${free ? '' : '<div class="sub" style="margin:8px 4px">Maximaal 2 bedden: verwijder er eerst één.</div>'}</div>`;
+  }).join('')}</div>${free ? '' : `<div class="sub" style="margin:8px 4px">${t('maxBedsHelp')}</div>`}</div>`;
 }
 
 async function addBed(mac) {
   const name = $('#addName').value.trim(), pin = $('#addPin').value.trim();
   const free = state.beds.find(b => !b.configured);
-  if (!name) { toast('Geef het bed een naam.'); return; }
-  if (!/^\d{4}$/.test(pin)) { toast('De PIN heeft 4 cijfers.'); return; }
-  if (!free) { toast('Maximaal 2 bedden.'); return; }
+  if (!name) { toast(t('giveName')); return; }
+  if (!/^\d{4}$/.test(pin)) { toast(t('pinDigits')); return; }
+  if (!free) { toast(t('maxBeds')); return; }
   adding = null;
   await run(`bed set ${free.index} ${mac} ${pin} ${name}`);
 }
 
 function renameBed(i, old) {
-  const name = prompt('Nieuwe naam', old);
+  const name = prompt(t('newName'), old);
   if (name && name.trim() && name.trim() !== old) run(`bed name ${i} ${name.trim()}`);
 }
 
 function removeBed(i, name) {
-  if (confirm(`${name} verwijderen? De bridge verbreekt de verbinding en vergeet de PIN.`)) run(`bed clear ${i}`);
+  if (confirm(t('confirmRemove', name))) run(`bed clear ${i}`);
 }
 
 async function refresh() {
@@ -300,18 +443,17 @@ async function refresh() {
     try { presets = JSON.parse(await cmd('preset list')); } catch (e) { presets = null; }
     const ready = state.beds.filter(b => b.state === 'ready').length;
     const configured = state.beds.filter(b => b.configured).length;
-    $('#sys').textContent = configured ? `${ready} van ${configured} bedden verbonden` : 'Nog geen bed ingesteld';
+    $('#sys').textContent = configured ? t('bedsConnected', ready, configured) : t('noBeds');
     $('#heap').textContent = Math.round(state.heap / 1024) + ' KB';
     $('#uptime').textContent = state.uptime < 3600 ? Math.floor(state.uptime / 60) + ' min'
-      : Math.floor(state.uptime / 3600) + ' uur ' + Math.floor(state.uptime % 3600 / 60) + ' min';
+      : Math.floor(state.uptime / 3600) + ' ' + t('hours') + ' ' + Math.floor(state.uptime % 3600 / 60) + ' min';
     // Don't redraw while a travel time is being typed
     const focus = document.activeElement;
     if (!$('#beds').contains(focus) || focus.tagName !== 'INPUT')
       $('#beds').innerHTML = state.beds.map(bedSection).join('');
     // Keep an open add form as it is while typing
-    if (!adding) $('#discovered').innerHTML = discoveredSection();
-    else if (!$('#addName')) $('#discovered').innerHTML = discoveredSection();
-  } catch (e) { $('#sys').textContent = 'Geen verbinding: ' + e.message; }
+    if (!adding || !$('#addName')) $('#discovered').innerHTML = discoveredSection();
+  } catch (e) { $('#sys').textContent = t('noConnection') + ': ' + e.message; }
 }
 
 // Pairing code, QR, commissioning window and paired controllers
@@ -322,32 +464,50 @@ async function loadMatter() {
   const n = m.qr_size;
   $('#qr').innerHTML = n ? `<svg viewBox="-2 -2 ${n + 4} ${n + 4}" shape-rendering="crispEdges" role="img" aria-label="${esc(m.qr)}">
     <rect x="-2" y="-2" width="${n + 4}" height="${n + 4}" fill="#fff"/><path fill="#000" d="${m.qr_path}"/></svg>` : '';
-  $('#window').textContent = m.window_open ? 'Koppelvenster open' : 'Koppelvenster gesloten';
+  $('#window').textContent = m.window_open ? t('windowOpen') : t('windowClosed');
   $('#openWindow').hidden = m.window_open;
-  $('#pairHelp').textContent = m.fabrics.length
-    ? 'Voor een extra controller (bijv. Apple Home): open het koppelvenster en scan de code binnen 5 minuten.'
-    : 'Nog niet gekoppeld. Scan de code in Home Assistant (Matter-apparaat toevoegen) of in Apple Home.';
+  $('#pairHelp').textContent = m.fabrics.length ? t('pairExtra') : t('pairFirst');
   $('#fabrics').innerHTML = m.fabrics.map(f => `<div class="row"><div class="label">${esc(f.vendor)}
       <div class="sub">Controller ${f.index}${f.label ? ' · ' + esc(f.label) : ''}</div></div>
-      <button class="warn" onclick="removeFabric(${f.index}, '${esc(f.vendor).replace(/'/g, '')}')">Loskoppelen</button></div>`).join('');
+      <button class="warn" onclick="removeFabric(${f.index}, '${quote(f.vendor)}')">${t('disconnect')}</button></div>`).join('');
   $('#product').textContent = `${m.product} ${m.version}`;
   $('#ids').textContent = `${m.vid} / ${m.pid}`;
   $('#network').textContent = m.network.trim();
 }
 
 async function removeFabric(index, vendor) {
-  if (!confirm(`${vendor} loskoppelen? De bedden verdwijnen daar tot je opnieuw koppelt.`)) return;
+  if (!confirm(t('confirmDisconnect', vendor))) return;
   await run(`matter remove ${index}`);
   loadMatter();
 }
 
+// The bridge's language wins, so all browsers and Home Assistant agree
+async function loadLanguage() {
+  try {
+    const code = (await cmd('language')).trim();
+    if (TEXT[code] && code !== lang) { lang = code; applyLanguage(); refresh(); loadMatter(); }
+  } catch (e) {}
+}
+
 $('#menuBtn').onclick = e => { e.stopPropagation(); $('#menu').classList.toggle('open'); };
+$('#menu').onclick = e => e.stopPropagation();
 document.addEventListener('click', () => $('#menu').classList.remove('open'));
-$('#reboot').onclick = () => { if (confirm('Herstarten?')) run('reboot'); };
+$('#reboot').onclick = () => { if (confirm(t('confirmRestart'))) run('reboot'); };
 $('#token').onclick = () => { askToken(); refresh(); loadMatter(); };
 $('#openWindow').onclick = async () => { await run('matter open'); loadMatter(); };
+$('#lang').onchange = async () => {
+  lang = $('#lang').value;
+  try { localStorage.setItem('octoLang', lang); } catch (e) {}
+  applyLanguage();
+  try { await cmd('language ' + lang); } catch (e) {}
+  refresh();
+  loadMatter();
+};
 
+applyLanguage();
+$('#sys').textContent = t('connecting');
 if (!token) askToken();
+loadLanguage();
 refresh();
 loadMatter();
 setInterval(() => { if (!document.hidden) refresh(); }, 2000);

@@ -51,4 +51,8 @@ std::string matter_json();
 //   preset <bed> save <1|2|3>          store the current position
 std::string preset_command(const std::vector<std::string>& args);
 
+// "language [en|nl|de|es]": the language of the settings page and of the
+// preset choice in Matter, kept in NVS
+std::string language_command(const std::vector<std::string>& args);
+
 }  // namespace matter_bridge

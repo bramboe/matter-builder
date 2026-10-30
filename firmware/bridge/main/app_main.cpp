@@ -59,6 +59,8 @@ extern "C" void app_main() {
     net::start();
     add_command("preset", "preset list | preset <0|1> <flat|1-3|match> | preset <0|1> save <1-3>\n",
                 matter_bridge::preset_command);
+    add_command("language", "language [en|nl|de|es]                  settings page and preset names\n",
+                matter_bridge::language_command);
     add_command("matter", "matter [open|fabrics|remove <n>|json]   pairing codes, endpoints; pairing window; controllers\n", cmd_matter);
     console_start();
     ESP_LOGI("main", "octo-matter bridge running; type 'help'");

@@ -19,8 +19,12 @@
 #include <setup_payload/OnboardingCodesUtil.h>
 
 #include "bed_link.h"
+#include "esp_app_desc.h"
 #include "esp_log.h"
+#include "qrcode.h"
+#include "net.h"
 #include "nvs.h"
+#include "setup_code.h"
 
 using namespace esp_matter;
 using namespace chip::app::Clusters;
@@ -620,6 +624,7 @@ void start() {
 
     bed_link::run_in_host([] { bed_link::on_calibrated(on_calibrated); });
     esp_matter::set_custom_device_instance_info_provider(&device_info);
+    setup_code::install();
     ESP_ERROR_CHECK(esp_matter::start(on_event));
 
     (void) chip::DeviceLayer::PlatformMgr().ScheduleWork([](intptr_t) {
@@ -776,6 +781,110 @@ std::string describe() {
         out += std::string("manual code: ") + manual + "\n";
     }
     return out + beds_text;
+}
+
+namespace {
+
+std::string json_text(const std::string& text) {
+    std::string out = "\"";
+    for (const char c : text) {
+        if (c == '"' || c == '\\') {
+            out += '\\';
+            out += c;
+        } else if (c == '\n') {
+            out += "\\n";
+        } else if (static_cast<unsigned char>(c) >= 0x20) {
+            out += c;
+        }
+    }
+    return out + "\"";
+}
+
+// Controllers by their Matter vendor ID
+const char* vendor_name(uint16_t vendor_id) {
+    switch (vendor_id) {
+        case 0x1349: return "Apple Home";
+        case 0x134B: return "Home Assistant";
+        case 0x6006: return "Google Home";
+        case 0x1217: return "Amazon Alexa";
+        case 0x110A: return "SmartThings";
+        default: return nullptr;
+    }
+}
+
+// The QR code as an SVG path, one rectangle per run of dark modules.
+// esp_qrcode reports the result through a callback without context.
+std::string* qr_path = nullptr;
+int qr_size = 0;
+
+void qr_to_path(esp_qrcode_handle_t qrcode) {
+    qr_size = esp_qrcode_get_size(qrcode);
+    for (int y = 0; y < qr_size; ++y) {
+        for (int x = 0; x < qr_size;) {
+            if (!esp_qrcode_get_module(qrcode, x, y)) {
+                ++x;
+                continue;
+            }
+            int run = 1;
+            while (x + run < qr_size && esp_qrcode_get_module(qrcode, x + run, y)) {
+                ++run;
+            }
+            char part[64];
+            std::snprintf(part, sizeof(part), "M%d %dh%dv1h-%dz", x, y, run, run);
+            *qr_path += part;
+            x += run;
+        }
+    }
+}
+
+}  // namespace
+
+std::string matter_json() {
+    char qr[64] = {};
+    char manual[32] = {};
+    chip::MutableCharSpan qr_span(qr);
+    chip::MutableCharSpan manual_span(manual);
+    const auto flags = chip::RendezvousInformationFlags(chip::RendezvousInformationFlag::kOnNetwork);
+    std::string fabrics;
+
+    chip::DeviceLayer::PlatformMgr().LockChipStack();
+    const bool have_qr = GetQRCode(qr_span, flags) == CHIP_NO_ERROR;
+    const bool have_manual = GetManualPairingCode(manual_span, flags) == CHIP_NO_ERROR;
+    chip::Server& server = chip::Server::GetInstance();
+    const bool window_open = server.GetCommissioningWindowManager().IsCommissioningWindowOpen();
+    for (const auto& fabric : server.GetFabricTable()) {
+        const uint16_t vendor_id = chip::to_underlying(fabric.GetVendorId());
+        const char* vendor = vendor_name(vendor_id);
+        char hex[8];
+        std::snprintf(hex, sizeof(hex), "0x%04X", vendor_id);
+        const chip::CharSpan label = fabric.GetFabricLabel();
+        fabrics += std::string(fabrics.empty() ? "" : ",") + "{\"index\":" + std::to_string(fabric.GetFabricIndex()) +
+                   ",\"vendor\":" + json_text(vendor != nullptr ? vendor : hex) + ",\"vendor_id\":" + json_text(hex) +
+                   ",\"label\":" + json_text(std::string(label.data(), label.size())) + "}";
+    }
+    chip::DeviceLayer::PlatformMgr().UnlockChipStack();
+
+    std::string path;
+    if (have_qr) {
+        esp_qrcode_config_t config = {};
+        config.display_func = qr_to_path;
+        config.max_qrcode_version = 6;
+        config.qrcode_ecc_level = ESP_QRCODE_ECC_MED;
+        qr_path = &path;
+        if (esp_qrcode_generate(&config, qr) != ESP_OK) {
+            path.clear();
+        }
+        qr_path = nullptr;
+    }
+
+    std::string out = "{\"product\":" + json_text(PRODUCT_NAME) + ",\"vendor\":" + json_text(VENDOR_NAME) +
+                      ",\"version\":" + json_text(esp_app_get_description()->version) +
+                      ",\"vid\":\"0xFFF1\",\"pid\":\"0x8000\"";
+    out += ",\"qr\":" + json_text(have_qr ? qr : "") + ",\"manual\":" + json_text(have_manual ? manual : "");
+    out += ",\"qr_size\":" + std::to_string(path.empty() ? 0 : qr_size) + ",\"qr_path\":" + json_text(path);
+    out += std::string(",\"window_open\":") + (window_open ? "true" : "false");
+    out += ",\"fabrics\":[" + fabrics + "],\"network\":" + json_text(net::describe()) + "}\n";
+    return out;
 }
 
 }  // namespace matter_bridge

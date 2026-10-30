@@ -6,7 +6,7 @@ manieren om terug te gaan.
 
 ## 0. Via het netwerk (installatie over ESPHome-OTA)
 
-De spike wordt via ESPHome's eigen OTA geïnstalleerd
+De bridge wordt via ESPHome's eigen OTA geïnstalleerd
 (`tools/esphome_ota_upload.py`). ESPHome blijft dan in het andere
 firmwareslot staan.
 
@@ -15,7 +15,7 @@ firmwareslot staan.
   10 minuten nog geen werkend netwerk heeft.
 - **Zelf, zolang ESPHome nog in het andere slot staat:** `tools/octo.sh revert`.
   `tools/octo.sh system` laat zien wat er in beide slots staat.
-- **Let op:** de *tweede* netwerk-update van de spike schrijft over het
+- **Let op:** de *tweede* netwerk-update van de bridge schrijft over het
   ESPHome-slot heen. Daarna gaat terug via een ESPHome-image: in de Device
   Builder *Install → Manual download → OTA format*, dan
   `tools/octo.sh --ota <bestand>.bin`.

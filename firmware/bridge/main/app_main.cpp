@@ -22,6 +22,9 @@ std::string cmd_matter(const std::vector<std::string>& args) {
     if (args.size() == 2 && args[1] == "open") {
         return matter_bridge::open_commissioning_window();
     }
+    if (args.size() == 2 && args[1] == "json") {
+        return matter_bridge::matter_json();
+    }
     if (args.size() == 2 && args[1] == "fabrics") {
         return matter_bridge::fabrics_text();
     }
@@ -56,7 +59,7 @@ extern "C" void app_main() {
     net::start();
     add_command("preset", "preset list | preset <0|1> <flat|1-3|match> | preset <0|1> save <1-3>\n",
                 matter_bridge::preset_command);
-    add_command("matter", "matter [open|fabrics|remove <n>]        pairing codes, endpoints; pairing window; controllers\n", cmd_matter);
+    add_command("matter", "matter [open|fabrics|remove <n>|json]   pairing codes, endpoints; pairing window; controllers\n", cmd_matter);
     console_start();
     ESP_LOGI("main", "octo-matter bridge running; type 'help'");
 }

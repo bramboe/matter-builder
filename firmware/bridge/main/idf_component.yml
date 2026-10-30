@@ -1,0 +1,3 @@
+dependencies:
+  # QR code of the pairing code, drawn by the settings page
+  espressif/qrcode: "^0.1.0"

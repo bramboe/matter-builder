@@ -1,5 +1,5 @@
 // Links to up to two Octo beds: connect, authenticate with the PIN, keep the
-// session alive and drive the motors. Used by the spike and the Matter bridge.
+// session alive and drive the motors. Used by the Matter bridge.
 //
 // All BLE state lives in the NimBLE host task. Other tasks (the console) hand
 // work to that task with bed_link::run_in_host(), so no locking is needed and

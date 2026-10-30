@@ -5,140 +5,252 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Octo bedden</title>
 <style>
-:root{--bg:#f4f4f2;--card:#fff;--fg:#1d1d1b;--mute:#6b6b66;--line:#ddddd8;--acc:#2f6f8f;--ok:#2e7d4f;--bad:#b3402e}
-@media (prefers-color-scheme:dark){:root{--bg:#161615;--card:#22221f;--fg:#ececea;--mute:#9a9a94;--line:#3a3a36;--acc:#6fb0d0;--ok:#6cc08b;--bad:#e07b67}}
+/* Colours, radii and spacing follow the Home Assistant frontend */
+:root{--primary:#009ac7;--bg:#f0f0f0;--card:#fff;--fg:#141414;--mute:#727272;--line:#e0e0e0;--fill:#f5f5f5;
+--ok:#43a047;--bad:#db4437;--light:#ff9800;--chip:rgba(0,154,199,.15);--radius:12px}
+@media (prefers-color-scheme:dark){:root{--bg:#111;--card:#1c1c1c;--fg:#e1e1e1;--mute:#9b9b9b;--line:#2f2f2f;--fill:#2a2a2a;--chip:rgba(0,154,199,.25)}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 system-ui,-apple-system,sans-serif}
-main{max-width:720px;margin:0 auto;padding:16px}
-h1{font-size:20px;margin:4px 0 2px}
-h2{font-size:17px;margin:0}
-h3{font-size:13px;margin:14px 0 6px;color:var(--mute);text-transform:uppercase;letter-spacing:.04em}
-.sub{color:var(--mute);font-size:13px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;margin:12px 0}
-.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-.head{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
-button{font:inherit;padding:7px 12px;border-radius:7px;border:1px solid var(--line);background:var(--bg);color:var(--fg);cursor:pointer}
-button.pri{background:var(--acc);border-color:var(--acc);color:#fff}
-button:disabled{opacity:.45;cursor:default}
-input,select{font:inherit;padding:6px 8px;border-radius:7px;border:1px solid var(--line);background:var(--bg);color:var(--fg);min-width:0}
-input[type=number]{width:5.5em}
-label{display:flex;flex-direction:column;gap:3px;font-size:13px;color:var(--mute)}
-.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;background:var(--bad)}
-.dot.ok{background:var(--ok)}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
-#msg{min-height:1.4em;color:var(--mute);font-size:13px}
-.steps{margin:0;padding-left:20px;color:var(--mute);font-size:13px}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 Roboto,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+svg{width:24px;height:24px;fill:currentColor;flex:none}
+header{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:12px;min-height:56px;padding:0 4px 0 16px;background:var(--bg)}
+header h1{flex:1;margin:0;font-size:20px;font-weight:400}
+header .sub{font-size:12px}
+main{max-width:1000px;margin:0 auto;padding:4px 16px 96px}
+.sub{color:var(--mute)}
+.section{margin:20px 0 8px}
+.section-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 4px 10px}
+.section-head h2{margin:0;font-size:20px;font-weight:400}
+.badge{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 12px;border-radius:14px;background:var(--card);border:1px solid var(--line);font-size:12px}
+.badge i{width:8px;height:8px;border-radius:50%;background:var(--bad)}
+.badge i.ok{background:var(--ok)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px;align-items:start}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:12px}
+.card h3{margin:0 0 8px;font-size:16px;font-weight:500}
+.tile{display:flex;align-items:center;gap:10px}
+.tile .icon{display:grid;place-items:center;width:36px;height:36px;border-radius:50%;background:var(--chip);color:var(--primary)}
+.tile .icon.light{background:rgba(255,152,0,.18);color:var(--light)}
+.tile .name{font-weight:500}
+.tile .state{color:var(--mute);font-size:12px}
+.tile .info{flex:1;min-width:0}
+.features{display:flex;gap:8px;margin-top:10px}
+.features button{flex:1}
+button{font:inherit;font-weight:500;display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:40px;padding:0 14px;border:0;border-radius:var(--radius);background:var(--fill);color:var(--fg);cursor:pointer}
+button:hover{filter:brightness(.96)}
+button.pri{background:var(--primary);color:#fff}
+button.text{background:none;color:var(--primary);padding:0 10px}
+button.warn{background:none;color:var(--bad)}
+button.icon-btn{background:none;width:40px;padding:0;border-radius:50%}
+button:disabled{opacity:.38;cursor:default;filter:none}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chips button{min-height:32px;border-radius:8px;border:1px solid var(--line);background:none;padding:0 12px}
+.row{display:flex;align-items:center;gap:12px;min-height:56px;padding:4px 0;border-top:1px solid var(--line)}
+.row:first-of-type{border-top:0}
+.row .label{flex:1;min-width:0}
+.row .label .sub{font-size:12px}
+.field{display:flex;flex-direction:column;min-width:0;background:var(--fill);border-radius:4px 4px 0 0;border-bottom:1px solid var(--mute);padding:6px 12px 4px}
+.field:focus-within{border-bottom:2px solid var(--primary);padding-bottom:3px}
+.field span{font-size:12px;color:var(--mute)}
+.field input,.field select{font:inherit;border:0;background:none;color:var(--fg);padding:2px 0;outline:none;min-width:0}
+.field.short{width:96px}
+.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:8px 0}
+details{border-top:1px solid var(--line);margin-top:10px}
+summary{display:flex;align-items:center;min-height:48px;cursor:pointer;font-weight:500;list-style:none}
+summary::-webkit-details-marker{display:none}
+summary::after{content:"";margin-left:auto;margin-right:6px;width:8px;height:8px;border-right:2px solid var(--mute);border-bottom:2px solid var(--mute);transform:rotate(45deg)}
+details[open] summary::after{transform:rotate(-135deg)}
+.steps{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 8px}
+.qrwrap{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.qrwrap svg{width:148px;height:148px;border-radius:8px}
+.code{font-size:20px;letter-spacing:.04em;margin:2px 0 6px}
+pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--mute);margin:4px 0 8px}
+.measure{margin:8px 0 0;font-weight:500;color:var(--primary)}
+.menu{position:absolute;right:8px;top:48px;min-width:200px;background:var(--card);border-radius:4px;box-shadow:0 4px 16px rgba(0,0,0,.25);padding:8px 0;display:none}
+.menu.open{display:block}
+.menu button{width:100%;justify-content:flex-start;border-radius:0;background:none;min-height:44px;font-weight:400}
+#toast{position:fixed;left:50%;bottom:16px;transform:translate(-50%,140px);max-width:calc(100% - 32px);background:#323232;color:#f1f1f1;border-radius:4px;padding:12px 16px;box-shadow:0 3px 6px rgba(0,0,0,.3);transition:transform .2s;white-space:pre-wrap;z-index:3}
+#toast.show{transform:translate(-50%,0)}
 </style>
 </head>
 <body>
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+<symbol id="i-up" viewBox="0 0 24 24"><path d="M13,20H11V8L5.5,13.5L4.08,12.08L12,4.16L19.92,12.08L18.5,13.5L13,8V20Z"/></symbol>
+<symbol id="i-down" viewBox="0 0 24 24"><path d="M11,4H13V16L18.5,10.5L19.92,11.92L12,19.84L4.08,11.92L5.5,10.5L11,16V4Z"/></symbol>
+<symbol id="i-stop" viewBox="0 0 24 24"><path d="M18,18H6V6H18V18Z"/></symbol>
+<symbol id="i-bed" viewBox="0 0 24 24"><path d="M19,7H11V14H3V5H1V20H3V17H21V20H23V11A4,4 0 0,0 19,7M7,13A3,3 0 0,0 10,10A3,3 0 0,0 7,7A3,3 0 0,0 4,10A3,3 0 0,0 7,13Z"/></symbol>
+<symbol id="i-light" viewBox="0 0 24 24"><path d="M12,2A7,7 0 0,0 5,9C5,11.38 6.19,13.47 8,14.74V17A1,1 0 0,0 9,18H15A1,1 0 0,0 16,17V14.74C17.81,13.47 19,11.38 19,9A7,7 0 0,0 12,2M9,21A1,1 0 0,0 10,22H14A1,1 0 0,0 15,21V20H9V21Z"/></symbol>
+<symbol id="i-menu" viewBox="0 0 24 24"><path d="M12,16A2,2 0 0,1 14,18A2,2 0 0,1 12,20A2,2 0 0,1 10,18A2,2 0 0,1 12,16M12,10A2,2 0 0,1 14,12A2,2 0 0,1 12,14A2,2 0 0,1 10,12A2,2 0 0,1 12,10M12,4A2,2 0 0,1 14,6A2,2 0 0,1 12,8A2,2 0 0,1 10,6A2,2 0 0,1 12,4Z"/></symbol>
+</svg>
+
+<header>
+  <h1>Octo bedden <div class="sub" id="sys">Verbinden…</div></h1>
+  <button class="icon-btn" id="menuBtn" aria-label="Menu"><svg><use href="#i-menu"/></svg></button>
+  <div class="menu" id="menu">
+    <button id="token">Wachtwoord wijzigen</button>
+    <button id="reboot">Herstarten</button>
+  </div>
+</header>
+
 <main>
-<h1>Octo bedden</h1>
-<div class="sub" id="sys">Verbinden…</div>
-<div id="msg"></div>
 <div id="beds"></div>
 
-<div class="card">
-<h2>Bed instellen</h2>
-<p class="sub">Zet de octo_bed-integratie en de OCTO-app uit: een bed accepteert maar één verbinding. De PIN wordt alleen op de ESP opgeslagen.</p>
-<div class="grid">
-<label>Plek<select id="slot"><option value="0">Bed 1</option><option value="1">Bed 2</option></select></label>
-<label>Bed (Bluetooth)<select id="mac"></select></label>
-<label>PIN<input id="pin" type="password" inputmode="numeric" maxlength="4" autocomplete="off"></label>
-<label>Naam<input id="name" maxlength="23" placeholder="bijv. Sam"></label>
-</div>
-<div class="row" style="margin-top:12px">
-<button class="pri" id="save">Opslaan</button>
-<button id="clear">Plek leegmaken</button>
-</div>
-<p class="sub">Een nieuwe naam is na een herstart ook in Home Assistant en Apple Home te zien.</p>
-</div>
-
-<div class="card">
-<h2>Systeem</h2>
-<div class="row" style="margin-top:8px">
-<button id="reboot">Herstarten</button>
-<button id="token">Token wijzigen</button>
-</div>
+<div class="section">
+  <div class="section-head"><h2>Instellingen</h2></div>
+  <div class="grid">
+    <div class="card">
+      <h3>Bed instellen</h3>
+      <div class="sub">Zet de OCTO-app en andere bridges uit: een bed accepteert maar één verbinding. De PIN wordt alleen op de ESP opgeslagen.</div>
+      <div class="form">
+        <label class="field"><span>Plek</span><select id="slot"><option value="0">Bed 1</option><option value="1">Bed 2</option></select></label>
+        <label class="field"><span>Bed (Bluetooth)</span><select id="mac"></select></label>
+        <label class="field"><span>PIN</span><input id="pin" type="password" inputmode="numeric" maxlength="4" autocomplete="off"></label>
+        <label class="field"><span>Naam</span><input id="name" maxlength="23" placeholder="bijv. Sam"></label>
+      </div>
+      <div class="sub">Een nieuwe naam is na een herstart ook in Home Assistant en Apple Home te zien.</div>
+      <div class="features"><button class="warn" id="clear">Plek leegmaken</button><button class="pri" id="save">Opslaan</button></div>
+    </div>
+    <div class="card">
+      <h3>Matter</h3>
+      <div class="qrwrap"><div id="qr"></div>
+        <div><div class="sub">Koppelcode</div><div class="code" id="manual">–</div>
+          <div class="sub" id="window"></div>
+          <button class="text" id="openWindow" style="padding:0;margin-top:4px">Koppelvenster openen</button></div></div>
+      <div class="sub" id="pairHelp" style="margin-top:10px"></div>
+      <div id="fabrics" style="margin-top:8px"></div>
+      <details><summary>Apparaat en netwerk</summary>
+        <div class="row"><div class="label">Apparaat</div><div id="product" class="sub">–</div></div>
+        <div class="row"><div class="label">Vendor-/product-ID<div class="sub">Test-ID's van de Matter-standaard</div></div><div id="ids" class="sub">–</div></div>
+        <pre id="network"></pre>
+      </details>
+    </div>
+    <div class="card">
+      <h3>Systeem</h3>
+      <div class="row"><div class="label">Vrij geheugen</div><div id="heap">–</div></div>
+      <div class="row"><div class="label">Actief</div><div id="uptime">–</div></div>
+    </div>
+  </div>
 </div>
 </main>
+<div id="toast"></div>
 
 <script>
 const $ = s => document.querySelector(s);
-let token = localStorage.getItem('octoToken') || '';
-let state = null;
-let presets = null;
+const icon = n => `<svg><use href="#i-${n}"/></svg>`;
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let token = '';
+try { token = localStorage.getItem('octoToken') || ''; } catch (e) {}
+let state = null, presets = null, toastTimer = 0;
+
+function toast(text) {
+  const t = $('#toast');
+  t.textContent = text;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 3500);
+}
 
 function askToken() {
-  const t = prompt('Token (OCTO_HTTP_TOKEN uit secrets.h)', token);
-  if (t !== null) { token = t.trim(); localStorage.setItem('octoToken', token); }
+  const t = prompt('Wachtwoord (OCTO_HTTP_TOKEN in secrets.h)', token);
+  if (t !== null) {
+    token = t.trim();
+    try { localStorage.setItem('octoToken', token); } catch (e) {}
+  }
 }
 
 async function cmd(line) {
   const r = await fetch('/cmd', {method: 'POST', headers: {'X-Octo-Token': token}, body: line});
   const text = await r.text();
-  if (r.status === 401) { askToken(); throw new Error('token geweigerd'); }
+  if (r.status === 401) { askToken(); throw new Error('wachtwoord geweigerd'); }
   return text;
 }
 
 async function run(line) {
-  try { $('#msg').textContent = (await cmd(line)).trim(); refresh(); }
-  catch (e) { $('#msg').textContent = 'Fout: ' + e.message; }
+  try { toast((await cmd(line)).trim() || 'OK'); refresh(); }
+  catch (e) { toast('Fout: ' + e.message); }
 }
 
-const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+// Shown the Home Assistant way: 0 % flat, 100 % fully raised
+const pos = v => v === undefined ? '' : v === 0 ? 'Plat' : v >= 100 ? 'Helemaal omhoog' : v + '% omhoog';
 
-function bedCard(b) {
-  if (!b.configured) return `<div class="card"><h2>Bed ${b.index + 1}</h2><p class="sub">Niet ingesteld.</p></div>`;
-  const ready = b.state === 'ready', i = b.index, dis = ready ? '' : 'disabled';
-  const cal = b.calibrating;
-  const motor = (part, label, travel) => `
-    <div><h3>${label}</h3>
-    <div class="row">
-      <button ${dis} onclick="run('move ${i} ${part} up 2')">▲</button>
-      <button ${dis} onclick="run('move ${i} ${part} down 2')">▼</button>
-      <label>Looptijd (s)<input type="number" step="0.1" min="5" max="120" value="${travel}" id="t${i}${part}"></label>
-      <button onclick="run('travel ${i} ${part} ' + $('#t${i}${part}').value)">Bewaar</button>
-    </div>
-    <div class="row" style="margin-top:8px">
-      <button ${dis || (cal ? 'disabled' : '')} onclick="run('move ${i} ${part} down ' + (Math.min(${travel}, 120) + 5))">1. Helemaal omlaag</button>
-      <button ${dis || (cal ? 'disabled' : '')} onclick="run('calibrate ${i} ${part}')">2. Start meting</button>
-      <button class="pri" ${cal === part ? '' : 'disabled'} onclick="run('calibrate ${i} stop')">3. Bovenaan: stop</button>
-    </div></div>`;
+function motorTile(b, part, label, value) {
+  const i = b.index, dis = b.state === 'ready' ? '' : 'disabled';
   return `<div class="card">
-    <div class="head"><h2><span class="dot ${ready ? 'ok' : ''}"></span>${esc(b.name)}</h2>
-    <span class="sub">${esc(b.mac)} · ${esc(b.state)}${ready ? ' · ' + b.rssi + ' dBm' : ''} · onderbrekingen ${b.drops}</span></div>
-    ${cal ? `<p><b>Meting ${cal === 'head' ? 'hoofd' : 'benen'}: ${b.calibrate_elapsed.toFixed(1)} s</b> — druk op stop als het bovenaan is.</p>` : ''}
-    <div class="row" style="margin-top:8px">
-      <button ${dis} onclick="run('stop ${i}')">■ Stop</button>
-      <button ${dis} onclick="run('light ${i} on')">Licht aan</button>
-      <button ${dis} onclick="run('light ${i} off')">Licht uit</button>
-    </div>
-    ${presetRow(b)}
-    ${motor('head', 'Hoofd', b.head_travel)}
-    ${motor('legs', 'Benen', b.legs_travel)}
-    <ol class="steps"><li>Leg het onderdeel plat (stap 1).</li><li>Start de meting: het gaat omhoog.</li><li>Druk op stop zodra het helemaal bovenaan is; de tijd wordt de looptijd.</li></ol>
-  </div>`;
+    <div class="tile"><div class="icon">${icon('bed')}</div>
+      <div class="info"><div class="name">${label}</div><div class="state">${pos(value)}</div></div></div>
+    <div class="features">
+      <button ${dis} title="Omhoog" onclick="run('move ${i} ${part} up 2')">${icon('up')}</button>
+      <button ${dis} title="Stop" onclick="run('stop ${i}')">${icon('stop')}</button>
+      <button ${dis} title="Omlaag" onclick="run('move ${i} ${part} down 2')">${icon('down')}</button>
+    </div></div>`;
 }
 
-// Presets exist only on the Matter bridge ("preset list" fails on the spike)
-function presetRow(b) {
-  const p = presets && presets.beds[b.index];
+function lightTile(b) {
+  const i = b.index, dis = b.state === 'ready' ? '' : 'disabled';
+  return `<div class="card">
+    <div class="tile"><div class="icon light">${icon('light')}</div>
+      <div class="info"><div class="name">Licht</div><div class="state">Bedverlichting</div></div></div>
+    <div class="features">
+      <button ${dis} onclick="run('light ${i} off')">Uit</button>
+      <button ${dis} onclick="run('light ${i} on')">Aan</button>
+    </div></div>`;
+}
+
+// Presets come from the bridge ("preset list"); hidden when that fails
+function presetCard(b, p) {
   if (!p) return '';
   const i = b.index, dis = b.state === 'ready' ? '' : 'disabled';
   const other = state.beds[1 - i];
   const slot = n => {
     const s = p.presets[n - 1];
-    const tip = s ? `hoofd ${s.head}%, benen ${s.legs}%` : 'leeg';
-    return `<button ${dis || (s ? '' : 'disabled')} title="${tip}" onclick="run('preset ${i} ${n}')">Stand ${n}</button>`;
+    return `<button ${dis || (s ? '' : 'disabled')} title="${s ? `Hoofd ${s.head}%, benen ${s.legs}%` : 'Nog niet bewaard'}" onclick="run('preset ${i} ${n}')">Stand ${n}</button>`;
   };
-  const save = n => `<button onclick="if (confirm('Huidige stand bewaren als stand ${n}?')) run('preset ${i} save ${n}')">${n}</button>`;
-  return `<h3>Standen · nu hoofd ${p.head}%, benen ${p.legs}%</h3>
-    <div class="row">
-      <button ${dis} onclick="run('preset ${i} flat')">Plat</button>
-      ${slot(1)}${slot(2)}${slot(3)}
+  return `<div class="card">
+    <h3>Standen</h3>
+    <div class="chips">
+      <button ${dis} onclick="run('preset ${i} flat')">Plat</button>${slot(1)}${slot(2)}${slot(3)}
       ${other && other.configured ? `<button ${dis} onclick="run('preset ${i} match')">Zelfde als ${esc(other.name)}</button>` : ''}
     </div>
-    <div class="row" style="margin-top:8px"><span class="sub">Huidige stand bewaren als</span>${save(1)}${save(2)}${save(3)}</div>`;
+    <div class="row" style="margin-top:8px"><div class="label">Huidige stand bewaren<div class="sub">Hoofd ${p.head}%, benen ${p.legs}%</div></div>
+      ${[1, 2, 3].map(n => `<button class="text" onclick="if (confirm('Huidige stand bewaren als stand ${n}?')) run('preset ${i} save ${n}')">${n}</button>`).join('')}
+    </div></div>`;
+}
+
+function calibrationCard(b) {
+  const i = b.index, dis = b.state === 'ready' ? '' : 'disabled', cal = b.calibrating;
+  const motor = (part, label, travel) => `
+    <div class="row"><div class="label">${label}<div class="sub">Looptijd van plat tot helemaal omhoog</div></div>
+      <label class="field short"><span>Seconden</span><input type="number" step="0.1" min="5" max="120" value="${travel}" id="t${i}${part}"></label>
+      <button class="text" onclick="run('travel ${i} ${part} ' + $('#t${i}${part}').value)">Bewaar</button></div>
+    <div class="steps">
+      <button ${dis || (cal ? 'disabled' : '')} onclick="run('move ${i} ${part} down ' + (Math.min(${travel}, 120) + 5))">1. Helemaal omlaag</button>
+      <button ${dis || (cal ? 'disabled' : '')} onclick="run('calibrate ${i} ${part}')">2. Start meting</button>
+      <button class="pri" ${cal === part ? '' : 'disabled'} onclick="run('calibrate ${i} stop')">3. Bovenaan: stop</button>
+    </div>`;
+  // Keep the panel open across redraws, and open it while measuring
+  const open = cal || (document.getElementById('cal' + i) || {}).open ? 'open' : '';
+  return `<div class="card">
+    <h3>Kalibratie</h3>
+    <div class="sub">De stand wordt berekend uit de looptijd. Meet die per motor: helemaal omlaag, start de meting en stop zodra het onderdeel bovenaan is.</div>
+    ${cal ? `<div class="measure">Meting ${cal === 'head' ? 'hoofd' : 'benen'}: ${b.calibrate_elapsed.toFixed(1)} s</div>` : ''}
+    <details id="cal${i}" ${open}><summary>Looptijden en meten</summary>
+      ${motor('head', 'Hoofd', b.head_travel)}${motor('legs', 'Benen', b.legs_travel)}
+    </details></div>`;
+}
+
+function bedSection(b) {
+  if (!b.configured) {
+    return `<div class="section"><div class="section-head"><h2>Bed ${b.index + 1}</h2><span class="badge"><i></i>Niet ingesteld</span></div></div>`;
+  }
+  const ready = b.state === 'ready';
+  const p = presets && presets.beds[b.index];
+  const status = ready ? `Verbonden · ${b.rssi} dBm` : b.state;
+  return `<div class="section">
+    <div class="section-head"><h2>${esc(b.name)}</h2>
+      <span class="badge"><i class="${ready ? 'ok' : ''}"></i>${esc(status)}</span>
+      <span class="sub">${esc(b.mac)} · onderbrekingen ${b.drops}</span></div>
+    <div class="grid">
+      ${motorTile(b, 'head', 'Hoofd', p && p.head)}${motorTile(b, 'legs', 'Benen', p && p.legs)}${lightTile(b)}
+      ${presetCard(b, p)}${calibrationCard(b)}
+    </div></div>`;
 }
 
 function fillMacs() {
@@ -147,7 +259,7 @@ function fillMacs() {
   const opts = octo.map(s => `<option value="${s.address}">${esc(s.name || '?')} ${s.address} (${s.rssi} dBm)</option>`);
   for (const b of state.beds) if (b.configured && !octo.some(s => s.address === b.mac))
     opts.push(`<option value="${b.mac}">${esc(b.name)} ${b.mac}</option>`);
-  sel.innerHTML = opts.join('') || '<option value="">geen Octo-bed gevonden</option>';
+  sel.innerHTML = opts.join('') || '<option value="">Geen Octo-bed gevonden</option>';
   if ([...sel.options].some(o => o.value === keep)) sel.value = keep;
 }
 
@@ -155,27 +267,66 @@ async function refresh() {
   try {
     state = JSON.parse(await cmd('json'));
     try { presets = JSON.parse(await cmd('preset list')); } catch (e) { presets = null; }
-    $('#sys').textContent = `Uptime ${Math.floor(state.uptime / 60)} min · vrij geheugen ${Math.round(state.heap / 1024)} KB`;
+    const ready = state.beds.filter(b => b.state === 'ready').length;
+    const configured = state.beds.filter(b => b.configured).length;
+    $('#sys').textContent = configured ? `${ready} van ${configured} bedden verbonden` : 'Nog geen bed ingesteld';
+    $('#heap').textContent = Math.round(state.heap / 1024) + ' KB';
+    $('#uptime').textContent = state.uptime < 3600 ? Math.floor(state.uptime / 60) + ' min'
+      : Math.floor(state.uptime / 3600) + ' uur ' + Math.floor(state.uptime % 3600 / 60) + ' min';
     // Don't redraw while a travel time is being typed
-    if (!$('#beds').contains(document.activeElement)) $('#beds').innerHTML = state.beds.map(bedCard).join('');
+    const focus = document.activeElement;
+    if (!$('#beds').contains(focus) || focus.tagName !== 'INPUT')
+      $('#beds').innerHTML = state.beds.map(bedSection).join('');
     fillMacs();
   } catch (e) { $('#sys').textContent = 'Geen verbinding: ' + e.message; }
 }
 
+// Pairing code, QR, commissioning window and paired controllers
+async function loadMatter() {
+  let m;
+  try { m = JSON.parse(await cmd('matter json')); } catch (e) { return; }
+  $('#manual').textContent = m.manual.replace(/^(\d{4})(\d{3})(\d{4})$/, '$1-$2-$3') || '–';
+  const n = m.qr_size;
+  $('#qr').innerHTML = n ? `<svg viewBox="-2 -2 ${n + 4} ${n + 4}" shape-rendering="crispEdges" role="img" aria-label="${esc(m.qr)}">
+    <rect x="-2" y="-2" width="${n + 4}" height="${n + 4}" fill="#fff"/><path fill="#000" d="${m.qr_path}"/></svg>` : '';
+  $('#window').textContent = m.window_open ? 'Koppelvenster open' : 'Koppelvenster gesloten';
+  $('#openWindow').hidden = m.window_open;
+  $('#pairHelp').textContent = m.fabrics.length
+    ? 'Voor een extra controller (bijv. Apple Home): open het koppelvenster en scan de code binnen 5 minuten.'
+    : 'Nog niet gekoppeld. Scan de code in Home Assistant (Matter-apparaat toevoegen) of in Apple Home.';
+  $('#fabrics').innerHTML = m.fabrics.map(f => `<div class="row"><div class="label">${esc(f.vendor)}
+      <div class="sub">Controller ${f.index}${f.label ? ' · ' + esc(f.label) : ''}</div></div>
+      <button class="warn" onclick="removeFabric(${f.index}, '${esc(f.vendor).replace(/'/g, '')}')">Loskoppelen</button></div>`).join('');
+  $('#product').textContent = `${m.product} ${m.version}`;
+  $('#ids').textContent = `${m.vid} / ${m.pid}`;
+  $('#network').textContent = m.network.trim();
+}
+
+async function removeFabric(index, vendor) {
+  if (!confirm(`${vendor} loskoppelen? De bedden verdwijnen daar tot je opnieuw koppelt.`)) return;
+  await run(`matter remove ${index}`);
+  loadMatter();
+}
+
 $('#save').onclick = () => {
   const pin = $('#pin').value.trim(), name = $('#name').value.trim(), mac = $('#mac').value;
-  if (!/^\d{4}$/.test(pin)) { $('#msg').textContent = 'De PIN heeft 4 cijfers.'; return; }
-  if (!mac) { $('#msg').textContent = 'Kies een bed.'; return; }
+  if (!/^\d{4}$/.test(pin)) { toast('De PIN heeft 4 cijfers.'); return; }
+  if (!mac) { toast('Kies een bed.'); return; }
   run(`bed set ${$('#slot').value} ${mac} ${pin} ${name}`);
   $('#pin').value = '';
 };
 $('#clear').onclick = () => { if (confirm('Deze plek leegmaken?')) run(`bed clear ${$('#slot').value}`); };
+$('#menuBtn').onclick = e => { e.stopPropagation(); $('#menu').classList.toggle('open'); };
+document.addEventListener('click', () => $('#menu').classList.remove('open'));
 $('#reboot').onclick = () => { if (confirm('Herstarten?')) run('reboot'); };
-$('#token').onclick = () => { askToken(); refresh(); };
+$('#token').onclick = () => { askToken(); refresh(); loadMatter(); };
+$('#openWindow').onclick = async () => { await run('matter open'); loadMatter(); };
 
 if (!token) askToken();
 refresh();
+loadMatter();
 setInterval(() => { if (!document.hidden) refresh(); }, 2000);
+setInterval(() => { if (!document.hidden) loadMatter(); }, 15000);
 </script>
 </body>
 </html>

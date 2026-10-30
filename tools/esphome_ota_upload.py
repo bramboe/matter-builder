@@ -8,7 +8,7 @@ Needs the esphome package (e.g. a venv: python3 -m venv ~/esp/esphome-venv &&
 ~/esp/esphome-venv/bin/pip install esphome) and is run with that Python:
 
     ~/esp/esphome-venv/bin/python tools/esphome_ota_upload.py 192.168.1.50 \
-        firmware/spike/build/octo_spike.bin
+        firmware/bridge/build/octo_bridge.bin
 
 Set ESPHOME_OTA_PASSWORD if the device's ESPHome config has an OTA password.
 """

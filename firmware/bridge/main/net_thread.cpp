@@ -13,6 +13,7 @@
 #include <esp_openthread_lock.h>
 #include <lib/support/ThreadOperationalDataset.h>
 #include <openthread/ip6.h>
+#include <openthread/srp_client.h>
 #include <openthread/thread.h>
 #include <platform/CHIPDeviceLayer.h>
 #include <platform/ThreadStackManager.h>
@@ -116,6 +117,11 @@ std::string describe() {
         otInstance* instance = esp_openthread_get_instance();
         const char* role = otThreadDeviceRoleToString(otThreadGetDeviceRole(instance));
         out += std::string(", role ") + role + ", detaches " + std::to_string(detaches) + "\n";
+        // The border router publishes the Matter SRP host name on the LAN
+        const otSrpClientHostInfo* host = otSrpClientGetHostInfo(instance);
+        if (host != nullptr && host->mName != nullptr) {
+            out += std::string("  settings page: http://") + host->mName + ".local/\n";
+        }
         // The routable addresses, to reach the settings page from the LAN
         for (const otNetifAddress* address = otIp6GetUnicastAddresses(instance); address != nullptr;
              address = address->mNext) {

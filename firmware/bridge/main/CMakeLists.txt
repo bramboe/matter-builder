@@ -12,8 +12,8 @@ else()
 endif()
 
 idf_component_register(
-    SRCS "app_main.cpp" "matter_bridge.cpp" ${net_src}
+    SRCS "app_main.cpp" "matter_bridge.cpp" "setup_code.cpp" ${net_src}
     INCLUDE_DIRS "."
-    REQUIRES octo_core esp_matter nvs_flash esp_netif esp_event ${net_requires}
+    REQUIRES octo_core esp_matter nvs_flash esp_netif esp_event esp_app_format ${net_requires}
 )
 target_compile_options(${COMPONENT_LIB} PRIVATE "-DCHIP_HAVE_CONFIG_H")

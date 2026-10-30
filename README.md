@@ -9,18 +9,31 @@ Opvolger van de Home Assistant-integratie
 [octo-bed](https://github.com/bramboe/octo-bed); het BLE-protocol is daaruit
 geport en wordt met golden vectors gelijk gehouden.
 
-> **Status: F2.** De bridge (`firmware/bridge`) draait: beide bedden als Matter-apparaten
-> met hoofd, benen, licht, een stopknop en een presetkeuze, en een instellingenpagina op de ESP.
-> De stopknop is een Operational State-cluster dat alleen Stop accepteert, de presetkeuze een
-> Mode Select (plat, stand 1-3, zelfde als het andere bed, huidige stand bewaren); Home Assistant
-> toont ze als drukknop en keuzelijst, Apple Home toont ze niet. Hoofd en benen bewegen samen
-> als ze dezelfde kant op gaan, anders na elkaar. "Beide" (per bed en voor beide bedden) zijn
-> groepen in Home Assistant. Zie [docs/ontwerp.md](docs/ontwerp.md).
+> **Status: 1.0.** Eén bridge bedient twee bedden. Per bed: hoofd en benen
+> (Window Covering), licht, een stopknop en een presetkeuze (plat, stand 1-3,
+> zelfde als het andere bed, huidige stand bewaren). Hoofd en benen bewegen
+> samen als ze dezelfde kant op gaan, anders na elkaar. Op de ESP draait een
+> instellingenpagina voor bedden, looptijden en kalibratie. Zie
+> [docs/ontwerp.md](docs/ontwerp.md).
+
+## Borden
+
+| Bord | Matter via | Build |
+|---|---|---|
+| **ESP32-C6** (aanbevolen) | Thread, via een Thread border router | `build-c6/`, `sdkconfig.c6` |
+| Klassieke ESP32 | Wi-Fi | `build/`, `sdkconfig` |
+
+Bluetooth is op beide alleen voor de bedden: Matter wordt via het netwerk
+gekoppeld (Thread-dataset of Wi-Fi uit `secrets.h`), niet via BLE.
+
+In Home Assistant verschijnen de stopknop als drukknop en de presetkeuze als
+keuzelijst; Apple Home toont alleen de covers en het licht. "Beide" (per bed
+en voor beide bedden) zijn groepen in Home Assistant.
 
 ## Terug naar ESPHome
 
 Altijd mogelijk, zie [docs/esphome-fallback.md](docs/esphome-fallback.md).
-Maak **vóór de eerste flash** een backup:
+Maak **vóór de eerste flash** van een ESPHome-apparaat een backup:
 
 ```sh
 tools/backup_flash.sh /dev/cu.usbserial-XXXX
@@ -33,10 +46,60 @@ tools/backup_flash.sh /dev/cu.usbserial-XXXX
 | `components/octo_protocol` | Octo BLE-pakketprotocol (C++ port van `protocol.py`) |
 | `components/octo_core` | Bedverbindingen, boot guard, console-commando's, HTTP-API en instellingenpagina |
 | `firmware/bridge` | De Matter-bridge (esp-matter release/v1.6) |
-| `firmware/spike` | F0: alleen de bedverbindingen, zonder Matter |
 | `test/host` | Host-tests tegen golden vectors uit de Python-referentie |
-| `tools/` | Vectorgenerator, flash-backup en -restore |
-| `docs/` | Ontwerp en terugvalprocedure |
+| `tools/` | `octo.sh` (console via het netwerk), release, vectorgenerator, flash-backup en -restore |
+| `docs/` | Ontwerp, installatie en terugvalprocedure |
+
+## Bouwen
+
+Vereist ESP-IDF v5.5.5 (`~/esp/esp-idf-v5.5.5`, met `install.sh esp32,esp32c6`)
+en esp-matter `release/v1.6` (`~/esp/esp-matter`). Kopieer
+`firmware/bridge/main/secrets.example.h` naar `secrets.h` en vul Wi-Fi,
+Thread-dataset en wachtwoord in (staat niet in git).
+
+```sh
+. ~/esp/esp-idf-v5.5.5/export.sh && . ~/esp/esp-matter/export.sh
+cd firmware/bridge
+idf.py -B build-c6 -D SDKCONFIG=sdkconfig.c6 set-target esp32c6   # eenmalig
+idf.py -B build-c6 -D SDKCONFIG=sdkconfig.c6 build                # ESP32-C6
+idf.py build                                                      # klassieke ESP32
+```
+
+`tools/release.sh` bouwt beide en zet een release met SHA256SUMS en
+[installatie-instructies](docs/install.md) in `dist/`. De images bevatten je
+`secrets.h`: deel ze niet.
+
+## Bedienen
+
+`tools/octo.sh <commando>` stuurt een consolecommando via het netwerk
+(`OCTO_HOST=<ip>`, of `[ipv6]` of `<naam>.local` voor de C6). Updates:
+`tools/octo.sh --ota firmware/bridge/build-c6/octo_bridge.bin`.
+
+De instellingenpagina staat op `http://<adres>/`; `tools/octo.sh system` toont
+het adres. Ze vraagt één keer om het wachtwoord (`OCTO_HTTP_TOKEN`). Daar kun je:
+
+- een bed kiezen uit de Bluetooth-scan en met PIN en naam opslaan;
+- per motor de looptijd invullen, of meten: helemaal omlaag, *Start meting*,
+  en *Stop* zodra het onderdeel bovenaan is;
+- bewegen, stoppen, het licht schakelen en standen kiezen of bewaren;
+- de koppelcode zien.
+
+In de console (zie `help`), de PIN wordt in NVS opgeslagen, niet in de firmware:
+
+```
+octo> scan
+octo> bed set 0 AA:BB:CC:DD:EE:01 0000 Sam
+octo> status
+octo> move 0 head up 3
+octo> preset 0 save 1
+octo> preset 0 1
+octo> stop 0
+```
+
+Koppelen met Matter: elke bridge maakt bij de eerste start een eigen
+koppelcode (`matter` toont die), `matter open` opent een koppelvenster voor
+een extra controller, `matter fabrics` en `matter remove <n>` tonen en
+verwijderen gekoppelde controllers.
 
 ## Host-tests
 
@@ -45,73 +108,6 @@ test/host/run.sh
 ```
 
 Na een protocolwijziging in octo-bed: `tools/gen_vectors.py ../octo-bed`.
-
-## F0 bouwen en testen
-
-Vereist ESP-IDF v5.5.5. Kopieer eerst `firmware/spike/main/secrets.example.h`
-naar `secrets.h` en vul wifi en token in (staat niet in git).
-
-Installeren op een ESP32 die nog ESPHome draait, via het netwerk:
-
-```sh
-~/esp/esphome-venv/bin/python tools/esphome_ota_upload.py <ip> firmware/spike/build/octo_spike.bin
-tools/octo.sh status          # daarna alles via het netwerk
-tools/octo.sh --ota firmware/spike/build/octo_spike.bin   # volgende updates
-```
-
-Of via USB:
-
-```sh
-cd firmware/spike
-idf.py set-target esp32
-idf.py build
-idf.py -p /dev/cu.usbserial-XXXX flash monitor
-```
-
-In de console, of via `tools/octo.sh <commando>` (de PIN wordt in NVS opgeslagen, niet in de firmware):
-
-```
-octo> scan
-octo> bed set 0 AA:BB:CC:DD:EE:01 0000 Links
-octo> bed set 1 XX:XX:XX:XX:XX:XX 1234 Rechts
-octo> status
-octo> move 0 head up 3
-octo> stop 0
-octo> light 0 on
-```
-
-F0 is geslaagd als beide bedden 24 uur verbonden blijven (de `STAT`-regels,
-elke 5 minuten, tonen `drops=0` of alleen herstelde drops) en bewegen werkt.
-Sluit tijdens het testen de `octo_bed`-integratie en de OCTO-app af: het bed
-accepteert maar één verbinding.
-
-## Bridge bouwen
-
-Vereist ook esp-matter `release/v1.6` (in `~/esp/esp-matter`):
-
-```sh
-. ~/esp/esp-idf-v5.5.5/export.sh && . ~/esp/esp-matter/export.sh
-cd firmware/bridge && idf.py build
-tools/octo.sh --ota firmware/bridge/build/octo_bridge.bin
-```
-
-`firmware/bridge/main/secrets.h` mag een symlink naar die van de spike zijn.
-
-## Instellen en kalibreren
-
-Open `http://<ip van de ESP>/` in een browser. De pagina vraagt één keer om het
-token uit `secrets.h` en bewaart dat in de browser. Daar kun je:
-
-- een bed kiezen uit de Bluetooth-scan en met PIN en naam opslaan;
-- per motor de looptijd invullen, of meten: helemaal omlaag, *Start meting*,
-  en *Stop* zodra het onderdeel bovenaan is;
-- hoofd en benen kort bewegen, stoppen en het licht schakelen.
-
-Hetzelfde kan via de console: `travel`, `calibrate`, `bed set` (zie `help`).
-
-Koppelen met Matter: `tools/octo.sh matter` geeft de code, `matter open` opent
-een koppelvenster voor een extra controller, `matter fabrics` en
-`matter remove <n>` tonen en verwijderen gekoppelde controllers.
 
 ## Licentie
 

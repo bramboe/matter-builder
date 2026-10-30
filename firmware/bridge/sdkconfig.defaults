@@ -4,7 +4,7 @@ CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=6144
 CONFIG_LOG_DEFAULT_LEVEL_INFO=y
 
-# Same partition table as the spike (and ESPHome before it): a network
+# Same partition table as ESPHome had (and the F0 spike): a network
 # install keeps the table already on the device, so it cannot change.
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
@@ -50,7 +50,9 @@ CONFIG_HTTPD_MAX_REQ_HDR_LEN=1024
 
 # Manufacturer and model names come from main/matter_bridge.cpp
 CONFIG_CUSTOM_DEVICE_INSTANCE_INFO_PROVIDER=y
-CONFIG_DEVICE_SOFTWARE_VERSION_NUMBER=1
+# Each bridge generates its own pairing code (main/setup_code.cpp)
+CONFIG_CUSTOM_COMMISSIONABLE_DATA_PROVIDER=y
+CONFIG_DEVICE_SOFTWARE_VERSION_NUMBER=100
 
 # Aggregator plus, per bed, a device endpoint with head, legs and light
 CONFIG_ESP_MATTER_MAX_DYNAMIC_ENDPOINT_COUNT=12

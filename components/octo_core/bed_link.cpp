@@ -8,8 +8,9 @@
 #include "esp_heap_caps.h"
 #include "esp_bt.h"
 #include "esp_log.h"
-#include "soc/soc_caps.h"
+#include "esp_system.h"
 #include "esp_timer.h"
+#include "soc/soc_caps.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "host/ble_hs.h"
@@ -28,6 +29,7 @@ const char* TAG = "bed";
 // Timing, matching the Home Assistant integration (octo_bed_client.py)
 constexpr uint32_t MANAGER_INTERVAL_MS = 500;
 constexpr uint32_t MOTION_INTERVAL_MS = 375;      // bed remote repeats commands every ~375 ms
+constexpr uint32_t HOST_TIMEOUT_MS = 10000;       // run_in_host watchdog
 constexpr uint32_t KEEPALIVE_INTERVAL_MS = 25000;  // bed drops the link after ~30 s without PIN
 constexpr uint32_t STATS_INTERVAL_MS = 300000;
 constexpr int64_t SEEN_RECENTLY_US = 10 * 1000000LL;
@@ -873,7 +875,12 @@ void run_in_host(const std::function<void()>& fn) {
     request.done = xSemaphoreCreateBinary();
     ble_npl_event_init(&request.event, run_request, &request);
     ble_npl_eventq_put(nimble_port_get_dflt_eventq(), &request.event);
-    xSemaphoreTake(request.done, portMAX_DELAY);
+    // Watchdog: a host task that stops answering would block Matter and the
+    // HTTP API with it, so restart instead.
+    if (xSemaphoreTake(request.done, pdMS_TO_TICKS(HOST_TIMEOUT_MS)) != pdTRUE) {
+        ESP_LOGE(TAG, "BLE host task not answering for %u ms, restarting", static_cast<unsigned>(HOST_TIMEOUT_MS));
+        esp_restart();
+    }
     ble_npl_event_deinit(&request.event);  // return the pool block
     vSemaphoreDelete(request.done);
 }

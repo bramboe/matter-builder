@@ -46,7 +46,7 @@ Gevolgen van de klassieke ESP32 (520 KB SRAM, meestal 4 MB flash, geen PSRAM):
 
 **Aanbeveling bij aanschaf: ESP32-S3-DevKitC-1-N16R8** (16 MB flash, 8 MB PSRAM, ±€10–15), of de `-1U`-variant met externe antenne als het bereik tot de bedden krap is. Daarmee verdwijnen de geheugen- en flashrisico's, en de proxy blijft werken tijdens de ontwikkeling. Pas na F3 wordt de oude proxy uitgezet of hergebruikt. De firmware is gelijk, alleen een andere build-target.
 
-Niet geschikt: ESP32-C6 en -C3 (geen PSRAM, zelfde RAM-probleem), ESP32-H2 (geen Wi-Fi).
+Niet geschikt: ESP32-C6 en -C3 (geen PSRAM, zelfde RAM-probleem), ESP32-H2 (geen Wi-Fi). *Achteraf: de C6 met Thread in plaats van Wi-Fi heeft ruim genoeg geheugen, zie §13.*
 
 Voor het flashen: een volledige backup van de huidige ESPHome-firmware maken (`esptool read_flash 0 ALL`), zodat de proxy met één commando terug te zetten is.
 
@@ -191,6 +191,23 @@ Let op in de configuratie: esp-matter zet BLE standaard uit na commissioning. Da
 - **Namen in Apple Home:** iOS haalt de naam van de bridge uit de DCL; met de
   test-ID's (0xFFF1/0x8000) wordt dat "Matter Accessory". De bedden zelf
   krijgen wel hun eigen naam.
-- **Geheugen op de klassieke ESP32 is krap** (±30 KB vrij, dalend naar
-  ±8–20 KB bij koppelen of veel verkeer). Een ESP32-C6 of -S3 is de uitweg.
+- **Geheugen op de klassieke ESP32 is krap** (±25 KB vrij, dalend naar
+  ±8–20 KB bij koppelen of veel verkeer). Daarom de C6 (hieronder).
 
+- **ESP32-C6 met Thread** is het hoofdbord geworden (de klassieke ESP32 blijft
+  als Wi-Fi-variant bouwbaar). De C6 gaat als *minimal end device* het
+  Thread-netwerk uit `OCTO_THREAD_DATASET` op; Bluetooth en Thread delen de
+  radio. ±220 KB vrij geheugen. De instellingenpagina is via IPv6 bereikbaar,
+  op naam via de SRP-hostnaam die de border router als `<naam>.local`
+  publiceert.
+- **Motoren als losse runs.** Elke motor heeft een eigen run; dezelfde
+  richting gaat in één commando, tegengestelde richtingen na elkaar. De
+  posities volgen de runs, ook van bewegingen via de pagina of kalibratie.
+- **Stopknop en presets op het bedapparaat** (Operational State met alleen
+  Stop, en Mode Select), zonder extra endpoints. "Beide"-endpoints zijn
+  groepen in Home Assistant in plaats van firmware-endpoints: geen extra
+  geheugen en geen nieuwe koppeling nodig.
+- **Eigen koppelcode per bridge**, bij de eerste start willekeurig gemaakt en
+  in NVS bewaard, in plaats van de testcode.
+- **Watchdog:** antwoordt de BLE-hosttaak 10 s niet, dan herstart de ESP.
+- **De F0-spike is uitgefaseerd**; `secrets.h` staat nu in `firmware/bridge/main`.

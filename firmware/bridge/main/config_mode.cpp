@@ -21,7 +21,10 @@
 #include "http_api.h"
 #include "mdns.h"
 #include "nvs.h"
+#include "program_access.h"
+#include "sdkconfig.h"
 #include "secrets.h"
+#include "setup_code.h"
 #include "setup_dns.h"
 #include "thread_dataset.h"
 
@@ -145,6 +148,7 @@ bool http_started = false;
 // The setup access point: no Wi-Fi network set, or it does not connect and
 // the bridge has no Thread network to go back to
 volatile bool ap_mode = false;
+bool force_ap = false;  // recovery: the setup access point even with a Wi-Fi network
 char ap_ssid[33] = "";
 int last_reason = 0;  // wifi_err_reason_t of the last disconnect
 
@@ -288,6 +292,22 @@ std::string state_json(const Network& network) {
     return out;
 }
 
+// The pairing code for the page; pairing itself waits for Matter (Thread)
+std::string pairing_json() {
+    std::string qr;
+    std::string manual;
+    const bool have = setup_code::codes(qr, manual);
+    int size = 0;
+    const std::string path = have ? setup_code::qr_svg_path(qr.c_str(), size) : "";
+    char ids[48];
+    std::snprintf(ids, sizeof(ids), "\"vid\":\"0x%04X\",\"pid\":\"0x%04X\"", CONFIG_DEVICE_VENDOR_ID,
+                  CONFIG_DEVICE_PRODUCT_ID);
+    return std::string("{\"config_mode\":true,\"product\":\"\",\"version\":") +
+           json_text(esp_app_get_description()->version) + "," + ids + ",\"qr\":" + json_text(have ? qr : "") +
+           ",\"manual\":" + json_text(have ? manual : "") + ",\"qr_size\":" + std::to_string(size) +
+           ",\"qr_path\":" + json_text(path) + ",\"window_open\":false,\"fabrics\":[],\"network\":\"\"}\n";
+}
+
 // Offered every command first. The bed commands go on to the built-ins (an
 // empty reply); Matter and Thread are off, so their commands are answered here.
 std::string command_in_config_mode(const std::vector<std::string>& args) {
@@ -319,6 +339,12 @@ std::string command_in_config_mode(const std::vector<std::string>& args) {
     if (cmd == "thread") {
         return thread_dataset::command(args);
     }
+    if (cmd == "access") {
+        return program_access::command(args);
+    }
+    if (cmd == "matter" && args.size() == 2 && args[1] == "json") {
+        return pairing_json();
+    }
     if (cmd == "matter" || cmd == "preset" || cmd == "language") {
         return "not available in configuration mode: Matter is off (wifi exit to go back)\n";
     }
@@ -339,8 +365,11 @@ bool requested() {
     uint8_t minutes = 0;
     const bool asked = nvs_get_u8(handle, "boot", &minutes) == ESP_OK && minutes > 0;
     if (asked) {
+        uint8_t ap = 0;
+        force_ap = nvs_get_u8(handle, "ap", &ap) == ESP_OK && ap != 0;
         // Clear it first: whatever happens in this boot, the next one is normal
         nvs_erase_key(handle, "boot");
+        nvs_erase_key(handle, "ap");
         nvs_commit(handle);
         idle_limit_us = static_cast<int64_t>(minutes) * MINUTE_US;
     }
@@ -374,7 +403,7 @@ void run() {
     ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, on_event, nullptr));
 
     console_start();
-    if (network.ssid.empty()) {
+    if (network.ssid.empty() || force_ap) {
         ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
         start_ap();
         while (true) {
@@ -444,13 +473,13 @@ std::string command(const std::vector<std::string>& args) {
            (network.password.empty() ? ", no password" : ", password set") + "\n";
 }
 
-bool request(int minutes) {
+bool request(int minutes, bool setup_ap) {
     nvs_handle_t handle;
     if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &handle) != ESP_OK) {
         return false;
     }
-    const bool stored =
-        nvs_set_u8(handle, "boot", static_cast<uint8_t>(minutes)) == ESP_OK && nvs_commit(handle) == ESP_OK;
+    const bool stored = nvs_set_u8(handle, "boot", static_cast<uint8_t>(minutes)) == ESP_OK &&
+                        nvs_set_u8(handle, "ap", setup_ap ? 1 : 0) == ESP_OK && nvs_commit(handle) == ESP_OK;
     nvs_close(handle);
     return stored;
 }

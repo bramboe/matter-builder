@@ -1,10 +1,15 @@
 // The HTTP API shared by all apps, so a device can be used and updated
-// without USB. Every request needs the header "X-Octo-Token: <password>".
+// without USB. Every request needs the header "X-Octo-Token: <password>", or
+// the token of a linked program (see program_access.h).
 //
 //   GET  /      settings page (no token needed to load it)
 //   GET  /auth  {"password":true|false}: whether a password was chosen
 //   POST /auth  body = new password (8-63 characters); the first one needs
-//               no token, a change needs the current one
+//               no token, a change needs the current password
+//   POST /link  body = program name -> {"id":…}; needs the password, then
+//               the BOOT button within 2 minutes (program_access.h)
+//   GET  /link  header X-Octo-Link: <id> -> {"state":"waiting"|"linked"|
+//               "expired", "token":… once linked}; needs the password
 //   POST /cmd   body = console command line   -> command output
 //   POST /ota   body = firmware image (.bin)  -> flashed to the other slot, reboot
 //

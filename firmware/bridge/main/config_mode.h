@@ -31,8 +31,9 @@ bool requested();
 // The "wifi" command of the normal bridge
 std::string command(const std::vector<std::string>& args);
 
-// Ask for configuration mode at the next start. Without a Wi-Fi network it
-// opens the setup access point. False when storing failed.
-bool request(int minutes);
+// Ask for configuration mode at the next start. Without a Wi-Fi network, or
+// with `setup_ap` (recovery), it opens the setup access point. False when
+// storing failed.
+bool request(int minutes, bool setup_ap = false);
 
 }  // namespace config_mode

@@ -43,7 +43,7 @@ struct ExtraCommand {
     CommandHandler handler;
 };
 
-constexpr int MAX_EXTRA_COMMANDS = 6;
+constexpr int MAX_EXTRA_COMMANDS = 8;
 ExtraCommand extra_commands[MAX_EXTRA_COMMANDS];
 int extra_count = 0;
 CommandHandler override_handler = nullptr;

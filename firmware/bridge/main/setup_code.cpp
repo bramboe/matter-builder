@@ -1,13 +1,17 @@
 #include "setup_code.h"
 
+#include <cstdio>
 #include <cstring>
 
 #include <crypto/CHIPCryptoPAL.h>
 #include <esp_matter_providers.h>
+#include <setup_payload/ManualSetupPayloadGenerator.h>
+#include <setup_payload/QRCodeSetupPayloadGenerator.h>
 #include <setup_payload/SetupPayload.h>
 
 #include "esp_log.h"
 #include "esp_random.h"
+#include "qrcode.h"
 #include "nvs.h"
 
 namespace setup_code {
@@ -87,6 +91,8 @@ public:
     }
     CHIP_ERROR SetSetupPasscode(uint32_t) override { return CHIP_ERROR_NOT_IMPLEMENTED; }
 
+    bool loaded() const { return passcode != 0; }
+
 private:
     uint32_t passcode = 0;
     uint16_t discriminator = 0;
@@ -106,7 +112,67 @@ private:
 
 Provider provider;
 
+// esp_qrcode reports the result through a callback without context
+std::string* qr_path = nullptr;
+int qr_size = 0;
+
+void qr_to_path(esp_qrcode_handle_t qrcode) {
+    qr_size = esp_qrcode_get_size(qrcode);
+    for (int y = 0; y < qr_size; ++y) {
+        for (int x = 0; x < qr_size;) {
+            if (!esp_qrcode_get_module(qrcode, x, y)) {
+                ++x;
+                continue;
+            }
+            int run = 1;
+            while (x + run < qr_size && esp_qrcode_get_module(qrcode, x + run, y)) {
+                ++run;
+            }
+            char part[64];
+            std::snprintf(part, sizeof(part), "M%d %dh%dv1h-%dz", x, y, run, run);
+            *qr_path += part;
+            x += run;
+        }
+    }
+}
+
 }  // namespace
+
+bool codes(std::string& qr, std::string& manual) {
+    if (!provider.loaded()) {
+        provider.load_or_create();
+    }
+    chip::SetupPayload payload;
+    payload.vendorID = CONFIG_DEVICE_VENDOR_ID;
+    payload.productID = CONFIG_DEVICE_PRODUCT_ID;
+    payload.rendezvousInformation.SetValue(
+        chip::RendezvousInformationFlags(chip::RendezvousInformationFlag::kOnNetwork));
+    uint16_t discriminator = 0;
+    uint32_t passcode = 0;
+    if (provider.GetSetupDiscriminator(discriminator) != CHIP_NO_ERROR ||
+        provider.GetSetupPasscode(passcode) != CHIP_NO_ERROR) {
+        return false;
+    }
+    payload.discriminator.SetLongValue(discriminator);
+    payload.setUpPINCode = passcode;
+    return chip::QRCodeSetupPayloadGenerator(payload).payloadBase38Representation(qr) == CHIP_NO_ERROR &&
+           chip::ManualSetupPayloadGenerator(payload).payloadDecimalStringRepresentation(manual) == CHIP_NO_ERROR;
+}
+
+std::string qr_svg_path(const char* qr, int& size) {
+    std::string path;
+    esp_qrcode_config_t config = {};
+    config.display_func = qr_to_path;
+    config.max_qrcode_version = 6;
+    config.qrcode_ecc_level = ESP_QRCODE_ECC_MED;
+    qr_path = &path;
+    if (esp_qrcode_generate(&config, qr) != ESP_OK) {
+        path.clear();
+    }
+    qr_path = nullptr;
+    size = path.empty() ? 0 : qr_size;
+    return path;
+}
 
 void install() {
     provider.load_or_create();

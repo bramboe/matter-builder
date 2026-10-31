@@ -5,11 +5,19 @@
 
 #pragma once
 
+#include <string>
+
 #include <platform/CommissionableDataProvider.h>
 
 namespace setup_code {
 
 // Call before esp_matter::start().
 void install();
+
+// The QR text and manual code, without Matter running (configuration mode)
+bool codes(std::string& qr, std::string& manual);
+
+// The QR code as an SVG path of `size` modules (0 when it failed)
+std::string qr_svg_path(const char* qr, int& size);
 
 }  // namespace setup_code

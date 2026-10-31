@@ -14,6 +14,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "nvs.h"
+#include "program_access.h"
 
 namespace http_api {
 
@@ -65,20 +66,48 @@ bool store_password(const char* value) {
     return err == ESP_OK;
 }
 
-bool authorized(httpd_req_t* req) {
-    if (password[0] == '\0') {
-        httpd_resp_set_status(req, "401 Unauthorized");
-        httpd_resp_sendstr(req, "no password set\n");
-        return false;
-    }
+enum class Who { nobody, owner, program };
+
+// The page password is the owner; a linked program has a token of its own
+Who who(httpd_req_t* req) {
     char token[MAX_PASSWORD_LEN + 1] = {};
-    if (httpd_req_get_hdr_value_str(req, "X-Octo-Token", token, sizeof(token)) == ESP_OK &&
-        std::strcmp(token, password) == 0) {
+    if (httpd_req_get_hdr_value_str(req, "X-Octo-Token", token, sizeof(token)) != ESP_OK) {
+        return Who::nobody;
+    }
+    if (password[0] != '\0' && std::strcmp(token, password) == 0) {
+        return Who::owner;
+    }
+    return program_access::token_valid(token) ? Who::program : Who::nobody;
+}
+
+// Sends the 401 itself when it returns false. Changing the password and
+// linking programs need the password itself.
+bool authorized(httpd_req_t* req, bool owner_only = false) {
+    const Who caller = who(req);
+    if (caller == Who::owner || (caller == Who::program && !owner_only)) {
         return true;
     }
     httpd_resp_set_status(req, "401 Unauthorized");
-    httpd_resp_sendstr(req, "missing or wrong X-Octo-Token\n");
+    httpd_resp_sendstr(req, password[0] == '\0' && caller == Who::nobody ? "no password set\n"
+                                                                         : "missing or wrong X-Octo-Token\n");
     return false;
+}
+
+// Reads the whole body into `out` (at most `max` bytes)
+bool read_body(httpd_req_t* req, char* out, size_t max) {
+    if (req->content_len > max) {
+        return false;
+    }
+    size_t got = 0;
+    while (got < req->content_len) {
+        int r = httpd_req_recv(req, out + got, req->content_len - got);
+        if (r <= 0) {
+            return false;
+        }
+        got += r;
+    }
+    out[got] = '\0';
+    return true;
 }
 
 // Phones probe a fixed address when they join a network; sending them to the
@@ -97,7 +126,7 @@ esp_err_t handle_auth_get(httpd_req_t* req) {
 // Body = the new password. The first one needs no token; changing it needs
 // the current one.
 esp_err_t handle_auth_post(httpd_req_t* req) {
-    if (password[0] != '\0' && !authorized(req)) {
+    if (password[0] != '\0' && !authorized(req, true)) {
         return ESP_OK;
     }
     if (req->content_len < MIN_PASSWORD_LEN || req->content_len > MAX_PASSWORD_LEN) {
@@ -129,6 +158,7 @@ esp_err_t handle_auth_post(httpd_req_t* req) {
 }
 
 esp_err_t handle_cmd(httpd_req_t* req) {
+    const Who caller = who(req);
     if (!authorized(req)) {
         return ESP_OK;
     }
@@ -145,8 +175,37 @@ esp_err_t handle_cmd(httpd_req_t* req) {
         }
         got += r;
     }
+    // Which programs have access is for the owner to change
+    if (caller == Who::program && std::strncmp(line, "access ", 7) == 0 && std::strcmp(line, "access json") != 0) {
+        httpd_resp_set_status(req, "403 Forbidden");
+        return httpd_resp_sendstr(req, "only with the page password\n");
+    }
     httpd_resp_set_type(req, "text/plain");
     return httpd_resp_sendstr(req, run_command(line).c_str());
+}
+
+// Body = the program's name; the reply's id is polled with GET /link
+esp_err_t handle_link_post(httpd_req_t* req) {
+    if (!authorized(req, true)) {
+        return ESP_OK;
+    }
+    char name[32] = {};
+    if (!read_body(req, name, sizeof(name) - 1)) {
+        httpd_resp_set_status(req, "400 Bad Request");
+        return httpd_resp_sendstr(req, "body must be the program's name\n");
+    }
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_sendstr(req, program_access::link_request(name).c_str());
+}
+
+esp_err_t handle_link_get(httpd_req_t* req) {
+    if (!authorized(req, true)) {
+        return ESP_OK;
+    }
+    char id[20] = {};
+    httpd_req_get_hdr_value_str(req, "X-Octo-Link", id, sizeof(id));
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_sendstr(req, program_access::link_poll(id).c_str());
 }
 
 // The settings page (web/index.html, embedded at build time). It holds no
@@ -285,6 +344,18 @@ void start(const char* fallback_token) {
     auth_post.method = HTTP_POST;
     auth_post.handler = handle_auth_post;
     httpd_register_uri_handler(server, &auth_post);
+
+    httpd_uri_t link_post = {};
+    link_post.uri = "/link";
+    link_post.method = HTTP_POST;
+    link_post.handler = handle_link_post;
+    httpd_register_uri_handler(server, &link_post);
+
+    httpd_uri_t link_get = {};
+    link_get.uri = "/link";
+    link_get.method = HTTP_GET;
+    link_get.handler = handle_link_get;
+    httpd_register_uri_handler(server, &link_get);
 
     httpd_uri_t ota = {};
     ota.uri = "/ota";

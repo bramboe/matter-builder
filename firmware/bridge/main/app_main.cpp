@@ -12,9 +12,12 @@
 #include "thread_dataset.h"
 #endif
 #include "esp_log.h"
+#include "esp_system.h"
+#include "http_api.h"
 #include "matter_bridge.h"
 #include "net.h"
 #include "nvs_flash.h"
+#include "program_access.h"
 
 #if CONFIG_OPENTHREAD_ENABLED
 #include <platform/ESP32/OpenthreadLauncher.h>
@@ -38,6 +41,16 @@ std::string cmd_matter(const std::vector<std::string>& args) {
     return matter_bridge::describe();
 }
 
+// BOOT held 5-10 s: forget the page password and open the setup access
+// point, so the owner can choose a new one with the bridge in hand
+void recovery() {
+    http_api::reset_password();
+#if CONFIG_OPENTHREAD_ENABLED
+    config_mode::request(15, true);
+#endif
+    esp_restart();
+}
+
 }  // namespace
 
 extern "C" void app_main() {
@@ -48,6 +61,7 @@ extern "C" void app_main() {
     }
 
     boot_guard::early();
+    program_access::start(recovery);  // the BOOT button, also in configuration mode
 #if CONFIG_OPENTHREAD_ENABLED
     // One boot on Wi-Fi for fast updates, asked for on the settings page
     if (config_mode::requested()) {
@@ -77,6 +91,8 @@ extern "C" void app_main() {
     add_command("thread", "thread [dataset <hex>|clear|json]        Thread network, joined at the next start\n",
                 thread_dataset::command);
 #endif
+    add_command("access", "access [json|revoke <n>]                programs with a token of their own\n",
+                program_access::command);
     add_command("matter", "matter [open|fabrics|remove <n>|json]   pairing codes, endpoints; pairing window; controllers\n", cmd_matter);
     console_start();
     ESP_LOGI("main", "octo-matter bridge running; type 'help'");

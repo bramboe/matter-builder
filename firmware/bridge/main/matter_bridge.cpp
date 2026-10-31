@@ -23,7 +23,6 @@
 #include "bed_link.h"
 #include "esp_app_desc.h"
 #include "esp_log.h"
-#include "qrcode.h"
 #include "net.h"
 #include "nvs.h"
 #include "setup_code.h"
@@ -947,31 +946,6 @@ const char* vendor_name(uint16_t vendor_id) {
     }
 }
 
-// The QR code as an SVG path, one rectangle per run of dark modules.
-// esp_qrcode reports the result through a callback without context.
-std::string* qr_path = nullptr;
-int qr_size = 0;
-
-void qr_to_path(esp_qrcode_handle_t qrcode) {
-    qr_size = esp_qrcode_get_size(qrcode);
-    for (int y = 0; y < qr_size; ++y) {
-        for (int x = 0; x < qr_size;) {
-            if (!esp_qrcode_get_module(qrcode, x, y)) {
-                ++x;
-                continue;
-            }
-            int run = 1;
-            while (x + run < qr_size && esp_qrcode_get_module(qrcode, x + run, y)) {
-                ++run;
-            }
-            char part[64];
-            std::snprintf(part, sizeof(part), "M%d %dh%dv1h-%dz", x, y, run, run);
-            *qr_path += part;
-            x += run;
-        }
-    }
-}
-
 }  // namespace
 
 std::string matter_json() {
@@ -999,24 +973,14 @@ std::string matter_json() {
     }
     chip::DeviceLayer::PlatformMgr().UnlockChipStack();
 
-    std::string path;
-    if (have_qr) {
-        esp_qrcode_config_t config = {};
-        config.display_func = qr_to_path;
-        config.max_qrcode_version = 6;
-        config.qrcode_ecc_level = ESP_QRCODE_ECC_MED;
-        qr_path = &path;
-        if (esp_qrcode_generate(&config, qr) != ESP_OK) {
-            path.clear();
-        }
-        qr_path = nullptr;
-    }
+    int qr_size = 0;
+    const std::string path = have_qr ? setup_code::qr_svg_path(qr, qr_size) : "";
 
     std::string out = "{\"product\":" + json_text(PRODUCT_NAME) + ",\"vendor\":" + json_text(VENDOR_NAME) +
                       ",\"version\":" + json_text(esp_app_get_description()->version) +
                       ",\"vid\":\"0xFFF1\",\"pid\":\"0x8000\"";
     out += ",\"qr\":" + json_text(have_qr ? qr : "") + ",\"manual\":" + json_text(have_manual ? manual : "");
-    out += ",\"qr_size\":" + std::to_string(path.empty() ? 0 : qr_size) + ",\"qr_path\":" + json_text(path);
+    out += ",\"qr_size\":" + std::to_string(qr_size) + ",\"qr_path\":" + json_text(path);
     out += std::string(",\"window_open\":") + (window_open ? "true" : "false");
     out += ",\"fabrics\":[" + fabrics + "],\"network\":" + json_text(net::describe()) + "}\n";
     return out;

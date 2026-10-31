@@ -19,7 +19,8 @@ enum class Part { Head, Feet, Both };
 
 void start();
 
-// Run fn in the NimBLE host task and wait for it to finish.
+// Run fn in the NimBLE host task and wait for it to finish. Does nothing
+// before start() (configuration mode, BLE off).
 void run_in_host(const std::function<void()>& fn);
 
 // Full travel time of a motor, flat to fully raised. 30 s matches the

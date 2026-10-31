@@ -7,6 +7,9 @@
 #include "bed_link.h"
 #include "boot_guard.h"
 #include "commands.h"
+#if CONFIG_OPENTHREAD_ENABLED
+#include "config_mode.h"
+#endif
 #include "esp_log.h"
 #include "matter_bridge.h"
 #include "net.h"
@@ -44,6 +47,12 @@ extern "C" void app_main() {
     }
 
     boot_guard::early();
+#if CONFIG_OPENTHREAD_ENABLED
+    // One boot on Wi-Fi for fast updates, asked for on the settings page
+    if (config_mode::requested()) {
+        config_mode::run();
+    }
+#endif
     bed_link::start();
 #if CONFIG_OPENTHREAD_ENABLED
     // OpenThread on the chip's own 802.15.4 radio, sharing it with BLE
@@ -61,6 +70,10 @@ extern "C" void app_main() {
                 matter_bridge::preset_command);
     add_command("language", "language [en|nl|de|es]                  settings page and preset names\n",
                 matter_bridge::language_command);
+#if CONFIG_OPENTHREAD_ENABLED
+    add_command("wifi", "wifi [ssid <name>|password <pw>|clear|config [minutes]]  Wi-Fi for configuration mode\n",
+                config_mode::command);
+#endif
     add_command("matter", "matter [open|fabrics|remove <n>|json]   pairing codes, endpoints; pairing window; controllers\n", cmd_matter);
     console_start();
     ESP_LOGI("main", "octo-matter bridge running; type 'help'");

@@ -861,6 +861,9 @@ void run_request(ble_npl_event* event) {
 
 // ------------------------------------------------------------------ public API
 
+// False in configuration mode, where BLE stays off
+bool host_started = false;
+
 void start() {
     store_load();
 #if SOC_BT_CLASSIC_SUPPORTED
@@ -882,9 +885,13 @@ void start() {
     ble_npl_callout_reset(&stats_co, ble_npl_time_ms_to_ticks32(STATS_INTERVAL_MS));
 
     nimble_port_freertos_init(host_task);
+    host_started = true;
 }
 
 void run_in_host(const std::function<void()>& fn) {
+    if (!host_started) {
+        return;  // nothing to talk to: BLE is off
+    }
     // Zero-initialise: the ESP-IDF NPL port only allocates the event's pool
     // block when ev->event is null, so stack garbage there is a wild write.
     HostRequest request{};

@@ -45,6 +45,7 @@ struct ExtraCommand {
 constexpr int MAX_EXTRA_COMMANDS = 4;
 ExtraCommand extra_commands[MAX_EXTRA_COMMANDS];
 int extra_count = 0;
+CommandHandler override_handler = nullptr;
 
 bool parse_index(const std::string& text, int& index) {
     char* end = nullptr;
@@ -231,11 +232,21 @@ void add_command(const char* name, const char* help_line, CommandHandler handler
     }
 }
 
+void set_command_override(CommandHandler handler) {
+    override_handler = handler;
+}
+
 std::string run_command(const std::string& line) {
     Args args;
     std::istringstream stream(line);
     for (std::string word; stream >> word;) {
         args.push_back(word);
+    }
+    if (override_handler != nullptr) {
+        std::string out = override_handler(args);
+        if (!out.empty()) {
+            return out;
+        }
     }
     if (args.empty() || args[0] == "help") {
         std::string out = HELP;

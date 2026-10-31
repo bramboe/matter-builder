@@ -29,6 +29,7 @@ const char* NVS_NAMESPACE = "http";
 const char* NVS_KEY = "password";
 
 httpd_handle_t server = nullptr;
+char redirect_url[32] = "";  // see redirect_unknown_to()
 // The password of the page: chosen on the page and kept in NVS. Empty until
 // then; only setting it works without one.
 char password[MAX_PASSWORD_LEN + 1] = {};
@@ -78,6 +79,14 @@ bool authorized(httpd_req_t* req) {
     httpd_resp_set_status(req, "401 Unauthorized");
     httpd_resp_sendstr(req, "missing or wrong X-Octo-Token\n");
     return false;
+}
+
+// Phones probe a fixed address when they join a network; sending them to the
+// page makes them show it as a sign-in page
+esp_err_t handle_unknown(httpd_req_t* req, httpd_err_code_t) {
+    httpd_resp_set_status(req, "302 Found");
+    httpd_resp_set_hdr(req, "Location", redirect_url);
+    return httpd_resp_send(req, nullptr, 0);
 }
 
 esp_err_t handle_auth_get(httpd_req_t* req) {
@@ -296,6 +305,14 @@ std::string reset_password() {
     }
     password[0] = '\0';
     return "password cleared: choose a new one on the settings page\n";
+}
+
+void redirect_unknown_to(const char* url) {
+    if (server == nullptr) {
+        return;
+    }
+    std::strncpy(redirect_url, url, sizeof(redirect_url) - 1);
+    httpd_register_err_handler(server, HTTPD_404_NOT_FOUND, handle_unknown);
 }
 
 }  // namespace http_api

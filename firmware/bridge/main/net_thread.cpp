@@ -49,7 +49,7 @@ void to_configuration_mode(const char* why) {
         ESP_LOGW(TAG, "%s: restarting in configuration mode on Wi-Fi", why);
         esp_restart();
     }
-    ESP_LOGE(TAG, "%s, and no Wi-Fi network for configuration mode is set", why);
+    ESP_LOGE(TAG, "%s, and configuration mode could not be requested", why);
 }
 
 void on_attach_limit(void*) {

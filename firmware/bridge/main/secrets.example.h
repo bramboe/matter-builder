@@ -1,6 +1,8 @@
 // Copy to secrets.h (not in git) and fill in.
 #pragma once
 
+// Classic ESP32 only (its Matter network). The ESP32-C6 takes the Wi-Fi for
+// configuration mode from the settings page, or its setup access point.
 #define OCTO_WIFI_SSID "your-ssid"
 #define OCTO_WIFI_PASSWORD "your-wifi-password"
 

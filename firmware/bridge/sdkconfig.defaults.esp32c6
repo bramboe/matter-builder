@@ -31,3 +31,7 @@ CONFIG_LWIP_HOOK_IP6_ROUTE_NONE=y
 CONFIG_LWIP_HOOK_ND6_GET_GW_NONE=y
 CONFIG_USE_MINIMAL_MDNS=n
 CONFIG_ENABLE_EXTENDED_DISCOVERY=y
+
+# The setup access point of configuration mode (config_mode.h), for a new
+# bridge that has no Wi-Fi network yet
+CONFIG_ESP_WIFI_SOFTAP_SUPPORT=y

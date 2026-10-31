@@ -5,7 +5,7 @@ endif()
 # Wi-Fi on the classic ESP32, Thread on the ESP32-C6
 if(CONFIG_OPENTHREAD_ENABLED)
     # Plus Wi-Fi for the configuration mode (config_mode.h)
-    set(net_src "net_thread.cpp" "config_mode.cpp" "thread_dataset.cpp")
+    set(net_src "net_thread.cpp" "config_mode.cpp" "thread_dataset.cpp" "setup_dns.cpp")
     set(net_requires openthread esp_wifi mdns)
 else()
     set(net_src "net.cpp")

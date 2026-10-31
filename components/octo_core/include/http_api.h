@@ -25,4 +25,8 @@ void start(const char* fallback_token);
 // it is the way back for someone with the device in hand.
 std::string reset_password();
 
+// Answer every unknown path with a redirect to `url` (after start()): on the
+// setup access point this opens the page as the phone's sign-in page.
+void redirect_unknown_to(const char* url);
+
 }  // namespace http_api

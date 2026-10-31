@@ -11,6 +11,7 @@
 #include "esp_app_desc.h"
 #include "esp_event.h"
 #include "esp_log.h"
+#include "esp_mac.h"
 #include "esp_netif.h"
 #include "esp_system.h"
 #include "esp_timer.h"
@@ -21,6 +22,7 @@
 #include "mdns.h"
 #include "nvs.h"
 #include "secrets.h"
+#include "setup_dns.h"
 #include "thread_dataset.h"
 
 #ifndef OCTO_HTTP_TOKEN
@@ -45,7 +47,7 @@ constexpr int64_t CHECK_INTERVAL_US = 10 * 1000000LL;
 struct Network {
     std::string ssid;
     std::string password;
-    const char* source = "none";  // "page" (settings page), "secrets" (secrets.h) or "none"
+    const char* source = "none";  // "page" (settings page) or "none"
 };
 
 std::string nvs_string(nvs_handle_t handle, const char* key) {
@@ -69,7 +71,8 @@ std::string stored_text(const char* key) {
     return value;
 }
 
-// The network from the settings page; secrets.h only when none was set there
+// The network from the settings page. OCTO_WIFI_SSID in secrets.h is not used
+// here: without a network from the page, the bridge opens its setup access point
 Network stored_network() {
     Network network;
     network.ssid = stored_text("ssid");
@@ -77,13 +80,6 @@ Network stored_network() {
     if (!network.ssid.empty()) {
         network.source = "page";
     }
-#ifdef OCTO_WIFI_SSID
-    if (network.ssid.empty() && std::strcmp(OCTO_WIFI_SSID, "your-ssid") != 0) {
-        network.ssid = OCTO_WIFI_SSID;
-        network.password = OCTO_WIFI_PASSWORD;
-        network.source = "secrets";
-    }
-#endif
     return network;
 }
 
@@ -146,6 +142,10 @@ int64_t idle_limit_us = DEFAULT_MINUTES * MINUTE_US;
 volatile int64_t last_activity_us = 0;
 char ip_text[16] = "";
 bool http_started = false;
+// The setup access point: no Wi-Fi network set, or it does not connect and
+// the bridge has no Thread network to go back to
+volatile bool ap_mode = false;
+char ap_ssid[33] = "";
 int last_reason = 0;  // wifi_err_reason_t of the last disconnect
 
 // Why the last configuration mode ended early, for the settings page
@@ -153,9 +153,57 @@ void store_result(const char* why) {
     store("result", std::string(why) + " " + std::to_string(last_reason));
 }
 
+void start_mdns();
+
+void start_http() {
+    if (!http_started) {
+        http_started = true;
+        start_mdns();
+        http_api::start(OCTO_HTTP_TOKEN);
+    }
+}
+
+bool has_thread_network() {
+    uint8_t tlvs[254];
+    const char* source = nullptr;
+    return thread_dataset::wanted(tlvs, sizeof(tlvs), &source) > 0;
+}
+
+// "Octo-Bridge-" and the last four hex digits of the access point's MAC
+std::string setup_ap_name() {
+    uint8_t mac[6] = {};
+    esp_read_mac(mac, ESP_MAC_WIFI_SOFTAP);
+    char name[24];
+    std::snprintf(name, sizeof(name), "Octo-Bridge-%02X%02X", mac[4], mac[5]);
+    return name;
+}
+
+// An open network "Octo-Bridge-XXXX" at 192.168.4.1, with DNS answering every
+// name with that address so phones open the page by themselves
+void start_ap() {
+    std::strncpy(ap_ssid, setup_ap_name().c_str(), sizeof(ap_ssid) - 1);
+    ap_mode = true;
+    esp_wifi_disconnect();
+    esp_wifi_stop();
+    wifi_config_t config = {};
+    std::strncpy(reinterpret_cast<char*>(config.ap.ssid), ap_ssid, sizeof(config.ap.ssid));
+    config.ap.ssid_len = std::strlen(ap_ssid);
+    config.ap.authmode = WIFI_AUTH_OPEN;
+    config.ap.max_connection = 3;
+    config.ap.channel = 6;
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &config));
+    ESP_ERROR_CHECK(esp_wifi_start());
+    std::strcpy(ip_text, "192.168.4.1");
+    setup_dns::start(esp_ip4addr_aton(ip_text));
+    start_http();
+    http_api::redirect_unknown_to("http://192.168.4.1/");
+    ESP_LOGW(TAG, "Setup access point '%s': join it and open http://192.168.4.1/", ap_ssid);
+}
+
 void on_check(void*) {
     const int64_t now = esp_timer_get_time();
-    if (ip_text[0] == '\0' && !http_started && now > CONNECT_LIMIT_US) {
+    if (!ap_mode && ip_text[0] == '\0' && !http_started && now > CONNECT_LIMIT_US) {
         ESP_LOGE(TAG, "No Wi-Fi connection after %lld s (reason %d), back to Thread", CONNECT_LIMIT_US / 1000000,
                  last_reason);
         // 15/202/204: the password was refused; 201: network not found
@@ -164,7 +212,11 @@ void on_check(void*) {
                              last_reason == WIFI_REASON_HANDSHAKE_TIMEOUT
                          ? "password"
                          : "noconnect");
-        esp_restart();
+        if (has_thread_network()) {
+            esp_restart();
+        }
+        start_ap();  // nowhere else to go: set the bridge up on its own network
+        return;
     }
     if (now - last_activity_us > idle_limit_us || now > HARD_LIMIT_US) {
         ESP_LOGW(TAG, "Time limit reached, back to Thread");
@@ -185,7 +237,7 @@ void start_mdns() {
 void on_event(void*, esp_event_base_t base, int32_t id, void* data) {
     if (base == WIFI_EVENT && id == WIFI_EVENT_STA_START) {
         esp_wifi_connect();
-    } else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
+    } else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED && !ap_mode) {
         ip_text[0] = '\0';
         last_reason = static_cast<wifi_event_sta_disconnected_t*>(data)->reason;
         esp_wifi_connect();
@@ -193,12 +245,25 @@ void on_event(void*, esp_event_base_t base, int32_t id, void* data) {
         esp_ip4addr_ntoa(&static_cast<ip_event_got_ip_t*>(data)->ip_info.ip, ip_text, sizeof(ip_text));
         ESP_LOGI(TAG, "Wi-Fi connected: http://%s.local/ or http://%s/", HOSTNAME, ip_text);
         if (!http_started) {
-            http_started = true;
             store("result", "");
-            start_mdns();
-            http_api::start(OCTO_HTTP_TOKEN);
+            start_http();
         }
     }
+}
+
+// The page's address on Thread: the one it was opened on, else the name the
+// bridge registers there (its 802.15.4 EUI-64), for a bridge set up from the
+// access point
+std::string home_host() {
+    std::string home = stored_text("home");
+    uint8_t eui[8] = {};
+    if (home.empty() && esp_read_mac(eui, ESP_MAC_IEEE802154) == ESP_OK) {
+        char text[24];
+        std::snprintf(text, sizeof(text), "%02X%02X%02X%02X%02X%02X%02X%02X.local", eui[0], eui[1], eui[2], eui[3],
+                      eui[4], eui[5], eui[6], eui[7]);
+        home = text;
+    }
+    return home;
 }
 
 // The beds' state plus "config_mode": the settings page shows the beds and
@@ -207,14 +272,15 @@ std::string state_json(const Network& network) {
     std::string beds;
     bed_link::run_in_host([&] { beds = bed_link::state_json(); });
     wifi_ap_record_t ap = {};
-    const bool up = ip_text[0] != '\0' && esp_wifi_sta_get_ap_info(&ap) == ESP_OK;
+    const bool up = !ap_mode && ip_text[0] != '\0' && esp_wifi_sta_get_ap_info(&ap) == ESP_OK;
     const int64_t now = esp_timer_get_time();
     const int64_t until = std::min(last_activity_us + idle_limit_us, HARD_LIMIT_US);
     std::string out = "{\"config_mode\":{";
-    out += "\"ssid\":" + json_text(network.ssid);
+    out += "\"ssid\":" + json_text(ap_mode ? std::string(ap_ssid) : network.ssid);
+    out += ",\"ap\":" + std::string(ap_mode ? "true" : "false");
     out += ",\"ip\":" + json_text(ip_text);
     out += ",\"host\":" + json_text(std::string(HOSTNAME) + ".local");
-    out += ",\"home\":" + json_text(stored_text("home"));
+    out += ",\"home\":" + json_text(home_host());
     out += ",\"rssi\":" + std::to_string(up ? ap.rssi : 0);
     out += ",\"remaining\":" + std::to_string(until > now ? (until - now) / 1000000 : 0);
     out += ",\"version\":" + json_text(esp_app_get_description()->version);
@@ -232,6 +298,10 @@ std::string command_in_config_mode(const std::vector<std::string>& args) {
     }
     last_activity_us = esp_timer_get_time();
     if (cmd == "system") {
+        if (ap_mode) {
+            return boot_guard::describe() + "configuration mode on the setup access point '" + ap_ssid +
+                   "', ip " + ip_text + "\n";
+        }
         return boot_guard::describe() + "configuration mode on Wi-Fi '" + network.ssid + "', ip " +
                (ip_text[0] ? ip_text : "-") + "\n";
     }
@@ -240,7 +310,7 @@ std::string command_in_config_mode(const std::vector<std::string>& args) {
         restart_in_background();
         return "back to normal (Thread)\n";
     }
-    if (cmd == "wifi" && args.size() >= 2 && args[1] == "config") {
+    if (cmd == "wifi" && args.size() >= 2 && args[1] == "config" && !ap_mode) {
         return "already in configuration mode\n";
     }
     if (cmd == "wifi") {
@@ -297,10 +367,20 @@ void run() {
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     esp_netif_create_default_wifi_sta();
+    esp_netif_create_default_wifi_ap();
     wifi_init_config_t init = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&init));
     ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, on_event, nullptr));
     ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, on_event, nullptr));
+
+    console_start();
+    if (network.ssid.empty()) {
+        ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
+        start_ap();
+        while (true) {
+            vTaskDelay(portMAX_DELAY);
+        }
+    }
 
     wifi_config_t config = {};
     std::strncpy(reinterpret_cast<char*>(config.sta.ssid), network.ssid.c_str(), sizeof(config.sta.ssid));
@@ -311,7 +391,6 @@ void run() {
     ESP_ERROR_CHECK(esp_wifi_start());
     esp_wifi_set_ps(WIFI_PS_MIN_MODEM);  // required while BLE is on
 
-    console_start();
     while (true) {
         vTaskDelay(portMAX_DELAY);
     }
@@ -345,9 +424,6 @@ std::string command(const std::vector<std::string>& args) {
                ",\"host\":" + json_text(std::string(HOSTNAME) + ".local") + "}";
     }
     if (args.size() >= 2 && args[1] == "config") {
-        if (network.ssid.empty()) {
-            return "set a Wi-Fi network first: wifi ssid <name>, wifi password <password>\n";
-        }
         int minutes = args.size() == 3 ? std::atoi(args[2].c_str()) : DEFAULT_MINUTES;
         if (minutes < 1 || minutes > MAX_MINUTES) {
             return "minutes: 1-" + std::to_string(MAX_MINUTES) + "\n";
@@ -357,6 +433,10 @@ std::string command(const std::vector<std::string>& args) {
         }
         bed_link::run_in_host([] { bed_link::stop_all(); });
         restart_in_background();
+        if (network.ssid.empty()) {
+            return "restarting in configuration mode on the setup access point '" + setup_ap_name() +
+                   "', back after " + std::to_string(minutes) + " idle minutes: http://192.168.4.1/\n";
+        }
         return "restarting in configuration mode on Wi-Fi '" + network.ssid + "', back after " +
                std::to_string(minutes) + " idle minutes: http://" + HOSTNAME + ".local/\n";
     }
@@ -365,9 +445,6 @@ std::string command(const std::vector<std::string>& args) {
 }
 
 bool request(int minutes) {
-    if (stored_network().ssid.empty()) {
-        return false;
-    }
     nvs_handle_t handle;
     if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &handle) != ESP_OK) {
         return false;

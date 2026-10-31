@@ -54,8 +54,8 @@ tools/backup_flash.sh /dev/cu.usbserial-XXXX
 
 Vereist ESP-IDF v5.5.5 (`~/esp/esp-idf-v5.5.5`, met `install.sh esp32,esp32c6`)
 en esp-matter `release/v1.6` (`~/esp/esp-matter`). Kopieer
-`firmware/bridge/main/secrets.example.h` naar `secrets.h` en vul Wi-Fi en
-Thread-dataset in (staat niet in git). Het wachtwoord van de pagina kies je
+`firmware/bridge/main/secrets.example.h` naar `secrets.h` (staat niet in git); voor
+de C6 hoeft daar niets in: Wi-Fi en Thread stel je in op de pagina. Het wachtwoord van de pagina kies je
 op de pagina zelf.
 
 ```sh

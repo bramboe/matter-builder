@@ -8,6 +8,11 @@
 // (at most an hour in all), when Wi-Fi does not connect within a minute, or
 // on "wifi exit". The Wi-Fi network is set on the settings page ("wifi ssid",
 // "wifi password") and kept in NVS.
+//
+// Without a Wi-Fi network (a new bridge), or when it does not connect and
+// there is no Thread network either, the bridge opens its own open network
+// "Octo-Bridge-XXXX" instead: the page is then at http://192.168.4.1/ and
+// phones show it as the network's sign-in page.
 
 #pragma once
 
@@ -26,8 +31,8 @@ bool requested();
 // The "wifi" command of the normal bridge
 std::string command(const std::vector<std::string>& args);
 
-// Ask for configuration mode at the next start. False when no Wi-Fi network
-// is set (or storing failed).
+// Ask for configuration mode at the next start. Without a Wi-Fi network it
+// opens the setup access point. False when storing failed.
 bool request(int minutes);
 
 }  // namespace config_mode

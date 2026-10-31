@@ -46,8 +46,11 @@ vorige.
 
 ## Daarna
 
-1. **Netwerk.** De C6 gaat het Thread-netwerk uit `OCTO_THREAD_DATASET` op; de
-   klassieke ESP32 het Wi-Fi-netwerk uit `OCTO_WIFI_SSID`.
+1. **Netwerk.** De C6 gaat op het Thread-netwerk dat op de pagina is ingesteld
+   (of uit `OCTO_THREAD_DATASET`). Heeft hij nog geen netwerk, dan opent hij
+   het setup-netwerk "Octo-Bridge-XXXX": verbind je telefoon, de pagina opent
+   vanzelf (anders http://192.168.4.1/). De klassieke ESP32 gaat op het
+   Wi-Fi-netwerk uit `OCTO_WIFI_SSID`.
 2. **Instellingenpagina.** `tools/octo.sh system` (of `system` op de seriële
    console) toont het adres, op Thread als `http://<naam>.local/`. Bij het
    eerste bezoek kies je daar een wachtwoord (vergeten: `password reset` op

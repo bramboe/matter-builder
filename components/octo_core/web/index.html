@@ -172,8 +172,8 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
       </details>
     </div>
     <div class="card" id="cfgCard">
-      <h3 data-t="configMode"></h3>
-      <div class="sub" data-t="configHelp"></div>
+      <h3 id="cfgCardTitle"></h3>
+      <div class="sub" id="cfgCardHelp" data-t="configHelp"></div>
       <form id="wifiForm" class="form" style="grid-template-columns:1fr">
         <label class="field"><span data-t="wifiNetwork"></span><input id="wifiSsid" autocomplete="off" maxlength="32"></label>
         <label class="field"><span data-t="wifiPassword"></span><input id="wifiPass" type="password" autocomplete="new-password" maxlength="64"></label>
@@ -210,6 +210,7 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
 // the page and the preset names in Home Assistant use the same one.
 const TEXT = {
   en: {
+    configInfoAp: s => `Setup network “${s}”. Set your own Wi-Fi and the Thread network below; the beds can be added already.`, configApGo: 'Continue on my Wi-Fi', configApMoved: h => `The bridge restarts on your Wi-Fi. Connect this phone to your own Wi-Fi again and open http://${h}/`, configApDone: h => `The bridge goes to Thread. Connect this phone to your own Wi-Fi again; the page is then at http://${h}/`,
     threadTitle: 'Thread network', threadChange: 'Set network', threadHelp: 'Paste the dataset from Home Assistant: Settings › Devices & services › Thread › Configure, then (i) at the preferred network.', threadDataset: 'Dataset (hex)', threadNone: 'No Thread network set yet: the bridge stays in configuration mode until you paste one.', threadNow: (name, ch, src) => `Network '${name}', channel ${ch}` + (src === 'secrets' ? ' (built into the firmware)' : ''), threadSaved: 'Saved: the bridge joins it at the next start', threadSavedConfig: 'Saved: the bridge joins it when you finish configuration mode', threadBad: 'This is not a Thread dataset. Copy the whole hex text from Home Assistant.',
     title: 'Octo beds',
     network: 'Network', thread: 'Thread', wifi: 'Wi-Fi',
@@ -260,6 +261,7 @@ const TEXT = {
     waiting: 'Connecting to the bed…', waitingHelp: 'Keep the bed in range and turn off the OCTO app and other bridges: a bed accepts only one connection. The controls appear once the bed has accepted the PIN.', pinRefused: 'The bed refused the PIN. Remove the bed and add it again with the right PIN.',
   },
   nl: {
+    configInfoAp: s => `Setup-netwerk “${s}”. Stel hieronder je eigen Wi-Fi en het Thread-netwerk in; bedden toevoegen kan al.`, configApGo: 'Verder via mijn Wi-Fi', configApMoved: h => `De bridge start opnieuw op je Wi-Fi. Verbind deze telefoon weer met je eigen Wi-Fi en open http://${h}/`, configApDone: h => `De bridge gaat op Thread. Verbind deze telefoon weer met je eigen Wi-Fi; de pagina staat dan op http://${h}/`,
     threadTitle: 'Thread-netwerk', threadChange: 'Netwerk instellen', threadHelp: 'Plak de dataset uit Home Assistant: Instellingen › Apparaten & diensten › Thread › Configureren, dan (i) bij het voorkeursnetwerk.', threadDataset: 'Dataset (hex)', threadNone: 'Nog geen Thread-netwerk ingesteld: de bridge blijft in de configuratiemodus tot je er een plakt.', threadNow: (name, ch, src) => `Netwerk '${name}', kanaal ${ch}` + (src === 'secrets' ? ' (ingebouwd in de firmware)' : ''), threadSaved: 'Opgeslagen: de bridge gaat erop bij de volgende start', threadSavedConfig: 'Opgeslagen: de bridge gaat erop zodra je de configuratiemodus afsluit', threadBad: 'Dit is geen Thread-dataset. Kopieer de hele hex-tekst uit Home Assistant.',
     title: 'Octo bedden',
     network: 'Netwerk', thread: 'Thread', wifi: 'Wi-Fi',
@@ -310,6 +312,7 @@ const TEXT = {
     waiting: 'Verbinden met het bed…', waitingHelp: 'Houd het bed binnen bereik en zet de OCTO-app en andere bridges uit: een bed accepteert maar één verbinding. De bediening verschijnt zodra het bed de PIN heeft geaccepteerd.', pinRefused: 'Het bed weigerde de PIN. Verwijder het bed en voeg het opnieuw toe met de juiste PIN.',
   },
   de: {
+    configInfoAp: s => `Einrichtungsnetz „${s}“. Stellen Sie unten Ihr WLAN und das Thread-Netzwerk ein; Betten können Sie schon hinzufügen.`, configApGo: 'Weiter über mein WLAN', configApMoved: h => `Die Bridge startet in Ihrem WLAN neu. Verbinden Sie dieses Telefon wieder mit Ihrem WLAN und öffnen Sie http://${h}/`, configApDone: h => `Die Bridge geht ins Thread-Netzwerk. Verbinden Sie dieses Telefon wieder mit Ihrem WLAN; die Seite ist dann unter http://${h}/`,
     threadTitle: 'Thread-Netzwerk', threadChange: 'Netzwerk einstellen', threadHelp: 'Fügen Sie den Datensatz aus Home Assistant ein: Einstellungen › Geräte & Dienste › Thread › Konfigurieren, dann (i) beim bevorzugten Netzwerk.', threadDataset: 'Datensatz (hex)', threadNone: 'Noch kein Thread-Netzwerk eingestellt: Die Bridge bleibt im Konfigurationsmodus, bis Sie eines einfügen.', threadNow: (name, ch, src) => `Netzwerk '${name}', Kanal ${ch}` + (src === 'secrets' ? ' (in der Firmware)' : ''), threadSaved: 'Gespeichert: Die Bridge verbindet sich beim nächsten Start', threadSavedConfig: 'Gespeichert: Die Bridge verbindet sich, sobald Sie den Konfigurationsmodus beenden', threadBad: 'Das ist kein Thread-Datensatz. Kopieren Sie den ganzen Hex-Text aus Home Assistant.',
     title: 'Octo-Betten',
     network: 'Netzwerk', thread: 'Thread', wifi: 'WLAN',
@@ -360,6 +363,7 @@ const TEXT = {
     waiting: 'Verbinde mit dem Bett…', waitingHelp: 'Halten Sie das Bett in Reichweite und schalten Sie die OCTO-App und andere Bridges aus: Ein Bett akzeptiert nur eine Verbindung. Die Bedienung erscheint, sobald das Bett die PIN akzeptiert hat.', pinRefused: 'Das Bett hat die PIN abgelehnt. Entfernen Sie das Bett und fügen Sie es mit der richtigen PIN erneut hinzu.',
   },
   es: {
+    configInfoAp: s => `Red de configuración «${s}». Configure abajo su Wi-Fi y la red Thread; ya puede añadir las camas.`, configApGo: 'Continuar por mi Wi-Fi', configApMoved: h => `El puente se reinicia en su Wi-Fi. Vuelva a conectar este teléfono a su Wi-Fi y abra http://${h}/`, configApDone: h => `El puente pasa a Thread. Vuelva a conectar este teléfono a su Wi-Fi; la página estará en http://${h}/`,
     threadTitle: 'Red Thread', threadChange: 'Configurar red', threadHelp: 'Pegue el conjunto de datos de Home Assistant: Ajustes › Dispositivos y servicios › Thread › Configurar, luego (i) en la red preferida.', threadDataset: 'Conjunto de datos (hex)', threadNone: 'Aún no hay red Thread: el puente sigue en modo de configuración hasta que pegue una.', threadNow: (name, ch, src) => `Red '${name}', canal ${ch}` + (src === 'secrets' ? ' (incluida en el firmware)' : ''), threadSaved: 'Guardado: el puente se une en el próximo inicio', threadSavedConfig: 'Guardado: el puente se une al salir del modo de configuración', threadBad: 'Esto no es un conjunto de datos Thread. Copie todo el texto hex de Home Assistant.',
     title: 'Camas Octo',
     network: 'Red', thread: 'Thread', wifi: 'Wi-Fi',
@@ -739,9 +743,14 @@ function showConfigMode(c) {
   configMode = c || null;
   $('#cfgView').hidden = !c;
   $('#matterCard').hidden = !!c;
-  $('#cfgCard').hidden = !!c;
+  // On the setup access point the Wi-Fi card stays: that is what is set here
+  $('#cfgCard').hidden = !!c && !c.ap;
+  $('#cfgStart').textContent = t(c && c.ap ? 'configApGo' : 'configStart');
+  $('#cfgCardTitle').textContent = t(c && c.ap ? 'wifiNetwork' : 'configMode');
+  $('#cfgCardHelp').hidden = !!(c && c.ap);
   if (!c) return;
-  $('#cfgInfo').textContent = t('configInfo', c.ssid, c.ip || c.host, Math.ceil(c.remaining / 60));
+  $('#cfgInfo').textContent = c.ap ? t('configInfoAp', c.ssid)
+    : t('configInfo', c.ssid, c.ip || c.host, Math.ceil(c.remaining / 60));
 }
 
 // Wait until `url` answers, then open it (the bridge restarts in between)
@@ -827,6 +836,12 @@ $('#wifiForm').onsubmit = async e => {
 };
 $('#cfgStart').onclick = async () => {
   try {
+    if (configMode && configMode.ap) {
+      if (!await saveWifi()) return;
+      await cmd('wifi config 30');
+      $('#cfgBack').textContent = t('configApMoved', wifiHost);
+      return;
+    }
     if (!await saveWifi() || !confirm(t('configConfirm', wifiHost))) return;
     await startConfigMode(15, $('#sys'));
   } catch (err) { toast(t('error') + ': ' + err.message); }
@@ -842,6 +857,7 @@ $('#cfgExit').onclick = async () => {
   try {
     await cmd('wifi exit');
     const home = configMode && configMode.home;
+    if (configMode && configMode.ap) { $('#cfgBack').textContent = t('configApDone', home); return; }
     $('#cfgBack').textContent = home ? t('backStarted', home) : t('backStartedNoHome');
     if (home) moveTo(`http://${home}/`, $('#cfgBack'));
   } catch (e) { toast(t('error') + ': ' + e.message); }

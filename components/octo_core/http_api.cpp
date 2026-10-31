@@ -20,7 +20,7 @@ namespace http_api {
 namespace {
 
 const char* TAG = "http";
-constexpr size_t MAX_COMMAND_LEN = 256;
+constexpr size_t MAX_COMMAND_LEN = 600;  // "thread dataset <hex>" fits
 constexpr size_t OTA_CHUNK = 4096;
 
 constexpr size_t MIN_PASSWORD_LEN = 8;

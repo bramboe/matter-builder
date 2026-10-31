@@ -21,6 +21,7 @@
 #include "mdns.h"
 #include "nvs.h"
 #include "secrets.h"
+#include "thread_dataset.h"
 
 #ifndef OCTO_HTTP_TOKEN
 #define OCTO_HTTP_TOKEN ""  // the password is chosen on the settings page
@@ -245,12 +246,15 @@ std::string command_in_config_mode(const std::vector<std::string>& args) {
     if (cmd == "wifi") {
         return command(args);
     }
+    if (cmd == "thread") {
+        return thread_dataset::command(args);
+    }
     if (cmd == "matter" || cmd == "preset" || cmd == "language") {
         return "not available in configuration mode: Matter is off (wifi exit to go back)\n";
     }
     if (cmd == "help") {
         return "Configuration mode on Wi-Fi: the bed commands work, Matter and Thread are off.\n"
-               "system | wifi exit (back to normal) | POST /ota for a firmware update\n";
+               "system | wifi exit (back to normal) | thread dataset <hex> | POST /ota for a firmware update\n";
     }
     return "";
 }
@@ -348,14 +352,7 @@ std::string command(const std::vector<std::string>& args) {
         if (minutes < 1 || minutes > MAX_MINUTES) {
             return "minutes: 1-" + std::to_string(MAX_MINUTES) + "\n";
         }
-        nvs_handle_t handle;
-        if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &handle) != ESP_OK) {
-            return "storing failed\n";
-        }
-        const bool stored =
-            nvs_set_u8(handle, "boot", static_cast<uint8_t>(minutes)) == ESP_OK && nvs_commit(handle) == ESP_OK;
-        nvs_close(handle);
-        if (!stored) {
+        if (!request(minutes)) {
             return "storing failed\n";
         }
         bed_link::run_in_host([] { bed_link::stop_all(); });
@@ -365,6 +362,20 @@ std::string command(const std::vector<std::string>& args) {
     }
     return "wifi: '" + network.ssid + "' (" + network.source + ")" +
            (network.password.empty() ? ", no password" : ", password set") + "\n";
+}
+
+bool request(int minutes) {
+    if (stored_network().ssid.empty()) {
+        return false;
+    }
+    nvs_handle_t handle;
+    if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &handle) != ESP_OK) {
+        return false;
+    }
+    const bool stored =
+        nvs_set_u8(handle, "boot", static_cast<uint8_t>(minutes)) == ESP_OK && nvs_commit(handle) == ESP_OK;
+    nvs_close(handle);
+    return stored;
 }
 
 }  // namespace config_mode

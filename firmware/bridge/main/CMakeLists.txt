@@ -1,11 +1,11 @@
 if(NOT EXISTS "${CMAKE_CURRENT_LIST_DIR}/secrets.h")
-    message(FATAL_ERROR "Copy main/secrets.example.h to main/secrets.h and fill in Wi-Fi and token")
+    message(FATAL_ERROR "Copy main/secrets.example.h to main/secrets.h and fill in what applies")
 endif()
 
 # Wi-Fi on the classic ESP32, Thread on the ESP32-C6
 if(CONFIG_OPENTHREAD_ENABLED)
     # Plus Wi-Fi for the configuration mode (config_mode.h)
-    set(net_src "net_thread.cpp" "config_mode.cpp")
+    set(net_src "net_thread.cpp" "config_mode.cpp" "thread_dataset.cpp")
     set(net_requires openthread esp_wifi mdns)
 else()
     set(net_src "net.cpp")

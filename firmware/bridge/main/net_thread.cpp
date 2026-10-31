@@ -1,8 +1,9 @@
 // Network side of the bridge on a Thread chip (ESP32-C6). The Matter stack
-// owns OpenThread; this joins the Thread network whose operational dataset
-// is in secrets.h and starts the HTTP API once the bridge is attached. Matter
-// is commissioned over Thread (on-network), not over BLE: BLE stays free for
-// the beds.
+// owns OpenThread; this joins the Thread network set on the settings page
+// (thread_dataset.h) and starts the HTTP API once the bridge is attached.
+// Matter is commissioned over Thread (on-network), not over BLE: BLE stays
+// free for the beds. Without a Thread network the bridge restarts in
+// configuration mode on Wi-Fi, so the page stays reachable.
 
 #include "net.h"
 
@@ -18,16 +19,15 @@
 #include <platform/CHIPDeviceLayer.h>
 #include <platform/ThreadStackManager.h>
 
+#include "config_mode.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "http_api.h"
 #include "secrets.h"
+#include "thread_dataset.h"
 
 #ifndef OCTO_HTTP_TOKEN
 #define OCTO_HTTP_TOKEN ""  // the password is chosen on the settings page
-#endif
-
-#ifndef OCTO_THREAD_DATASET
-#define OCTO_THREAD_DATASET ""  // reported at start: see secrets.example.h
 #endif
 
 namespace net {
@@ -39,28 +39,23 @@ const char* TAG = "net";
 bool attached = false;
 int detaches = 0;
 
-int hex_value(char c) {
-    if (c >= '0' && c <= '9') return c - '0';
-    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
-    return -1;
+// Not attached by then: the network is wrong or away, so go to
+// configuration mode, where the page can fix it
+constexpr int64_t ATTACH_LIMIT_US = 3 * 60 * 1000000LL;
+constexpr int FALLBACK_MINUTES = 15;
+
+void to_configuration_mode(const char* why) {
+    if (config_mode::request(FALLBACK_MINUTES)) {
+        ESP_LOGW(TAG, "%s: restarting in configuration mode on Wi-Fi", why);
+        esp_restart();
+    }
+    ESP_LOGE(TAG, "%s, and no Wi-Fi network for configuration mode is set", why);
 }
 
-// Returns the number of bytes, or 0 when the text is not valid hex.
-size_t parse_hex(const char* text, uint8_t* out, size_t max) {
-    const size_t length = std::strlen(text);
-    if (length == 0 || length % 2 != 0 || length / 2 > max) {
-        return 0;
+void on_attach_limit(void*) {
+    if (!attached) {
+        to_configuration_mode("Not attached to the Thread network after 3 minutes");
     }
-    for (size_t i = 0; i < length / 2; ++i) {
-        const int high = hex_value(text[2 * i]);
-        const int low = hex_value(text[2 * i + 1]);
-        if (high < 0 || low < 0) {
-            return 0;
-        }
-        out[i] = static_cast<uint8_t>(high << 4 | low);
-    }
-    return length / 2;
 }
 
 void on_attached() {
@@ -82,17 +77,23 @@ void on_device_event(const chip::DeviceLayer::ChipDeviceEvent* event, intptr_t) 
     }
 }
 
-// Runs in the Matter thread. Joins the network from secrets.h unless the
-// bridge already has that dataset (also when a controller provisioned it).
+// Runs in the Matter thread. Joins the network from the settings page (or
+// secrets.h) unless the bridge already has that dataset.
 void provision(intptr_t) {
     uint8_t tlvs[chip::Thread::kSizeOperationalDataset];
-    const size_t length = parse_hex(OCTO_THREAD_DATASET, tlvs, sizeof(tlvs));
-    chip::Thread::OperationalDataset wanted;
-    if (length == 0 || wanted.Init(chip::ByteSpan(tlvs, length)) != CHIP_NO_ERROR) {
-        ESP_LOGE(TAG, "OCTO_THREAD_DATASET in secrets.h is missing or not a valid dataset");
+    const char* source = "none";
+    const size_t length = thread_dataset::wanted(tlvs, sizeof(tlvs), &source);
+    auto& thread = chip::DeviceLayer::ThreadStackMgr();
+    if (length == 0) {
+        if (!thread.IsThreadProvisioned()) {
+            to_configuration_mode("No Thread network set");
+        } else if (thread.IsThreadAttached()) {
+            on_attached();
+        }
         return;
     }
-    auto& thread = chip::DeviceLayer::ThreadStackMgr();
+    chip::Thread::OperationalDataset wanted;
+    wanted.Init(chip::ByteSpan(tlvs, length));
     chip::Thread::OperationalDataset current;
     if (thread.IsThreadProvisioned() && thread.GetThreadProvision(current) == CHIP_NO_ERROR &&
         current.AsByteSpan().data_equal(wanted.AsByteSpan())) {
@@ -101,7 +102,7 @@ void provision(intptr_t) {
         }
         return;
     }
-    ESP_LOGI(TAG, "Joining the Thread network from secrets.h");
+    ESP_LOGI(TAG, "Joining the Thread network from %s", source);
     if (thread.AttachToThreadNetwork(wanted, nullptr) != CHIP_NO_ERROR) {
         ESP_LOGE(TAG, "Could not join the Thread network");
     }
@@ -113,6 +114,13 @@ void provision(intptr_t) {
 void start() {
     chip::DeviceLayer::PlatformMgr().AddEventHandler(on_device_event, 0);
     (void) chip::DeviceLayer::PlatformMgr().ScheduleWork(provision, 0);
+    esp_timer_create_args_t timer_args = {};
+    timer_args.callback = on_attach_limit;
+    timer_args.name = "attach_limit";
+    esp_timer_handle_t timer = nullptr;
+    if (esp_timer_create(&timer_args, &timer) == ESP_OK) {
+        esp_timer_start_once(timer, ATTACH_LIMIT_US);
+    }
 }
 
 std::string describe() {

@@ -9,6 +9,7 @@
 #include "commands.h"
 #if CONFIG_OPENTHREAD_ENABLED
 #include "config_mode.h"
+#include "thread_dataset.h"
 #endif
 #include "esp_log.h"
 #include "matter_bridge.h"
@@ -73,6 +74,8 @@ extern "C" void app_main() {
 #if CONFIG_OPENTHREAD_ENABLED
     add_command("wifi", "wifi [ssid <name>|password <pw>|clear|config [minutes]]  Wi-Fi for configuration mode\n",
                 config_mode::command);
+    add_command("thread", "thread [dataset <hex>|clear|json]        Thread network, joined at the next start\n",
+                thread_dataset::command);
 #endif
     add_command("matter", "matter [open|fabrics|remove <n>|json]   pairing codes, endpoints; pairing window; controllers\n", cmd_matter);
     console_start();

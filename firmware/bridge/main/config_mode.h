@@ -26,4 +26,8 @@ bool requested();
 // The "wifi" command of the normal bridge
 std::string command(const std::vector<std::string>& args);
 
+// Ask for configuration mode at the next start. False when no Wi-Fi network
+// is set (or storing failed).
+bool request(int minutes);
+
 }  // namespace config_mode

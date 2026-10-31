@@ -43,7 +43,7 @@ struct ExtraCommand {
     CommandHandler handler;
 };
 
-constexpr int MAX_EXTRA_COMMANDS = 4;
+constexpr int MAX_EXTRA_COMMANDS = 6;
 ExtraCommand extra_commands[MAX_EXTRA_COMMANDS];
 int extra_count = 0;
 CommandHandler override_handler = nullptr;
@@ -328,6 +328,7 @@ void console_start() {
     esp_console_repl_t* repl = nullptr;
     esp_console_repl_config_t repl_config = ESP_CONSOLE_REPL_CONFIG_DEFAULT();
     repl_config.prompt = "octo>";
+    repl_config.max_cmdline_length = 600;  // a pasted Thread dataset
     esp_console_dev_uart_config_t uart_config = ESP_CONSOLE_DEV_UART_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_console_new_repl_uart(&uart_config, &repl_config, &repl));
 

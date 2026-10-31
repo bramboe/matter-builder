@@ -182,6 +182,17 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
           <button type="button" class="pri" id="cfgStart" data-t="configStart"></button></div>
       </form>
     </div>
+    <div class="card" id="threadCard" hidden>
+      <h3 data-t="threadTitle"></h3>
+      <div class="sub" id="threadNow"></div>
+      <details id="threadEdit" style="margin-top:8px"><summary data-t="threadChange"></summary>
+        <div class="sub" data-t="threadHelp"></div>
+        <form id="threadForm" class="form" style="grid-template-columns:1fr">
+          <label class="field"><span data-t="threadDataset"></span><textarea id="threadHex" rows="3" spellcheck="false" autocomplete="off" style="font:12px ui-monospace,Menlo,monospace;resize:vertical"></textarea></label>
+          <div class="features" style="margin-top:0"><button class="pri" type="submit" data-t="save"></button></div>
+        </form>
+      </details>
+    </div>
     <div class="card">
       <h3 data-t="system"></h3>
       <div class="row"><div class="label"><span data-t="network"></span><div class="sub" id="pageUrl"></div></div><div id="netKind">–</div></div>
@@ -199,6 +210,7 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
 // the page and the preset names in Home Assistant use the same one.
 const TEXT = {
   en: {
+    threadTitle: 'Thread network', threadChange: 'Set network', threadHelp: 'Paste the dataset from Home Assistant: Settings › Devices & services › Thread › Configure, then (i) at the preferred network.', threadDataset: 'Dataset (hex)', threadNone: 'No Thread network set yet: the bridge stays in configuration mode until you paste one.', threadNow: (name, ch, src) => `Network '${name}', channel ${ch}` + (src === 'secrets' ? ' (built into the firmware)' : ''), threadSaved: 'Saved: the bridge joins it at the next start', threadSavedConfig: 'Saved: the bridge joins it when you finish configuration mode', threadBad: 'This is not a Thread dataset. Copy the whole hex text from Home Assistant.',
     title: 'Octo beds',
     network: 'Network', thread: 'Thread', wifi: 'Wi-Fi',
     pairLater: 'Add a bed first. The pairing code shows up here once a bed is connected, so the beds reach Home Assistant and Apple Home with their names.',
@@ -248,6 +260,7 @@ const TEXT = {
     waiting: 'Connecting to the bed…', waitingHelp: 'Keep the bed in range and turn off the OCTO app and other bridges: a bed accepts only one connection. The controls appear once the bed has accepted the PIN.', pinRefused: 'The bed refused the PIN. Remove the bed and add it again with the right PIN.',
   },
   nl: {
+    threadTitle: 'Thread-netwerk', threadChange: 'Netwerk instellen', threadHelp: 'Plak de dataset uit Home Assistant: Instellingen › Apparaten & diensten › Thread › Configureren, dan (i) bij het voorkeursnetwerk.', threadDataset: 'Dataset (hex)', threadNone: 'Nog geen Thread-netwerk ingesteld: de bridge blijft in de configuratiemodus tot je er een plakt.', threadNow: (name, ch, src) => `Netwerk '${name}', kanaal ${ch}` + (src === 'secrets' ? ' (ingebouwd in de firmware)' : ''), threadSaved: 'Opgeslagen: de bridge gaat erop bij de volgende start', threadSavedConfig: 'Opgeslagen: de bridge gaat erop zodra je de configuratiemodus afsluit', threadBad: 'Dit is geen Thread-dataset. Kopieer de hele hex-tekst uit Home Assistant.',
     title: 'Octo bedden',
     network: 'Netwerk', thread: 'Thread', wifi: 'Wi-Fi',
     pairLater: 'Voeg eerst een bed toe. De koppelcode verschijnt hier zodra een bed verbonden is, zodat de bedden met hun naam in Home Assistant en Apple Home komen.',
@@ -297,6 +310,7 @@ const TEXT = {
     waiting: 'Verbinden met het bed…', waitingHelp: 'Houd het bed binnen bereik en zet de OCTO-app en andere bridges uit: een bed accepteert maar één verbinding. De bediening verschijnt zodra het bed de PIN heeft geaccepteerd.', pinRefused: 'Het bed weigerde de PIN. Verwijder het bed en voeg het opnieuw toe met de juiste PIN.',
   },
   de: {
+    threadTitle: 'Thread-Netzwerk', threadChange: 'Netzwerk einstellen', threadHelp: 'Fügen Sie den Datensatz aus Home Assistant ein: Einstellungen › Geräte & Dienste › Thread › Konfigurieren, dann (i) beim bevorzugten Netzwerk.', threadDataset: 'Datensatz (hex)', threadNone: 'Noch kein Thread-Netzwerk eingestellt: Die Bridge bleibt im Konfigurationsmodus, bis Sie eines einfügen.', threadNow: (name, ch, src) => `Netzwerk '${name}', Kanal ${ch}` + (src === 'secrets' ? ' (in der Firmware)' : ''), threadSaved: 'Gespeichert: Die Bridge verbindet sich beim nächsten Start', threadSavedConfig: 'Gespeichert: Die Bridge verbindet sich, sobald Sie den Konfigurationsmodus beenden', threadBad: 'Das ist kein Thread-Datensatz. Kopieren Sie den ganzen Hex-Text aus Home Assistant.',
     title: 'Octo-Betten',
     network: 'Netzwerk', thread: 'Thread', wifi: 'WLAN',
     pairLater: 'Fügen Sie zuerst ein Bett hinzu. Der Kopplungscode erscheint hier, sobald ein Bett verbunden ist, damit die Betten mit ihrem Namen in Home Assistant und Apple Home ankommen.',
@@ -346,6 +360,7 @@ const TEXT = {
     waiting: 'Verbinde mit dem Bett…', waitingHelp: 'Halten Sie das Bett in Reichweite und schalten Sie die OCTO-App und andere Bridges aus: Ein Bett akzeptiert nur eine Verbindung. Die Bedienung erscheint, sobald das Bett die PIN akzeptiert hat.', pinRefused: 'Das Bett hat die PIN abgelehnt. Entfernen Sie das Bett und fügen Sie es mit der richtigen PIN erneut hinzu.',
   },
   es: {
+    threadTitle: 'Red Thread', threadChange: 'Configurar red', threadHelp: 'Pegue el conjunto de datos de Home Assistant: Ajustes › Dispositivos y servicios › Thread › Configurar, luego (i) en la red preferida.', threadDataset: 'Conjunto de datos (hex)', threadNone: 'Aún no hay red Thread: el puente sigue en modo de configuración hasta que pegue una.', threadNow: (name, ch, src) => `Red '${name}', canal ${ch}` + (src === 'secrets' ? ' (incluida en el firmware)' : ''), threadSaved: 'Guardado: el puente se une en el próximo inicio', threadSavedConfig: 'Guardado: el puente se une al salir del modo de configuración', threadBad: 'Esto no es un conjunto de datos Thread. Copie todo el texto hex de Home Assistant.',
     title: 'Camas Octo',
     network: 'Red', thread: 'Thread', wifi: 'Wi-Fi',
     pairLater: 'Añada primero una cama. El código de vinculación aparece aquí cuando una cama esté conectada, para que las camas lleguen a Home Assistant y Apple Home con su nombre.',
@@ -773,6 +788,27 @@ async function loadWifi() {
   } catch (e) {}
 }
 let wifiInfo = null;
+
+// The Thread network (ESP32-C6 only: the classic ESP32 has no "thread" command)
+async function loadThread() {
+  let th;
+  try { th = JSON.parse(await cmd('thread json')); } catch (e) { return; }
+  $('#threadCard').hidden = false;
+  $('#threadNow').textContent = th.source === 'none' ? t('threadNone') : t('threadNow', th.name, th.channel, th.source);
+  if (th.source === 'none') $('#threadEdit').open = true;
+}
+$('#threadForm').onsubmit = async e => {
+  e.preventDefault();
+  const hex = $('#threadHex').value.replace(/\s+/g, '');
+  try {
+    const out = await cmd('thread dataset ' + hex);
+    if (!out.startsWith('ok')) { toast(t('threadBad')); return; }
+    $('#threadHex').value = '';
+    $('#threadEdit').open = false;
+    toast(t(configMode ? 'threadSavedConfig' : 'threadSaved'));
+    loadThread();
+  } catch (err) { toast(t('error') + ': ' + err.message); }
+};
 let wifiHost = 'octo-bridge.local';
 
 async function saveWifi(ssidEl = $('#wifiSsid'), passEl = $('#wifiPass')) {
@@ -842,7 +878,7 @@ $('#otaForm').onsubmit = e => {
 
 applyLanguage();
 $('#sys').textContent = t('connecting');
-function startApp() { loadLanguage(); refresh(); loadMatter(); loadWifi(); }
+function startApp() { loadLanguage(); refresh(); loadMatter(); loadWifi(); loadThread(); }
 function keepToken(value) {
   token = value;
   try { localStorage.setItem('octoToken', token); } catch (err) {}

@@ -16,6 +16,7 @@
 #include <esp_matter_providers.h>
 #include <platform/CHIPDeviceLayer.h>
 #include <platform/ESP32/ESP32Config.h>
+#include <platform/DeviceInfoProvider.h>
 #include <platform/internal/GenericDeviceInstanceInfoProvider.h>
 #include <setup_payload/OnboardingCodesUtil.h>
 
@@ -77,12 +78,15 @@ struct Language {
     const char* preset;  // %s: slot
     const char* match;   // %s: the other bed
     const char* save;    // %s: slot
+    const char* head;    // part names, at most 16 bytes (fixed label)
+    const char* legs;
+    const char* light;
 };
 constexpr Language LANGUAGES[] = {
-    {"en", "Preset", "Flat", "Preset %s", "Match %s", "Save as preset %s"},
-    {"nl", "Stand", "Plat", "Stand %s", "Zelfde als %s", "Bewaar als stand %s"},
-    {"de", "Position", "Flach", "Position %s", "Wie %s", "Als Position %s speichern"},
-    {"es", "Posici\u00f3n", "Plano", "Posici\u00f3n %s", "Igual que %s", "Guardar como posici\u00f3n %s"},
+    {"en", "Preset", "Flat", "Preset %s", "Match %s", "Save as preset %s", "Head", "Legs", "Light"},
+    {"nl", "Stand", "Plat", "Stand %s", "Zelfde als %s", "Bewaar als stand %s", "Hoofd", "Benen", "Licht"},
+    {"de", "Position", "Flach", "Position %s", "Wie %s", "Als Position %s speichern", "Kopf", "Beine", "Licht"},
+    {"es", "Posici\u00f3n", "Plano", "Posici\u00f3n %s", "Igual que %s", "Guardar como posici\u00f3n %s", "Cabeza", "Piernas", "Luz"},
 };
 constexpr int LANGUAGE_COUNT = sizeof(LANGUAGES) / sizeof(LANGUAGES[0]);
 int language = 0;
@@ -249,6 +253,69 @@ struct BedEndpoints {
 };
 
 BedEndpoints beds[bed_link::MAX_BEDS];
+
+// The name of the bed part on an endpoint, or nullptr for other endpoints
+const char* part_label(chip::EndpointId endpoint_id) {
+    const Language& text = LANGUAGES[language];
+    for (const BedEndpoints& bed : beds) {
+        if (endpoint_id == bed.head.endpoint_id) {
+            return text.head;
+        }
+        if (endpoint_id == bed.feet.endpoint_id) {
+            return text.legs;
+        }
+        if (endpoint_id == bed.light_endpoint) {
+            return text.light;
+        }
+    }
+    return nullptr;
+}
+
+// Fixed labels name the parts of a bed. Home Assistant adds the
+// "ha_entitylabel" label to the device name for the test vendor and product
+// IDs, so the head cover arrives as "Sam Head" (cover.sam_head) instead of
+// two covers both called "Sam". The bed name itself is the device name.
+// User labels, locales and calendar types are not used (no such clusters).
+class PartLabels : public chip::DeviceLayer::DeviceInfoProvider {
+public:
+    FixedLabelIterator* IterateFixedLabel(chip::EndpointId endpoint_id) override {
+        return chip::Platform::New<Labels>(part_label(endpoint_id));
+    }
+    UserLabelIterator* IterateUserLabel(chip::EndpointId) override { return nullptr; }
+    SupportedLocalesIterator* IterateSupportedLocales() override { return nullptr; }
+    SupportedCalendarTypesIterator* IterateSupportedCalendarTypes() override { return nullptr; }
+
+protected:
+    CHIP_ERROR SetUserLabelLength(chip::EndpointId, size_t) override { return CHIP_ERROR_NOT_IMPLEMENTED; }
+    CHIP_ERROR GetUserLabelLength(chip::EndpointId, size_t&) override { return CHIP_ERROR_NOT_IMPLEMENTED; }
+    CHIP_ERROR SetUserLabelAt(chip::EndpointId, size_t, const UserLabelType&) override {
+        return CHIP_ERROR_NOT_IMPLEMENTED;
+    }
+    CHIP_ERROR DeleteUserLabelAt(chip::EndpointId, size_t) override { return CHIP_ERROR_NOT_IMPLEMENTED; }
+
+private:
+    class Labels : public FixedLabelIterator {
+    public:
+        explicit Labels(const char* value) : value_(value) {}
+        size_t Count() override { return value_ != nullptr ? 1 : 0; }
+        bool Next(FixedLabelType& output) override {
+            if (value_ == nullptr || done_) {
+                return false;
+            }
+            output.label = chip::CharSpan::fromCharString("ha_entitylabel");
+            output.value = chip::CharSpan::fromCharString(value_);
+            done_ = true;
+            return true;
+        }
+        void Release() override { chip::Platform::Delete(this); }
+
+    private:
+        const char* value_;
+        bool done_ = false;
+    };
+};
+
+PartLabels part_labels;
 
 int bed_of_device(chip::EndpointId endpoint_id) {
     for (int i = 0; i < bed_link::MAX_BEDS; ++i) {
@@ -606,6 +673,8 @@ void add_cover(node_t* node, endpoint_t* device, Cover& cover) {
     config.window_covering.delegate = &cover;
     endpoint_t* ep = endpoint::window_covering::create(node, &config, ENDPOINT_FLAG_NONE, nullptr);
     endpoint::set_parent_endpoint(ep, device);
+    cluster::fixed_label::config_t label_config;
+    cluster::fixed_label::create(ep, &label_config, CLUSTER_FLAG_SERVER);
     cover.endpoint_id = endpoint::get_id(ep);
     cover.SetEndpoint(cover.endpoint_id);
 }
@@ -614,6 +683,8 @@ uint16_t add_light(node_t* node, endpoint_t* device) {
     endpoint::on_off_light::config_t config;
     endpoint_t* ep = endpoint::on_off_light::create(node, &config, ENDPOINT_FLAG_NONE, nullptr);
     endpoint::set_parent_endpoint(ep, device);
+    cluster::fixed_label::config_t label_config;
+    cluster::fixed_label::create(ep, &label_config, CLUSTER_FLAG_SERVER);
     return endpoint::get_id(ep);
 }
 
@@ -662,6 +733,7 @@ void start() {
 
     bed_link::run_in_host([] { bed_link::on_calibrated(on_calibrated); });
     esp_matter::set_custom_device_instance_info_provider(&device_info);
+    esp_matter::set_custom_device_info_provider(&part_labels);
     setup_code::install();
     ESP_ERROR_CHECK(esp_matter::start(on_event));
 

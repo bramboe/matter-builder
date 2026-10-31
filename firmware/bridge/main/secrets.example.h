@@ -4,9 +4,8 @@
 #define OCTO_WIFI_SSID "your-ssid"
 #define OCTO_WIFI_PASSWORD "your-wifi-password"
 
-// Sent as header "X-Octo-Token" on every HTTP request. Generate one with:
-//   openssl rand -hex 16
-#define OCTO_HTTP_TOKEN "change-me"
+// The password of the settings page is chosen on the page the first time.
+// A bridge built with an OCTO_HTTP_TOKEN here keeps accepting it until then.
 
 // Bridge on an ESP32-C6 only: the Thread network to join, as the operational
 // dataset TLVs in hex. In Home Assistant: Settings > Devices & services >

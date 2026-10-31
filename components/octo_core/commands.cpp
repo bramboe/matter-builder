@@ -12,6 +12,7 @@
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "http_api.h"
 #include "net.h"
 #include "nvs.h"
 
@@ -310,6 +311,17 @@ int console_dispatch(int argc, char** argv) {
     return 0;
 }
 
+// Not a command of run_command: the HTTP console must not be able to clear
+// the password, only someone at the serial port
+int console_password(int argc, char** argv) {
+    if (argc == 2 && std::strcmp(argv[1], "reset") == 0) {
+        std::fputs(http_api::reset_password().c_str(), stdout);
+    } else {
+        std::fputs("password reset                          forget the page password (serial only)\n", stdout);
+    }
+    return 0;
+}
+
 }  // namespace
 
 void console_start() {
@@ -332,5 +344,10 @@ void console_start() {
         cmd.func = console_dispatch;
         ESP_ERROR_CHECK(esp_console_cmd_register(&cmd));
     }
+    esp_console_cmd_t password_cmd = {};
+    password_cmd.command = "password";
+    password_cmd.help = "password reset: forget the page password";
+    password_cmd.func = console_password;
+    ESP_ERROR_CHECK(esp_console_cmd_register(&password_cmd));
     ESP_ERROR_CHECK(esp_console_start_repl(repl));
 }

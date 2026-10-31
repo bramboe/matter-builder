@@ -13,6 +13,10 @@
 #include "http_api.h"
 #include "secrets.h"
 
+#ifndef OCTO_HTTP_TOKEN
+#define OCTO_HTTP_TOKEN ""  // the password is chosen on the settings page
+#endif
+
 namespace net {
 
 namespace {

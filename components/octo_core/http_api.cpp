@@ -13,6 +13,7 @@
 #include "esp_ota_ops.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "nvs.h"
 
 namespace http_api {
 
@@ -22,18 +23,100 @@ const char* TAG = "http";
 constexpr size_t MAX_COMMAND_LEN = 256;
 constexpr size_t OTA_CHUNK = 4096;
 
+constexpr size_t MIN_PASSWORD_LEN = 8;
+constexpr size_t MAX_PASSWORD_LEN = 63;
+const char* NVS_NAMESPACE = "http";
+const char* NVS_KEY = "password";
+
 httpd_handle_t server = nullptr;
-const char* expected_token = "";
+// The password of the page: chosen on the page and kept in NVS. Empty until
+// then; only setting it works without one.
+char password[MAX_PASSWORD_LEN + 1] = {};
+
+void load_password(const char* fallback) {
+    nvs_handle_t nvs;
+    size_t size = sizeof(password);
+    if (nvs_open(NVS_NAMESPACE, NVS_READONLY, &nvs) == ESP_OK) {
+        if (nvs_get_str(nvs, NVS_KEY, password, &size) != ESP_OK) {
+            password[0] = '\0';
+        }
+        nvs_close(nvs);
+    }
+    // A token built in by an older firmware keeps working until a new one is set
+    if (password[0] == '\0' && fallback != nullptr && std::strcmp(fallback, "change-me") != 0) {
+        std::strncpy(password, fallback, MAX_PASSWORD_LEN);
+    }
+}
+
+bool store_password(const char* value) {
+    nvs_handle_t nvs;
+    if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs) != ESP_OK) {
+        return false;
+    }
+    esp_err_t err = value[0] == '\0' ? nvs_erase_key(nvs, NVS_KEY) : nvs_set_str(nvs, NVS_KEY, value);
+    if (err == ESP_ERR_NVS_NOT_FOUND) {
+        err = ESP_OK;
+    }
+    if (err == ESP_OK) {
+        err = nvs_commit(nvs);
+    }
+    nvs_close(nvs);
+    return err == ESP_OK;
+}
 
 bool authorized(httpd_req_t* req) {
-    char token[64] = {};
+    if (password[0] == '\0') {
+        httpd_resp_set_status(req, "401 Unauthorized");
+        httpd_resp_sendstr(req, "no password set\n");
+        return false;
+    }
+    char token[MAX_PASSWORD_LEN + 1] = {};
     if (httpd_req_get_hdr_value_str(req, "X-Octo-Token", token, sizeof(token)) == ESP_OK &&
-        std::strcmp(token, expected_token) == 0) {
+        std::strcmp(token, password) == 0) {
         return true;
     }
     httpd_resp_set_status(req, "401 Unauthorized");
     httpd_resp_sendstr(req, "missing or wrong X-Octo-Token\n");
     return false;
+}
+
+esp_err_t handle_auth_get(httpd_req_t* req) {
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_sendstr(req, password[0] != '\0' ? "{\"password\":true}" : "{\"password\":false}");
+}
+
+// Body = the new password. The first one needs no token; changing it needs
+// the current one.
+esp_err_t handle_auth_post(httpd_req_t* req) {
+    if (password[0] != '\0' && !authorized(req)) {
+        return ESP_OK;
+    }
+    if (req->content_len < MIN_PASSWORD_LEN || req->content_len > MAX_PASSWORD_LEN) {
+        httpd_resp_set_status(req, "400 Bad Request");
+        return httpd_resp_sendstr(req, "password must be 8 to 63 characters\n");
+    }
+    char value[MAX_PASSWORD_LEN + 1] = {};
+    size_t got = 0;
+    while (got < req->content_len) {
+        int r = httpd_req_recv(req, value + got, req->content_len - got);
+        if (r <= 0) {
+            return ESP_FAIL;
+        }
+        got += r;
+    }
+    for (size_t i = 0; i < got; ++i) {
+        if (static_cast<unsigned char>(value[i]) < 0x20 || value[i] == 0x7f) {
+            httpd_resp_set_status(req, "400 Bad Request");
+            return httpd_resp_sendstr(req, "password must be printable characters\n");
+        }
+    }
+    if (!store_password(value)) {
+        httpd_resp_set_status(req, "500 Internal Server Error");
+        return httpd_resp_sendstr(req, "cannot store the password\n");
+    }
+    std::strcpy(password, value);
+    ESP_LOGI(TAG, "Password of the page set");
+    return httpd_resp_sendstr(req, "OK\n");
 }
 
 esp_err_t handle_cmd(httpd_req_t* req) {
@@ -153,11 +236,11 @@ esp_err_t handle_ota(httpd_req_t* req) {
 
 }  // namespace
 
-void start(const char* token) {
+void start(const char* fallback_token) {
     if (server != nullptr) {
         return;
     }
-    expected_token = token;
+    load_password(fallback_token);
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.stack_size = 6144;
     config.recv_wait_timeout = 15;
@@ -182,14 +265,37 @@ void start(const char* token) {
     cmd.handler = handle_cmd;
     httpd_register_uri_handler(server, &cmd);
 
+    httpd_uri_t auth_get = {};
+    auth_get.uri = "/auth";
+    auth_get.method = HTTP_GET;
+    auth_get.handler = handle_auth_get;
+    httpd_register_uri_handler(server, &auth_get);
+
+    httpd_uri_t auth_post = {};
+    auth_post.uri = "/auth";
+    auth_post.method = HTTP_POST;
+    auth_post.handler = handle_auth_post;
+    httpd_register_uri_handler(server, &auth_post);
+
     httpd_uri_t ota = {};
     ota.uri = "/ota";
     ota.method = HTTP_POST;
     ota.handler = handle_ota;
     httpd_register_uri_handler(server, &ota);
 
+    if (password[0] == '\0') {
+        ESP_LOGW(TAG, "No password yet: choose one on the settings page");
+    }
     ESP_LOGI(TAG, "HTTP API running on port 80");
     boot_guard::network_ok();
+}
+
+std::string reset_password() {
+    if (!store_password("")) {
+        return "cannot clear the password\n";
+    }
+    password[0] = '\0';
+    return "password cleared: choose a new one on the settings page\n";
 }
 
 }  // namespace http_api

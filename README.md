@@ -54,8 +54,9 @@ tools/backup_flash.sh /dev/cu.usbserial-XXXX
 
 Vereist ESP-IDF v5.5.5 (`~/esp/esp-idf-v5.5.5`, met `install.sh esp32,esp32c6`)
 en esp-matter `release/v1.6` (`~/esp/esp-matter`). Kopieer
-`firmware/bridge/main/secrets.example.h` naar `secrets.h` en vul Wi-Fi,
-Thread-dataset en wachtwoord in (staat niet in git).
+`firmware/bridge/main/secrets.example.h` naar `secrets.h` en vul Wi-Fi en
+Thread-dataset in (staat niet in git). Het wachtwoord van de pagina kies je
+op de pagina zelf.
 
 ```sh
 . ~/esp/esp-idf-v5.5.5/export.sh && . ~/esp/esp-matter/export.sh
@@ -76,7 +77,9 @@ idf.py build                                                      # klassieke ES
 `tools/octo.sh --ota firmware/bridge/build-c6/octo_bridge.bin`.
 
 De instellingenpagina staat op `http://<adres>/`; `tools/octo.sh system` toont
-het adres. Ze vraagt één keer om het wachtwoord (`OCTO_HTTP_TOKEN`). Daar kun je:
+het adres. De eerste keer kies je daar een wachtwoord; daarna vraagt ze er
+één keer per browser om. Vergeten: `password reset` op de seriële console.
+`tools/octo.sh` gebruikt `OCTO_TOKEN=<wachtwoord>`. Op de pagina kun je:
 
 - een bed kiezen uit de Bluetooth-scan en met PIN en naam opslaan;
 - per motor de looptijd invullen, of meten: helemaal omlaag, *Start meting*,

@@ -49,8 +49,9 @@ vorige.
 1. **Netwerk.** De C6 gaat het Thread-netwerk uit `OCTO_THREAD_DATASET` op; de
    klassieke ESP32 het Wi-Fi-netwerk uit `OCTO_WIFI_SSID`.
 2. **Instellingenpagina.** `tools/octo.sh system` (of `system` op de seriële
-   console) toont het adres, op Thread als `http://<naam>.local/`. Het
-   wachtwoord is `OCTO_HTTP_TOKEN`.
+   console) toont het adres, op Thread als `http://<naam>.local/`. Bij het
+   eerste bezoek kies je daar een wachtwoord (vergeten: `password reset` op
+   de seriële console).
 3. **Bedden.** Op de pagina onder *Bed instellen*: bed uit de scan kiezen,
    PIN en naam invullen. Een bed accepteert maar één Bluetooth-verbinding:
    zet de OCTO-app en andere bridges uit.

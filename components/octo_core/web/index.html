@@ -101,12 +101,14 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
 <main>
 <div class="section" id="login" hidden>
   <div class="card" style="max-width:420px;margin:40px auto 0">
-    <h3 data-t="loginTitle"></h3>
-    <div class="sub" data-t="loginHelp"></div>
+    <h3 id="loginTitle"></h3>
+    <div class="sub" id="loginHelp"></div>
     <form id="loginForm" class="form" style="grid-template-columns:1fr">
-      <label class="field"><span data-t="password"></span><input id="password" type="password" autocomplete="current-password"></label>
+      <label class="field"><span id="passwordLabel"></span><input id="password" type="password" autocomplete="current-password"></label>
+      <label class="field" id="repeatField" hidden><span data-t="repeatPassword"></span><input id="password2" type="password" autocomplete="new-password"></label>
       <div class="sub" id="loginError" style="color:var(--bad)"></div>
-      <div class="features" style="margin-top:0"><button class="pri" type="submit" data-t="login"></button></div>
+      <div class="features" style="margin-top:0"><button class="pri" type="submit" id="loginBtn"></button>
+        <button type="button" id="loginCancel" data-t="cancel" hidden></button></div>
     </form>
   </div>
 </div>
@@ -200,12 +202,12 @@ const TEXT = {
     title: 'Octo beds',
     network: 'Network', thread: 'Thread', wifi: 'Wi-Fi',
     pairLater: 'Add a bed first. The pairing code shows up here once a bed is connected, so the beds reach Home Assistant and Apple Home with their names.',
-    loginTitle: 'Sign in', loginHelp: 'Enter the password of this bridge (OCTO_HTTP_TOKEN in secrets.h).', password: 'Password', login: 'Sign in', wrongPassword: 'Wrong password.', stateIdle: 'Not connected', stateBusy: 'Connecting…', weakSignal: 'Weak signal: place the bridge closer to the bed.', changePassword: 'Change password', restart: 'Restart', language: 'Language',
+    loginTitle: 'Sign in', loginHelp: "Enter the password of this bridge. Forgot it? Type 'password reset' on the serial console.", password: 'Password', login: 'Sign in', wrongPassword: 'Wrong password.', stateIdle: 'Not connected', stateBusy: 'Connecting…', weakSignal: 'Weak signal: place the bridge closer to the bed.', changePassword: 'Change password', restart: 'Restart', language: 'Language',
     settings: 'Settings', pairingCode: 'Pairing code', openWindow: 'Open pairing window',
     deviceNetwork: 'Device and network', device: 'Device', vidPid: 'Vendor / product ID',
     testIds: 'Test IDs of the Matter standard', system: 'System', freeMemory: 'Free memory', uptime: 'Running',
     connecting: 'Connecting…', bedsConnected: (r, c) => `${r} of ${c} beds connected`, noBeds: 'No bed added yet',
-    noConnection: 'No connection', passwordPrompt: 'Password (OCTO_HTTP_TOKEN in secrets.h)',
+    noConnection: 'No connection', setupTitle: 'Choose a password', setupHelp: 'This bridge has no password yet. Choose one: you need it to open this page on another device.', changeTitle: 'Change password', newPassword: 'New password', repeatPassword: 'Repeat password', save: 'Save', passwordShort: 'Use at least 8 characters.', passwordMismatch: 'The passwords differ.', passwordSaved: 'Password saved',
     passwordRefused: 'password refused', error: 'Error',
     flat: 'Flat', fullyRaised: 'Fully raised', raised: v => `${v}% raised`,
     up: 'Up', stop: 'Stop', down: 'Down', head: 'Head', legs: 'Legs', light: 'Light', underBed: 'Bed light',
@@ -249,12 +251,12 @@ const TEXT = {
     title: 'Octo bedden',
     network: 'Netwerk', thread: 'Thread', wifi: 'Wi-Fi',
     pairLater: 'Voeg eerst een bed toe. De koppelcode verschijnt hier zodra een bed verbonden is, zodat de bedden met hun naam in Home Assistant en Apple Home komen.',
-    loginTitle: 'Inloggen', loginHelp: 'Vul het wachtwoord van deze bridge in (OCTO_HTTP_TOKEN in secrets.h).', password: 'Wachtwoord', login: 'Inloggen', wrongPassword: 'Onjuist wachtwoord.', stateIdle: 'Niet verbonden', stateBusy: 'Verbinden…', weakSignal: 'Zwak signaal: zet de bridge dichter bij het bed.', changePassword: 'Wachtwoord wijzigen', restart: 'Herstarten', language: 'Taal',
+    loginTitle: 'Inloggen', loginHelp: "Vul het wachtwoord van deze bridge in. Vergeten? Typ 'password reset' op de seriële console.", password: 'Wachtwoord', login: 'Inloggen', wrongPassword: 'Onjuist wachtwoord.', stateIdle: 'Niet verbonden', stateBusy: 'Verbinden…', weakSignal: 'Zwak signaal: zet de bridge dichter bij het bed.', changePassword: 'Wachtwoord wijzigen', restart: 'Herstarten', language: 'Taal',
     settings: 'Instellingen', pairingCode: 'Koppelcode', openWindow: 'Koppelvenster openen',
     deviceNetwork: 'Apparaat en netwerk', device: 'Apparaat', vidPid: 'Vendor-/product-ID',
     testIds: "Test-ID's van de Matter-standaard", system: 'Systeem', freeMemory: 'Vrij geheugen', uptime: 'Actief',
     connecting: 'Verbinden…', bedsConnected: (r, c) => `${r} van ${c} bedden verbonden`, noBeds: 'Nog geen bed toegevoegd',
-    noConnection: 'Geen verbinding', passwordPrompt: 'Wachtwoord (OCTO_HTTP_TOKEN in secrets.h)',
+    noConnection: 'Geen verbinding', setupTitle: 'Kies een wachtwoord', setupHelp: 'Deze bridge heeft nog geen wachtwoord. Kies er een: je hebt het nodig om deze pagina op een ander apparaat te openen.', changeTitle: 'Wachtwoord wijzigen', newPassword: 'Nieuw wachtwoord', repeatPassword: 'Herhaal wachtwoord', save: 'Opslaan', passwordShort: 'Gebruik minstens 8 tekens.', passwordMismatch: 'De wachtwoorden verschillen.', passwordSaved: 'Wachtwoord opgeslagen',
     passwordRefused: 'wachtwoord geweigerd', error: 'Fout',
     flat: 'Plat', fullyRaised: 'Helemaal omhoog', raised: v => `${v}% omhoog`,
     up: 'Omhoog', stop: 'Stop', down: 'Omlaag', head: 'Hoofd', legs: 'Benen', light: 'Licht', underBed: 'Bedverlichting',
@@ -298,12 +300,12 @@ const TEXT = {
     title: 'Octo-Betten',
     network: 'Netzwerk', thread: 'Thread', wifi: 'WLAN',
     pairLater: 'Fügen Sie zuerst ein Bett hinzu. Der Kopplungscode erscheint hier, sobald ein Bett verbunden ist, damit die Betten mit ihrem Namen in Home Assistant und Apple Home ankommen.',
-    loginTitle: 'Anmelden', loginHelp: 'Geben Sie das Passwort dieser Bridge ein (OCTO_HTTP_TOKEN in secrets.h).', password: 'Passwort', login: 'Anmelden', wrongPassword: 'Falsches Passwort.', stateIdle: 'Nicht verbunden', stateBusy: 'Verbinde…', weakSignal: 'Schwaches Signal: Stellen Sie die Bridge näher ans Bett.', changePassword: 'Passwort ändern', restart: 'Neu starten', language: 'Sprache',
+    loginTitle: 'Anmelden', loginHelp: "Geben Sie das Passwort dieser Bridge ein. Vergessen? Geben Sie 'password reset' auf der seriellen Konsole ein.", password: 'Passwort', login: 'Anmelden', wrongPassword: 'Falsches Passwort.', stateIdle: 'Nicht verbunden', stateBusy: 'Verbinde…', weakSignal: 'Schwaches Signal: Stellen Sie die Bridge näher ans Bett.', changePassword: 'Passwort ändern', restart: 'Neu starten', language: 'Sprache',
     settings: 'Einstellungen', pairingCode: 'Kopplungscode', openWindow: 'Kopplungsfenster öffnen',
     deviceNetwork: 'Gerät und Netzwerk', device: 'Gerät', vidPid: 'Hersteller-/Produkt-ID',
     testIds: 'Test-IDs des Matter-Standards', system: 'System', freeMemory: 'Freier Speicher', uptime: 'Laufzeit',
     connecting: 'Verbinde…', bedsConnected: (r, c) => `${r} von ${c} Betten verbunden`, noBeds: 'Noch kein Bett hinzugefügt',
-    noConnection: 'Keine Verbindung', passwordPrompt: 'Passwort (OCTO_HTTP_TOKEN in secrets.h)',
+    noConnection: 'Keine Verbindung', setupTitle: 'Passwort wählen', setupHelp: 'Diese Bridge hat noch kein Passwort. Wählen Sie eines: Sie brauchen es, um diese Seite auf einem anderen Gerät zu öffnen.', changeTitle: 'Passwort ändern', newPassword: 'Neues Passwort', repeatPassword: 'Passwort wiederholen', save: 'Speichern', passwordShort: 'Mindestens 8 Zeichen verwenden.', passwordMismatch: 'Die Passwörter sind verschieden.', passwordSaved: 'Passwort gespeichert',
     passwordRefused: 'Passwort abgelehnt', error: 'Fehler',
     flat: 'Flach', fullyRaised: 'Ganz hoch', raised: v => `${v}% hoch`,
     up: 'Hoch', stop: 'Stopp', down: 'Runter', head: 'Kopf', legs: 'Beine', light: 'Licht', underBed: 'Bettbeleuchtung',
@@ -347,12 +349,12 @@ const TEXT = {
     title: 'Camas Octo',
     network: 'Red', thread: 'Thread', wifi: 'Wi-Fi',
     pairLater: 'Añada primero una cama. El código de vinculación aparece aquí cuando una cama esté conectada, para que las camas lleguen a Home Assistant y Apple Home con su nombre.',
-    loginTitle: 'Iniciar sesión', loginHelp: 'Introduzca la contraseña de este puente (OCTO_HTTP_TOKEN en secrets.h).', password: 'Contraseña', login: 'Entrar', wrongPassword: 'Contraseña incorrecta.', stateIdle: 'No conectada', stateBusy: 'Conectando…', weakSignal: 'Señal débil: acerque el puente a la cama.', changePassword: 'Cambiar contraseña', restart: 'Reiniciar', language: 'Idioma',
+    loginTitle: 'Iniciar sesión', loginHelp: "Introduzca la contraseña de este puente. ¿La olvidó? Escriba 'password reset' en la consola serie.", password: 'Contraseña', login: 'Entrar', wrongPassword: 'Contraseña incorrecta.', stateIdle: 'No conectada', stateBusy: 'Conectando…', weakSignal: 'Señal débil: acerque el puente a la cama.', changePassword: 'Cambiar contraseña', restart: 'Reiniciar', language: 'Idioma',
     settings: 'Ajustes', pairingCode: 'Código de vinculación', openWindow: 'Abrir ventana de vinculación',
     deviceNetwork: 'Dispositivo y red', device: 'Dispositivo', vidPid: 'ID de fabricante / producto',
     testIds: 'IDs de prueba del estándar Matter', system: 'Sistema', freeMemory: 'Memoria libre', uptime: 'Activo',
     connecting: 'Conectando…', bedsConnected: (r, c) => `${r} de ${c} camas conectadas`, noBeds: 'Aún no hay camas',
-    noConnection: 'Sin conexión', passwordPrompt: 'Contraseña (OCTO_HTTP_TOKEN en secrets.h)',
+    noConnection: 'Sin conexión', setupTitle: 'Elija una contraseña', setupHelp: 'Este puente aún no tiene contraseña. Elija una: la necesita para abrir esta página en otro dispositivo.', changeTitle: 'Cambiar contraseña', newPassword: 'Nueva contraseña', repeatPassword: 'Repita la contraseña', save: 'Guardar', passwordShort: 'Use al menos 8 caracteres.', passwordMismatch: 'Las contraseñas no coinciden.', passwordSaved: 'Contraseña guardada',
     passwordRefused: 'contraseña rechazada', error: 'Error',
     flat: 'Plano', fullyRaised: 'Totalmente arriba', raised: v => `${v}% arriba`,
     up: 'Subir', stop: 'Parar', down: 'Bajar', head: 'Cabeza', legs: 'Piernas', light: 'Luz', underBed: 'Luz de la cama',
@@ -403,6 +405,7 @@ function applyLanguage() {
   document.title = t('title');
   document.querySelectorAll('[data-t]').forEach(el => { el.textContent = t(el.dataset.t); });
   $('#lang').value = lang;
+  renderLogin();
 }
 
 const $ = s => document.querySelector(s);
@@ -429,14 +432,28 @@ function toast(text) {
   toastTimer = setTimeout(() => el.classList.remove('show'), 3500);
 }
 
-// Sign-in card instead of a browser prompt; shown until the password works
-let signedIn = false;
-function showLogin(error) {
-  signedIn = false;
+// Sign-in card instead of a browser prompt; shown until the password works.
+// The same card chooses the first password ('setup') or a new one ('change').
+let signedIn = false, loginMode = 'login';
+function renderLogin() {
+  const choose = loginMode !== 'login';
+  $('#loginTitle').textContent = t(loginMode === 'setup' ? 'setupTitle' : loginMode === 'change' ? 'changeTitle' : 'loginTitle');
+  $('#loginHelp').textContent = loginMode === 'setup' ? t('setupHelp') : loginMode === 'change' ? '' : t('loginHelp');
+  $('#passwordLabel').textContent = t(choose ? 'newPassword' : 'password');
+  $('#loginBtn').textContent = t(choose ? 'save' : 'login');
+  $('#repeatField').hidden = !choose;
+  $('#loginCancel').hidden = loginMode !== 'change';
+  $('#password').autocomplete = choose ? 'new-password' : 'current-password';
+}
+function showLogin(error, mode = 'login') {
+  if (mode !== 'change') signedIn = false;
+  loginMode = mode;
+  renderLogin();
   $('#login').hidden = false;
   $('#app').hidden = true;
-  $('#loginError').textContent = error ? t('wrongPassword') : '';
+  $('#loginError').textContent = error === true ? t('wrongPassword') : error || '';
   $('#password').value = '';
+  $('#password2').value = '';
   $('#password').focus();
 }
 function signedInOk() {
@@ -449,7 +466,7 @@ function signedInOk() {
 async function cmd(line) {
   const r = await fetch('/cmd', {method: 'POST', headers: {'X-Octo-Token': token}, body: line});
   const text = await r.text();
-  if (r.status === 401) { showLogin(!!token); throw new Error(t('passwordRefused')); }
+  if (r.status === 401) { showLogin(!text.startsWith('no password') && !!token, text.startsWith('no password') ? 'setup' : 'login'); throw new Error(t('passwordRefused')); }
   signedInOk();
   return text;
 }
@@ -688,11 +705,8 @@ $('#menuBtn').onclick = e => { e.stopPropagation(); $('#menu').classList.toggle(
 $('#menu').onclick = e => e.stopPropagation();
 document.addEventListener('click', closeMenus);
 $('#reboot').onclick = () => { if (confirm(t('confirmRestart'))) run('reboot'); };
-$('#token').onclick = () => {
-  token = '';
-  try { localStorage.removeItem('octoToken'); } catch (e) {}
-  showLogin(false);
-};
+$('#token').onclick = () => { closeMenus(); showLogin(false, 'change'); };
+$('#loginCancel').onclick = () => { $('#login').hidden = true; $('#app').hidden = false; };
 $('#openWindow').onclick = async () => { await run('matter open'); loadMatter(); };
 $('#lang').onchange = async () => {
   lang = $('#lang').value;
@@ -828,17 +842,43 @@ $('#otaForm').onsubmit = e => {
 
 applyLanguage();
 $('#sys').textContent = t('connecting');
+function startApp() { loadLanguage(); refresh(); loadMatter(); loadWifi(); }
+function keepToken(value) {
+  token = value;
+  try { localStorage.setItem('octoToken', token); } catch (err) {}
+}
+async function choosePassword(value) {
+  $('#loginError').textContent = '';
+  if (value.length < 8) { $('#loginError').textContent = t('passwordShort'); return; }
+  if (value !== $('#password2').value.trim()) { $('#loginError').textContent = t('passwordMismatch'); return; }
+  try {
+    const r = await fetch('/auth', {method: 'POST', headers: {'X-Octo-Token': token}, body: value});
+    if (r.status === 401) { showLogin(true); return; }
+    if (!r.ok) { $('#loginError').textContent = (await r.text()).trim(); return; }
+  } catch (err) { $('#loginError').textContent = t('noConnection'); return; }
+  const first = loginMode === 'setup';
+  keepToken(value);
+  toast(t('passwordSaved'));
+  $('#login').hidden = true;
+  $('#app').hidden = false;
+  if (first) startApp();
+}
 $('#loginForm').onsubmit = e => {
   e.preventDefault();
-  token = $('#password').value.trim();
-  try { localStorage.setItem('octoToken', token); } catch (err) {}
-  loadLanguage();
-  refresh();
-  loadMatter();
-  loadWifi();
+  const value = $('#password').value.trim();
+  if (loginMode !== 'login') { choosePassword(value); return; }
+  keepToken(value);
+  startApp();
 };
-if (!token) showLogin(false);
-else { loadLanguage(); refresh(); loadMatter(); loadWifi(); }
+// A bridge without a password asks for one first; older firmware has no /auth
+(async () => {
+  try {
+    const r = await fetch('/auth');
+    if (r.ok && !(await r.json()).password) { showLogin(false, 'setup'); return; }
+  } catch (e) {}
+  if (!token) showLogin(false);
+  else startApp();
+})();
 setInterval(() => { if (!document.hidden && signedIn) refresh(); }, 3000);
 setInterval(() => { if (!document.hidden && signedIn) loadMatter(); }, 30000);
 </script>

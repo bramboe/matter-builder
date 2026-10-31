@@ -7,12 +7,13 @@
 #   tools/octo.sh --ota esphome-firmware.ota.bin      (back to ESPHome)
 #
 # Host: $OCTO_HOST (default octo-matter.local; an IPv6 address in brackets,
-# e.g. [fd00::1], for the bridge on Thread). Token: from secrets.h.
+# e.g. [fd00::1], for the bridge on Thread). Password: $OCTO_TOKEN (the one
+# chosen on the settings page), else OCTO_HTTP_TOKEN from an older secrets.h.
 set -eu
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 HOST="${OCTO_HOST:-octo-matter.local}"
-TOKEN=$(sed -n 's/^#define OCTO_HTTP_TOKEN "\(.*\)"/\1/p' "$ROOT/firmware/bridge/main/secrets.h")
+TOKEN="${OCTO_TOKEN:-$(sed -n 's/^#define OCTO_HTTP_TOKEN "\(.*\)"/\1/p' "$ROOT/firmware/bridge/main/secrets.h" 2>/dev/null)}"
 
 if [ "${1:-}" = "--ota" ]; then
     IMAGE="${2:?usage: $0 --ota <app image .bin>}"

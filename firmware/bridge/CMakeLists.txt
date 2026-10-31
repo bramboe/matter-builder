@@ -14,9 +14,17 @@ set(EXTRA_COMPONENT_DIRS
     "${MATTER_SDK_PATH}/config/esp32/components"
     "${ESP_MATTER_PATH}/components")
 
-# Shown to controllers as the software version
-set(PROJECT_VER "1.0.0")
+# Shown to controllers as the software version. PROJECT_VER_NUMBER goes into
+# the Matter OTA image header and must equal CONFIG_DEVICE_SOFTWARE_VERSION_NUMBER,
+# the version the device reports: an update is only taken when it is higher.
+set(PROJECT_VER "1.0.1")
+set(PROJECT_VER_NUMBER 101)
 project(octo_bridge)
+
+if(NOT CONFIG_DEVICE_SOFTWARE_VERSION_NUMBER EQUAL PROJECT_VER_NUMBER)
+    message(FATAL_ERROR "PROJECT_VER_NUMBER ${PROJECT_VER_NUMBER} differs from "
+        "CONFIG_DEVICE_SOFTWARE_VERSION_NUMBER ${CONFIG_DEVICE_SOFTWARE_VERSION_NUMBER}")
+endif()
 
 idf_build_set_property(CXX_COMPILE_OPTIONS "-std=gnu++17;-Os;-DCHIP_HAVE_CONFIG_H;-Wno-overloaded-virtual" APPEND)
 idf_build_set_property(C_COMPILE_OPTIONS "-Os" APPEND)

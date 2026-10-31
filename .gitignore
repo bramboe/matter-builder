@@ -27,3 +27,7 @@ firmware/*/main/secrets.h
 
 # Release builds (contain secrets.h)
 dist/
+
+# Firmware sources copied into the add-on by tools/addon_sync.sh
+ha-addon/matter_builder/src/
+__pycache__/

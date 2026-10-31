@@ -3,6 +3,8 @@
 // the token of a linked program (see program_access.h).
 //
 //   GET  /      settings page (no token needed to load it)
+//   GET  /info  {"kind":"matter-builder","app","version","id"}: no token
+//               needed, so the Home Assistant add-on can recognise devices
 //   GET  /auth  {"password":true|false}: whether a password was chosen
 //   POST /auth  body = new password (8-63 characters); the first one needs
 //               no token, a change needs the current password

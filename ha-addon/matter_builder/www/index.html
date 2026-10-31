@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Matter Builder</title>
+<style>
+/* Colours, radii and spacing follow the Home Assistant frontend, like the proxies' own page */
+:root{--primary:#009ac7;--bg:#f0f0f0;--card:#fff;--fg:#141414;--mute:#727272;--line:#e0e0e0;--fill:#f5f5f5;
+--ok:#43a047;--bad:#db4437;--warn:#ff9800;--chip:rgba(0,154,199,.15);--radius:12px}
+@media (prefers-color-scheme:dark){:root{--bg:#111;--card:#1c1c1c;--fg:#e1e1e1;--mute:#9b9b9b;--line:#2f2f2f;--fill:#2a2a2a;--chip:rgba(0,154,199,.25)}}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 Roboto,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+svg{width:24px;height:24px;fill:currentColor;flex:none}
+header{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:12px;min-height:56px;padding:0 8px 0 16px;background:var(--bg)}
+header h1{flex:1;margin:0;font-size:20px;font-weight:400}
+main{max-width:1000px;margin:0 auto;padding:4px 16px 64px}
+.sub{color:var(--mute)}
+.section{margin:20px 0 8px}
+.section-head{display:flex;align-items:center;gap:8px;margin:0 4px 10px}
+.section-head h2{margin:0;font-size:20px;font-weight:400}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:8px;align-items:start}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:12px}
+.card h3{margin:0 0 4px;font-size:16px;font-weight:500;overflow-wrap:anywhere}
+.tile{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.tile .icon{display:grid;place-items:center;width:40px;height:40px;border-radius:50%;background:var(--chip);color:var(--primary)}
+.tile .info{flex:1;min-width:0}
+.row{display:flex;align-items:center;gap:12px;min-height:44px;padding:4px 0;border-top:1px solid var(--line)}
+.row .label{flex:1;min-width:0}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--bad);margin-right:6px}
+.dot.ok{background:var(--ok)}
+button,a.button{font:inherit;font-weight:500;display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:40px;padding:0 14px;border:0;border-radius:var(--radius);background:var(--fill);color:var(--fg);cursor:pointer;text-decoration:none}
+button.pri{background:var(--primary);color:#fff}
+button.text,a.text{background:none;color:var(--primary);padding:0 8px;min-height:32px}
+button.warn{background:none;color:var(--bad)}
+button:disabled{opacity:.38;cursor:default}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.field{display:flex;flex-direction:column;min-width:0;background:var(--fill);border-radius:4px 4px 0 0;border-bottom:1px solid var(--mute);padding:6px 12px 4px}
+.field span{font-size:12px;color:var(--mute)}
+.field input,.field select{font:inherit;border:0;background:none;color:var(--fg);padding:2px 0;outline:none;min-width:0}
+.form{display:grid;gap:12px;margin:8px 0}
+code,.mono{font:12px ui-monospace,Menlo,monospace;overflow-wrap:anywhere}
+pre{font:12px/1.4 ui-monospace,Menlo,monospace;background:var(--fill);border-radius:8px;padding:8px;margin:8px 0 0;max-height:360px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
+details{border-top:1px solid var(--line);margin-top:10px}
+summary{display:flex;align-items:center;min-height:44px;cursor:pointer;font-weight:500;list-style:none}
+summary::-webkit-details-marker{display:none}
+summary::after{content:"";margin-left:auto;margin-right:6px;width:8px;height:8px;border-right:2px solid var(--mute);border-bottom:2px solid var(--mute);transform:rotate(45deg)}
+.notice{color:var(--primary);margin-top:8px}
+.error{color:var(--bad);margin-top:8px}
+.warnText{color:var(--warn)}
+.bar{height:6px;border-radius:3px;background:var(--fill);overflow:hidden;margin-top:8px}
+.bar i{display:block;height:100%;background:var(--primary);transition:width .5s}
+.steps{margin:6px 0 0;padding-left:20px}
+.steps li{margin:4px 0}
+.switch{display:flex;align-items:center;gap:8px;cursor:pointer;color:var(--mute);font-size:13px}
+.switch input{width:36px;height:20px;appearance:none;border-radius:10px;background:var(--line);position:relative;cursor:pointer;margin:0}
+.switch input::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .2s}
+.switch input:checked{background:var(--primary)}
+.switch input:checked::after{left:18px}
+.lang{border:0;background:none;color:var(--mute);font:inherit}
+</style>
+</head>
+<body>
+<header>
+  <h1>Matter Builder</h1>
+  <label class="switch"><input type="checkbox" id="devMode"><span data-t="devMode"></span></label>
+  <select class="lang" id="lang" aria-label="Language"><option value="en">EN</option><option value="nl">NL</option></select>
+</header>
+<main>
+<div class="section" id="intro" hidden>
+  <div class="card">
+    <h3 data-t="introTitle"></h3>
+    <div class="sub" data-t="introText"></div>
+    <ol class="steps sub">
+      <li data-t="introStep1"></li>
+      <li data-t="introStep2"></li>
+      <li data-t="introStep3"></li>
+    </ol>
+  </div>
+</div>
+
+<div class="section" id="foundSection" hidden>
+  <div class="section-head"><h2 data-t="found"></h2></div>
+  <div class="grid" id="found"></div>
+</div>
+
+<div class="section">
+  <div class="section-head"><h2 data-t="proxies"></h2></div>
+  <div class="grid">
+    <div id="proxies" style="display:contents"></div>
+    <div class="card">
+      <h3 data-t="addTitle"></h3>
+      <div class="sub" data-t="addHelp"></div>
+      <form id="linkForm" class="form">
+        <label class="field"><span data-t="address"></span><input id="linkHost" autocomplete="off" spellcheck="false" placeholder="1A2B3C4D5E6F7081.local"></label>
+        <label class="field"><span data-t="pagePassword"></span><input id="linkPassword" type="password" autocomplete="off"></label>
+        <div class="actions" style="margin-top:0"><button class="pri" type="submit" id="linkBtn" data-t="link"></button></div>
+      </form>
+      <div class="notice" id="linkNotice" hidden></div>
+      <div class="error" id="linkError" hidden></div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-head"><h2>Firmware</h2></div>
+  <div class="grid">
+    <div class="card">
+      <h3 data-t="readyMade"></h3>
+      <div id="releases"></div>
+    </div>
+    <div class="card" id="devCard" hidden>
+      <h3 data-t="devTitle"></h3>
+      <div class="sub" data-t="devHelp"></div>
+      <div class="row"><div class="label"><span data-t="host"></span><div class="sub" id="system">–</div></div></div>
+      <div class="sub warnText" id="systemAdvice" hidden></div>
+      <div class="row"><div class="label">Toolchain<div class="sub" id="toolchainText"></div></div>
+        <button id="toolchainBtn" data-t="install"></button></div>
+      <div class="actions"><button class="pri" id="buildBtn" data-t="build"></button></div>
+      <div id="builds" style="margin-top:8px"></div>
+    </div>
+    <div class="card" id="jobCard" hidden>
+      <h3 id="jobTitle"></h3>
+      <div class="sub" id="jobState"></div>
+      <div class="bar" id="jobBar" hidden><i id="jobBarFill" style="width:0"></i></div>
+      <div class="sub" id="jobStep" style="margin-top:4px"></div>
+      <details id="jobDetails"><summary data-t="log"></summary><pre id="jobLog"></pre></details>
+    </div>
+  </div>
+</div>
+</main>
+<script>
+// All URLs are relative: Home Assistant serves the page under its ingress path
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+
+const TEXT = {
+  en: {
+    devMode: 'Developer mode', introTitle: 'Welcome',
+    introText: 'Matter Builder sets up ESP32 devices that work as standard Matter devices in Home Assistant, Apple Home and Google Home, over Wi-Fi or Thread. Every device keeps working without Home Assistant and has a settings page of its own.',
+    introStep1: 'Put firmware on an ESP32 (ready-made below).', introStep2: 'Set it up on its own page: password, Wi-Fi, Thread and what is connected.',
+    introStep3: 'Link it here, so this add-on can show and update it.',
+    proxies: 'Proxies', addTitle: 'Link a proxy',
+    addHelp: 'The address of the proxy’s settings page and its password. The add-on gets a key of its own; the password is not stored.',
+    address: 'Address', pagePassword: 'Password of the page', link: 'Link', wrongPassword: 'Wrong password.',
+    pressBoot: s => `Now press the proxy’s BOOT button briefly (${s} s left). Button out of reach? Switch its power off and on three times.`,
+    linked: 'Linked.', notLinked: 'Not linked: the BOOT button was not pressed in time. Try again.',
+    found: 'Found', foundHelp: 'Found on the network, not linked yet.', linkThis: 'Link',
+    keyRejected: 'The proxy no longer accepts the add-on’s key (revoked, or the proxy was reset).', linkAgain: 'Link again',
+    checking: 'Checking…', unreachable: 'Not reachable', firmware: 'Firmware', network: 'Network', connected: 'connected',
+    key: 'Key of the add-on', show: 'Show', hide: 'Hide', copy: 'Copy', update: 'Update', openPage: 'Open settings', rename: 'Rename', forget: 'Forget',
+    confirmUpdate: f => `Install ${f}? The proxy moves to Wi-Fi for a few minutes; what is connected to it is unavailable meanwhile.`,
+    confirmForget: 'Forget this proxy? Also revoke its key on the proxy’s page (Programs with access).', name: 'Name',
+    readyMade: 'Ready-made firmware',
+    noReleases: 'No releases yet. Signed, ready-made firmware appears here once the project publishes it. In developer mode you can build it yourself.',
+    devTitle: 'Developer mode', devHelp: 'Builds firmware in Home Assistant with fixed versions of ESP-IDF (v5.5.5) and esp-matter (release/v1.6). Nothing personal is built in.',
+    host: 'This host', cores: 'cores', memory: 'GB memory', disk: 'GB free',
+    fewCores: 'Few cores or little memory: the first build takes an hour or more. More cores for the Home Assistant machine help most (about 1.5 GB memory per core).',
+    toolchainReady: 'Ready', toolchainMissing: 'Not installed: about 6 GB, 15 minutes or more. Not included in backups.',
+    install: 'Install', build: 'Build Octo bridge (ESP32-C6)', ownBuilds: 'Own builds',
+    log: 'Log', running: t => `Running since ${t}`, done: 'Done.', failed: 'Failed: see the log.', step: (d, t) => `Step ${d} of ${t}`,
+    jobs: {toolchain: 'Installing the toolchain', build: 'Building firmware', update: n => `Updating ${n}`},
+  },
+  nl: {
+    devMode: 'Ontwikkelaarsmodus', introTitle: 'Welkom',
+    introText: 'Matter Builder zet ESP32-apparaten op die als gewone Matter-apparaten werken in Home Assistant, Apple Home en Google Home, over Wi-Fi of Thread. Elk apparaat werkt ook zonder Home Assistant en heeft een eigen instellingenpagina.',
+    introStep1: 'Zet firmware op een ESP32 (kant-en-klaar hieronder).', introStep2: 'Stel hem in op zijn eigen pagina: wachtwoord, Wi-Fi, Thread en wat er aangesloten is.',
+    introStep3: 'Koppel hem hier, zodat deze add-on hem kan tonen en bijwerken.',
+    proxies: 'Proxies', addTitle: 'Proxy koppelen',
+    addHelp: 'Het adres van de instellingenpagina van de proxy en het wachtwoord daarvan. De add-on krijgt een eigen sleutel; het wachtwoord wordt niet bewaard.',
+    address: 'Adres', pagePassword: 'Wachtwoord van de pagina', link: 'Koppelen', wrongPassword: 'Onjuist wachtwoord.',
+    pressBoot: s => `Druk nu kort op de BOOT-knop van de proxy (nog ${s} s). Knop niet bereikbaar? Zet de stroom drie keer kort uit en aan.`,
+    linked: 'Gekoppeld.', notLinked: 'Niet gekoppeld: de BOOT-knop is niet op tijd ingedrukt. Probeer opnieuw.',
+    found: 'Gevonden', foundHelp: 'Gevonden op het netwerk, nog niet gekoppeld.', linkThis: 'Koppelen',
+    keyRejected: 'De proxy accepteert de sleutel van de add-on niet meer (ingetrokken, of de proxy is gereset).', linkAgain: 'Opnieuw koppelen',
+    checking: 'Status ophalen…', unreachable: 'Niet bereikbaar', firmware: 'Firmware', network: 'Netwerk', connected: 'verbonden',
+    key: 'Sleutel van de add-on', show: 'Tonen', hide: 'Verbergen', copy: 'Kopiëren', update: 'Bijwerken', openPage: 'Instellingen openen', rename: 'Naam wijzigen', forget: 'Vergeten',
+    confirmUpdate: f => `${f} installeren? De proxy gaat een paar minuten naar Wi-Fi; wat erop aangesloten is, is dan niet bereikbaar.`,
+    confirmForget: 'Deze proxy vergeten? Trek de sleutel ook in op de pagina van de proxy (Programma’s met toegang).', name: 'Naam',
+    readyMade: 'Kant-en-klare firmware',
+    noReleases: 'Nog geen releases. Ondertekende, kant-en-klare firmware verschijnt hier zodra het project die publiceert. In de ontwikkelaarsmodus kun je zelf bouwen.',
+    devTitle: 'Ontwikkelaarsmodus', devHelp: 'Bouwt firmware in Home Assistant met vaste versies van ESP-IDF (v5.5.5) en esp-matter (release/v1.6). Er gaat niets persoonlijks in.',
+    host: 'Deze host', cores: 'kernen', memory: 'GB geheugen', disk: 'GB vrij',
+    fewCores: 'Weinig kernen of geheugen: de eerste build duurt een uur of langer. Meer kernen voor de Home Assistant-machine helpt het meest (ongeveer 1,5 GB geheugen per kern).',
+    toolchainReady: 'Klaar', toolchainMissing: 'Niet geïnstalleerd: ongeveer 6 GB, 15 minuten of langer. Gaat niet mee in back-ups.',
+    install: 'Installeren', build: 'Octo-bridge bouwen (ESP32-C6)', ownBuilds: 'Eigen builds',
+    log: 'Log', running: t => `Bezig sinds ${t}`, done: 'Klaar.', failed: 'Mislukt: zie het log.', step: (d, t) => `Stap ${d} van ${t}`,
+    jobs: {toolchain: 'Toolchain installeren', build: 'Firmware bouwen', update: n => `${n} bijwerken`},
+  },
+};
+let lang = 'en';
+try { lang = localStorage.getItem('mbLang') || (navigator.language || '').slice(0, 2); } catch (e) {}
+if (!TEXT[lang]) lang = 'en';
+function t(key, ...args) { const v = TEXT[lang][key]; return typeof v === 'function' ? v(...args) : v; }
+function applyLanguage() {
+  document.documentElement.lang = lang;
+  $('#lang').value = lang;
+  document.querySelectorAll('[data-t]').forEach(el => { el.textContent = t(el.dataset.t); });
+}
+
+let state = null, statuses = {}, shownTokens = {}, chosen = {};
+
+async function api(path, body) {
+  const r = await fetch(path, body === undefined ? {} : {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+  return r.json();
+}
+const date = seconds => new Date(seconds * 1000).toLocaleString(lang, {dateStyle: 'medium', timeStyle: 'short'});
+const gb = bytes => (bytes / 2 ** 30).toFixed(bytes < 10 * 2 ** 30 ? 1 : 0);
+
+const CHIP = '<svg viewBox="0 0 24 24"><path d="M6 4h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2m1 3v10h10V7H7m3 3h4v4h-4v-4M8 1h2v2H8V1m3 0h2v2h-2V1m3 0h2v2h-2V1M8 21h2v2H8v-2m3 0h2v2h-2v-2m3 0h2v2h-2v-2M1 8h2v2H1V8m0 3h2v2H1v-2m0 3h2v2H1v-2m20-6h2v2h-2V8m0 3h2v2h-2v-2m0 3h2v2h-2v-2"/></svg>';
+
+// "running: app1 @0x320000: octo_bridge 1.0.8 (…)" and "thread: attached, role child, …"
+function summary(s) {
+  if (!s) return `<div class="sub">${t('checking')}</div>`;
+  if (!s.ok && s.auth) return `<div class="sub warnText">${t('keyRejected')}</div>`;
+  if (!s.ok) return `<div class="sub"><span class="dot"></span>${t('unreachable')}: ${esc(s.error)}</div>`;
+  const lines = s.system.split('\n');
+  const version = ((lines[0] || '').match(/octo_bridge (\S+)/) || [])[1] || '?';
+  const net = lines.find(l => /^(thread|wifi|configuration mode)/.test(l)) || '';
+  const beds = s.beds.split('\n').map(l => l.match(/bed \d '([^']*)' \S+: (\w+)/)).filter(Boolean)
+    .map(m => `<div class="row"><div class="label">${esc(m[1])}</div><div class="sub"><span class="dot ${m[2] === 'ready' ? 'ok' : ''}"></span>${m[2] === 'ready' ? t('connected') : esc(m[2])}</div></div>`).join('');
+  return `<div class="row"><div class="label">${t('firmware')}</div><div>${esc(version)}</div></div>
+    <div class="row"><div class="label">${t('network')}</div><div class="sub">${esc(net.split(',').slice(0, 2).join(','))}</div></div>${beds}`;
+}
+
+function firmwareFiles() {
+  return [...state.releases.map(r => r.file), ...(state.settings.dev_mode ? state.builds.map(b => b.file) : [])];
+}
+
+function pageUrl(host) {
+  const h = host.trim();
+  return 'http://' + (h.split(':').length > 2 && !h.startsWith('[') ? `[${h}]` : h) + '/';
+}
+
+function proxyCard(p) {
+  const s = statuses[p.id];
+  const files = firmwareFiles();
+  const token = shownTokens[p.id];
+  return `<div class="card">
+    <div class="tile"><div class="icon">${CHIP}</div><div class="info"><h3>${esc(p.name)}</h3>
+      <div class="sub mono">${esc(p.host)}</div></div><span class="dot ${s && s.ok ? 'ok' : ''}"></span></div>
+    ${summary(s)}
+    <div class="row"><div class="label">${t('key')}<div class="sub mono">${token ? esc(token) : '••••••••••••••••'}</div></div>
+      <button class="text" onclick="toggleToken('${p.id}')">${token ? t('hide') : t('show')}</button>
+      ${token ? `<button class="text" onclick="copyToken('${p.id}')">${t('copy')}</button>` : ''}</div>
+    ${files.length ? `<div class="row"><label class="field" style="flex:1"><span>${t('firmware')}</span>
+      <select id="fw-${p.id}" onchange="chosen['${p.id}'] = this.value">${files.map(f => `<option ${chosen[p.id] === f ? 'selected' : ''}>${esc(f)}</option>`).join('')}</select></label>
+      <button class="pri" onclick="updateProxy('${p.id}')" ${state.job.running ? 'disabled' : ''}>${t('update')}</button></div>` : ''}
+    ${s && s.auth ? `<div class="actions"><button class="pri" onclick="prefillLink('${esc(p.host)}')">${t('linkAgain')}</button></div>` : ''}
+    <div class="actions"><a class="button text" href="${esc(pageUrl(p.host))}" target="_blank" rel="noopener">${t('openPage')} ↗</a>
+      <button class="text" onclick="renameProxy('${p.id}')">${t('rename')}</button>
+      <button class="warn" onclick="forgetProxy('${p.id}')">${t('forget')}</button></div>
+  </div>`;
+}
+
+const appName = app => app.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase());
+
+function foundCard(d) {
+  return `<div class="card"><div class="tile"><div class="icon">${CHIP}</div><div class="info">
+      <h3>${esc(appName(d.app))}</h3><div class="sub mono">${esc(d.host)}</div></div></div>
+    <div class="sub">${t('foundHelp')} ${t('firmware')} ${esc(d.version)}.</div>
+    <div class="actions"><button class="pri" onclick="prefillLink('${esc(d.address)}')">${t('linkThis')}</button></div></div>`;
+}
+
+// Fills in the address and asks for the password: the rest is the BOOT button
+function prefillLink(host) {
+  $('#linkHost').value = host;
+  $('#linkForm').scrollIntoView({behavior: 'smooth', block: 'center'});
+  $('#linkPassword').focus();
+}
+
+function render() {
+  const dev = state.settings.dev_mode;
+  $('#foundSection').hidden = !state.found.length;
+  $('#found').innerHTML = state.found.map(foundCard).join('');
+  $('#devMode').checked = dev;
+  $('#intro').hidden = state.proxies.length > 0 || state.found.length > 0;
+  $('#proxies').innerHTML = state.proxies.map(proxyCard).join('');
+  $('#releases').innerHTML = state.releases.length
+    ? state.releases.map(r => `<div class="row"><div class="label mono">${esc(r.file)}</div></div>`).join('')
+    : `<div class="sub">${t('noReleases')}</div>`;
+  $('#devCard').hidden = !dev;
+  const sys = state.system;
+  $('#system').textContent = `${sys.cores} ${t('cores')} · ${gb(sys.memory)} ${t('memory')} · ${gb(sys.disk_free)} ${t('disk')}`;
+  $('#systemAdvice').textContent = t('fewCores');
+  $('#systemAdvice').hidden = sys.cores >= 4 && sys.memory >= 6 * 2 ** 30;
+  $('#toolchainText').textContent = state.toolchain ? t('toolchainReady') : t('toolchainMissing');
+  $('#toolchainBtn').hidden = state.toolchain;
+  $('#toolchainBtn').disabled = state.job.running;
+  $('#buildBtn').disabled = !state.toolchain || state.job.running;
+  $('#builds').innerHTML = state.builds.length ? `<div class="sub" style="margin:8px 0 0">${t('ownBuilds')}</div>` +
+    state.builds.map(b => `<div class="row"><div class="label mono">${esc(b.file)}
+      <div class="sub">${date(b.date)} · ${(b.size / 2 ** 20).toFixed(2)} MB</div></div></div>`).join('') : '';
+}
+
+async function refresh() {
+  try { state = await api('api/state'); } catch (e) { return; }
+  render();
+  if (state.job.kind) loadJob();
+}
+
+async function loadStatuses() {
+  if (!state) return;
+  await Promise.all(state.proxies.map(async p => {
+    try { statuses[p.id] = await api(`api/proxy/${p.id}/status`); } catch (e) { statuses[p.id] = {ok: false, error: e.message}; }
+  }));
+  render();
+}
+
+async function loadJob() {
+  const j = await api('api/job');
+  $('#jobCard').hidden = false;
+  const jobs = TEXT[lang].jobs;
+  $('#jobTitle').textContent = j.kind === 'update' ? jobs.update(j.title) : jobs[j.kind] || j.title;
+  $('#jobState').textContent = j.running ? t('running', date(j.started)) : j.ok ? t('done') : t('failed');
+  const p = j.progress || {};
+  $('#jobBar').hidden = !(j.running && p.total);
+  if (p.total) $('#jobBarFill').style.width = `${Math.round(100 * p.done / p.total)}%`;
+  $('#jobStep').textContent = j.running ? [p.phase, p.total ? t('step', p.done, p.total) : ''].filter(Boolean).join(' · ') : '';
+  if (!j.running && !j.ok) $('#jobDetails').open = true;
+  const log = $('#jobLog'), atEnd = log.scrollTop + log.clientHeight >= log.scrollHeight - 20;
+  log.textContent = j.log;
+  if (atEnd) log.scrollTop = log.scrollHeight;
+}
+
+async function toggleToken(id) {
+  if (shownTokens[id]) delete shownTokens[id];
+  else shownTokens[id] = (await api(`api/proxy/${id}/token`)).token;
+  render();
+}
+async function copyToken(id) {
+  try { await navigator.clipboard.writeText(shownTokens[id]); } catch (e) {}
+}
+async function updateProxy(id) {
+  const file = $(`#fw-${id}`).value;
+  if (!confirm(t('confirmUpdate', file))) return;
+  await api(`api/proxy/${id}/update`, {file});
+  refresh();
+}
+async function renameProxy(id) {
+  const p = state.proxies.find(x => x.id === id);
+  const name = prompt(t('name'), p.name);
+  if (name) { await api(`api/proxy/${id}/rename`, {name}); refresh(); }
+}
+async function forgetProxy(id) {
+  if (!confirm(t('confirmForget'))) return;
+  await api(`api/proxy/${id}/forget`, {});
+  delete statuses[id];
+  refresh();
+}
+
+$('#linkForm').onsubmit = async e => {
+  e.preventDefault();
+  $('#linkError').hidden = true;
+  $('#linkBtn').disabled = true;
+  let r;
+  try { r = await api('api/link', {host: $('#linkHost').value, password: $('#linkPassword').value}); }
+  catch (err) { r = {error: err.message}; }
+  $('#linkPassword').value = '';
+  if (r.error) {
+    $('#linkError').textContent = r.error === 'wrong password' ? t('wrongPassword') : r.error;
+    $('#linkError').hidden = false;
+    $('#linkBtn').disabled = false;
+    return;
+  }
+  const until = Date.now() + r.seconds * 1000;
+  const poll = async () => {
+    const s = await api(`api/link/${r.link}`);
+    if (s.state === 'linked') {
+      $('#linkNotice').textContent = t('linked');
+      $('#linkBtn').disabled = false;
+      $('#linkHost').value = '';
+      await refresh();
+      loadStatuses();
+      return;
+    }
+    if (s.state !== 'waiting') {
+      $('#linkNotice').hidden = true;
+      $('#linkError').textContent = t('notLinked');
+      $('#linkError').hidden = false;
+      $('#linkBtn').disabled = false;
+      return;
+    }
+    $('#linkNotice').textContent = t('pressBoot', Math.max(0, Math.round((until - Date.now()) / 1000)));
+    setTimeout(poll, 2000);
+  };
+  $('#linkNotice').hidden = false;
+  poll();
+};
+$('#toolchainBtn').onclick = async () => { await api('api/toolchain', {}); refresh(); };
+$('#buildBtn').onclick = async () => { await api('api/build', {}); refresh(); };
+$('#devMode').onchange = async () => { await api('api/settings', {dev_mode: $('#devMode').checked}); refresh(); };
+$('#lang').onchange = () => {
+  lang = $('#lang').value;
+  try { localStorage.setItem('mbLang', lang); } catch (e) {}
+  applyLanguage();
+  if (state) render();
+};
+
+applyLanguage();
+refresh().then(loadStatuses);
+setInterval(() => { if (!document.hidden) refresh(); }, 3000);
+setInterval(() => { if (!document.hidden) loadStatuses(); }, 30000);
+</script>
+</body>
+</html>

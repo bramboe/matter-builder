@@ -14,7 +14,8 @@ Uitgangspunten:
 - Elke build is reproduceerbaar: vaste toolchainversies, een spec in git, en een manifest met hashes.
 - **De gebruiker past geen bestanden aan.** Alles wat een gebruiker instelt, gaat via Matter of via de lokale instellingenpagina van het apparaat: Wi-Fi, het Thread-netwerk, wachtwoorden, en modi zoals de configuratiemodus. Gegevens die al in HA staan (de Thread-dataset, en de Wi-Fi-gegevens als HA die kent) neemt de add-on automatisch over. Waarden die in de firmware worden ingebakken, zijn hooguit een terugvaloptie voor ontwikkelaars.
 - **Een proxy werkt autonoom.** Na de eerste installatie is HA niet nodig: instellingen, GPIO's in de instelbare laag (§6), Wi-Fi, Thread en updates gaan via de lokale pagina. HA is een extra beheerder, geen vereiste. De add-on is nodig voor een nieuwe proxy, een nieuwe gebouwde driver, een ander board of netwerktype, en een volledige herinstallatie.
-- **HA blijft de bouwer.** Er komt geen externe webflasher. De add-on houdt de toolchain op vaste versies, toont build- en crashlogs, en een nieuwe Matter- of Thread-versie komt pas binnen als de add-on wordt bijgewerkt. Dat is meer onderhoud, maar geeft controle en geen afhankelijkheid van een externe site.
+- **Een gewone gebruiker bouwt niet.** Hij installeert de add-on, kiest kant-en-klare firmware (de algemene, instelbare firmware of een bekende toepassing zoals de Octo-bridge), installeert die via USB of over het netwerk, en stelt alles in op de pagina of in de add-on. Geen toolchain, geen wachten. Die firmware wordt per release reproduceerbaar gebouwd (vaste versies, zelfde toolchain als de add-on) en ondertekend.
+- **Ontwikkelaarsmodus: HA als bouwer.** Wie een eigen driver of toepassing wil, zet de ontwikkelaarsmodus aan. De add-on downloadt dan de toolchain op vaste versies en bouwt zelf, met build- en crashlogs in beeld; een nieuwe Matter- of Thread-versie komt pas binnen als de add-on wordt bijgewerkt. Er komt geen externe webflasher: ook kant-en-klare firmware wordt door de add-on zelf geïnstalleerd.
 - Octo is toepassing nr. 1. Een tweede, eenvoudige toepassing moet bewijzen dat de opzet generiek is.
 
 Niet-doelen voor v1: Matter-certificering, een eigen Vendor ID, publicatie in de add-on store, en apparaten die niet in de Matter-device-types passen.
@@ -193,6 +194,9 @@ Beslissingen:
 ## 7. Builder-app in HA (add-on)
 
 ### 7.1 Image
+- **Twee modi** (§1). Standaard is de add-on klein: hij haalt ondertekende, kant-en-klare firmware van de releases van het project en installeert die. De **ontwikkelaarsmodus** downloadt de toolchain naar `/data` (niet in de back-up) en bouwt zelf. In 0.1 zit ESP-IDF nog in het image zelf (`espressif/idf`, 3,6 GB); zodra er releases zijn, gaat ook ESP-IDF naar de download van de ontwikkelaarsmodus.
+- **Releases** worden gebouwd in CI (GitHub Actions) met precies de toolchain van de add-on, per chip en per toepassing, met een manifest met hashes en een handtekening. Dezelfde bron en versies geven hetzelfde image; dat is te controleren door het in de ontwikkelaarsmodus na te bouwen.
+- Gemeten (0.1, HA als amd64-VM): toolchain-installatie ±15 min, eerste build voor de ESP32-C6 ±35 min. Een volgende build hergebruikt build-map en ccache in `/data`. Bouwtijd hangt vooral af van het aantal processorkernen en het geheugen van de host (±1,5 GB per gelijktijdige compilatiestap); de add-on toont beide.
 - Basis: Debian, met **vaste versies** van ESP-IDF v5.5.5, esp-matter release/v1.6 (vaste commit) en connectedhomeip-submodule op een vaste commit.
 - Architecturen: amd64 en aarch64 (HA Green, Pi 5). De connectedhomeip-hosttools moeten op aarch64 bouwen. Dat is een risico om vroeg te testen.
 - Grootte: verwacht 5–8 GB. Daarom de toolchain eventueel in een apart volume dat bij de eerste start wordt gedownload, en de add-on-image zelf klein houden.
@@ -390,7 +394,7 @@ Genomen (2026-10-31):
 - **Autonoom, met HA als extra**: een proxy werkt na installatie zonder HA (§1).
 - **Twee lagen** in plaats van alleen code genereren (§6).
 - **Koppelen** met paginawachtwoord en een fysieke handeling; Matter-beheerder zijn is geen bewijs (§7.4).
-- **HA blijft de bouwer**, geen externe webflasher (§1).
+- **Gewone gebruiker installeert kant-en-klare, ondertekende firmware; bouwen in HA is de ontwikkelaarsmodus**; geen externe webflasher (§1).
 
 ## 15. Risico's
 

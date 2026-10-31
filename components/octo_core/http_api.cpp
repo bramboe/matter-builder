@@ -10,6 +10,7 @@
 #include "esp_app_desc.h"
 #include "esp_http_server.h"
 #include "esp_log.h"
+#include "esp_mac.h"
 #include "esp_ota_ops.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -116,6 +117,20 @@ esp_err_t handle_unknown(httpd_req_t* req, httpd_err_code_t) {
     httpd_resp_set_status(req, "302 Found");
     httpd_resp_set_hdr(req, "Location", redirect_url);
     return httpd_resp_send(req, nullptr, 0);
+}
+
+// Who this is, for the Home Assistant add-on looking for devices it can
+// manage: no names or settings, those need the password
+esp_err_t handle_info(httpd_req_t* req) {
+    const esp_app_desc_t* app = esp_app_get_description();
+    uint8_t mac[6] = {};
+    esp_read_mac(mac, ESP_MAC_BASE);
+    char out[160];
+    std::snprintf(out, sizeof(out),
+                  "{\"kind\":\"matter-builder\",\"app\":\"%s\",\"version\":\"%s\",\"id\":\"%02X%02X%02X%02X%02X%02X\"}",
+                  app->project_name, app->version, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_sendstr(req, out);
 }
 
 esp_err_t handle_auth_get(httpd_req_t* req) {
@@ -317,6 +332,7 @@ void start(const char* fallback_token) {
     // instead of letting new requests wait for a free slot
     config.max_open_sockets = 5;
     config.lru_purge_enable = true;
+    config.max_uri_handlers = 12;  // 8 now: the default would be full
     if (httpd_start(&server, &config) != ESP_OK) {
         ESP_LOGE(TAG, "HTTP server failed to start");
         return;
@@ -332,6 +348,12 @@ void start(const char* fallback_token) {
     cmd.method = HTTP_POST;
     cmd.handler = handle_cmd;
     httpd_register_uri_handler(server, &cmd);
+
+    httpd_uri_t info = {};
+    info.uri = "/info";
+    info.method = HTTP_GET;
+    info.handler = handle_info;
+    httpd_register_uri_handler(server, &info);
 
     httpd_uri_t auth_get = {};
     auth_get.uri = "/auth";

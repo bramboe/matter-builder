@@ -138,7 +138,7 @@ textarea.yaml{width:100%;min-height:280px;font:12px/1.5 ui-monospace,Menlo,monos
     <nav>
       <button data-tab="devices" class="on" data-t="tabDevices"></button>
       <button data-tab="catalog" data-t="tabCatalog"></button>
-      <button data-tab="developer" data-t="tabDeveloper" hidden id="devTabBtn"></button>
+      <button data-tab="developer" data-t="tabConfigs" id="devTabBtn"></button>
     </nav>
     <span class="grow"></span>
     <label class="search" id="searchBox"><svg viewBox="0 0 24 24"><path d="M9.5,3A6.5,6.5 0 0,1 16,9.5C16,11.11 15.41,12.59 14.44,13.73L14.71,14H15.5L20.5,19L19,20.5L14,15.5V14.71L13.73,14.44C12.59,15.41 11.11,16 9.5,16A6.5,6.5 0 0,1 3,9.5A6.5,6.5 0 0,1 9.5,3M9.5,5C7,5 5,7 5,9.5C5,12 7,14 9.5,14C12,14 14,12 14,9.5C14,7 12,5 9.5,5Z"/></svg>
@@ -181,7 +181,7 @@ textarea.yaml{width:100%;min-height:280px;font:12px/1.5 ui-monospace,Menlo,monos
 
 <!-- Developer -->
 <section id="developerTab" hidden>
-  <div class="section-head"><h2 data-t="ownDevices"></h2><span class="grow"></span><button class="pri" onclick="newSpec()" data-t="newSpec"></button></div>
+  <div class="section-head"><h2 data-t="myConfigs"></h2><span class="grow"></span><button class="pri" onclick="newSpec()" data-t="newSpec"></button></div>
   <p class="sub" data-t="specHelp" style="margin:0 2px 10px"></p>
   <div class="grid" id="specList"></div>
   <div class="card" id="specEditor" hidden style="margin-top:12px">
@@ -193,6 +193,7 @@ textarea.yaml{width:100%;min-height:280px;font:12px/1.5 ui-monospace,Menlo,monos
     <div class="actions end"><button class="plain" onclick="$('#specEditor').hidden = true" data-t="close"></button>
       <button id="specCheck" data-t="check"></button><button class="pri" id="specSave" data-t="save"></button></div>
   </div>
+  <div id="devBlock">
   <div class="section-head"><h2 data-t="standardBuilds"></h2></div>
   <div class="grid">
     <div class="card">
@@ -200,6 +201,7 @@ textarea.yaml{width:100%;min-height:280px;font:12px/1.5 ui-monospace,Menlo,monos
       <div class="actions"><button class="pri" id="buildGenericBtn" data-t="build"></button><span class="sub" id="buildHint" data-t="installToolchain"></span></div>
     </div>
     <div class="card"><h3 data-t="ownBuilds"></h3><div id="builds" class="meta"></div></div>
+  </div>
   </div>
 </section>
 </main>
@@ -221,10 +223,10 @@ textarea.yaml{width:100%;min-height:280px;font:12px/1.5 ui-monospace,Menlo,monos
   <div class="dlg">
     <div class="dlg-head"><span class="ico" id="dIcon"></span><div class="info"><h2 id="dName"></h2><div class="sub mono" id="dHost"></div></div>
       <span id="dChip"></span><button class="icon" onclick="closeDevice()" aria-label="Close" id="dClose"></button></div>
-    <div class="tabs"><button data-dtab="connections" data-t="connections"></button><button data-dtab="firmware" data-t="firmware"></button><button data-dtab="info" data-t="info"></button></div>
+    <div class="tabs"><button data-dtab="connections" data-t="configuration"></button><button data-dtab="firmware" data-t="firmware"></button><button data-dtab="info" data-t="info"></button></div>
     <div class="dlg-body">
       <div id="dConnections">
-        <div id="noIo" class="sub" hidden data-t="noIo" style="margin-top:14px"></div>
+        <div id="noIo" hidden style="margin-top:14px"></div>
         <div id="ioEditor">
           <div class="notice" id="recipeNotice" hidden></div>
           <div class="seg"><button id="tabUi" class="on" data-t="form"></button><button id="tabYaml">YAML</button></div>
@@ -237,7 +239,7 @@ textarea.yaml{width:100%;min-height:280px;font:12px/1.5 ui-monospace,Menlo,monos
           <div class="sub" data-t="manageHelp" style="margin-top:12px"></div>
           <div class="error" id="mError" hidden></div>
           <div class="notice" id="mNotice" hidden></div>
-          <div class="actions end"><button id="mSave" data-t="saveDraft"></button>
+          <div class="actions end"><button class="plain" id="mSaveConfig" data-t="saveConfig"></button><span class="grow"></span><button id="mSave" data-t="saveDraft"></button>
             <button class="pri" id="mApply" data-t="applyRestart" hidden></button>
             <button class="pri" id="mConfirm" data-t="keep" hidden></button></div>
         </div>
@@ -312,7 +314,14 @@ function setHtml(el, html) {
 }
 
 const TEXT = {
-  tabDevices: 'Devices', tabCatalog: 'Catalog', tabDeveloper: 'Developer', searchDevices: 'Search devices', searchCatalog: 'Search the catalog',
+  tabDevices: 'Devices', tabCatalog: 'Catalog', tabConfigs: 'Configs', configuration: 'Configuration', searchDevices: 'Search devices', searchCatalog: 'Search the catalog',
+  myConfigs: 'My configs', saveConfig: 'Save to My configs', configSaved: n => `Saved as “${n}” in My configs.`,
+  readOnlyYaml: 'This firmware has no configurable connections; its own settings are on its page. This is what it reports:',
+  wConfigure: 'Configure the device', configureHelp: 'Name and connections, as YAML. Wi-Fi, Thread and passwords are set on the device itself. Pins: 0–7, 10, 11, 18–23.',
+  startEmpty: 'Empty', fromConfigs: 'My configs', fromRecipes: 'Recipes', skip: 'Skip', saveToConfigs: 'Also save to My configs',
+  configOk: (n, c) => `${n}: ${c} connection${c === 1 ? '' : 's'}.`, applyTo: 'Apply to a device', noGeneric: 'No linked generic device yet.',
+  applyingConfig: 'Applying the configuration…', configOnTrial: s => `The new connections run on trial: keep them within ${s} s, or the device goes back.`,
+  configKept: 'Kept. The device is ready.', configFailed: e => `The configuration was not applied: ${e}`,
   emptyTitle: 'Set up your first device',
   emptyText: 'Matter Builder turns an ESP32-C6 into a standard Matter device for Home Assistant, Apple Home and Google Home. Every device keeps working without Home Assistant and has a settings page of its own.',
   newDevice: 'New device', newDeviceHelp: 'Install firmware or link one', browseCatalog: 'Browse the catalog',
@@ -354,8 +363,8 @@ const TEXT = {
   wLink: 'Link a device', linkHelp: 'The address of the device’s page and its password. The add-on gets a key of its own; the password is not stored.',
   pagePassword: 'Password of the page', link: 'Link', wrongPassword: 'Wrong password.',
   pressBoot: s => `Now press the device’s BOOT button briefly (${s} s left). Button out of reach? Switch its power off and on three times.`,
-  notLinked: 'Not linked: the BOOT button was not pressed in time.', wLinked: 'Linked', linkedText: n => `${n} is linked. Set up what is connected to it next.`,
-  setUpConnections: 'Set up connections', wRecipeTarget: 'Where should it go?', recipeNew: 'A new ESP32', recipeNewHelp: 'Install the generic firmware first',
+  notLinked: 'Not linked: the BOOT button was not pressed in time.', wLinked: 'Linked', linkedText: n => `${n} is linked. Set up what is connected to it next.`, linkedName: n => `${n} is linked.`,
+  setUpConnections: 'Set up connections', openDevice: 'Open device', wRecipeTarget: 'Where should it go?', recipeNew: 'A new ESP32', recipeNewHelp: 'Install the generic firmware first',
   recipeOn: n => `On ${n}`, recipeOnHelp: 'Replaces its connections after you save and apply',
   filterAll: 'All', filterFirmware: 'Firmware', filterRecipes: 'Recipes', official: 'Official', recipe: 'Recipe', use: 'Use',
   anySource: 'Any source', community: 'Community', verified: 'Verified', source: 'Source', version: 'Version', stars: 'GitHub stars',
@@ -381,8 +390,8 @@ const TEXT = {
   host: 'This host', cores: 'cores', memory: 'GB memory', disk: 'GB free',
   fewCores: 'Few cores or little memory: the first build takes an hour or more. More cores for the Home Assistant machine help most (about 1.5 GB memory per core).',
   toolchainReady: 'Ready', toolchainMissing: 'Not installed: about 6 GB, 15 minutes or more. Not included in backups.',
-  ownDevices: 'Own devices', newSpec: 'New spec', specEditorTitle: 'Spec',
-  specHelp: 'A spec describes what is built: name, application and connections. Wi-Fi, Thread and passwords are set on the device itself.',
+  ownDevices: 'Own devices', noConfigs: 'No configs yet. Save one from a device, or make a new one.', newSpec: 'New config', specEditorTitle: 'Config',
+  specHelp: 'Configurations of generic devices, as YAML: a name and its connections. Install one on a new ESP32 or apply it to a linked device; nothing personal goes in.',
   startFrom: 'Start from', check: 'Check', save: 'Save', specOk: s => `Valid: ${s.name} ${s.version} (${s.app}).`, specSaved: 'Saved.', del: 'Delete',
   build: 'Build', updateFile: 'Update file', factoryFile: 'For a new ESP32', confirmDelete: n => `Delete the spec “${n}”? Built files stay.`,
   standardBuilds: 'Standard firmware', genericTitle: 'Generic device', genericHelp: 'Build the standard firmware yourself, the same as the release.',
@@ -682,28 +691,51 @@ async function removeSource(repo) {
 // ---------------------------------------------------------------- developer
 function specCard(sp) {
   const latest = list => list.length ? list[list.length - 1] : null;
-  const fw = latest(sp.firmware), factory = latest(sp.factory);
+  const dev = state.settings.dev_mode, fw = latest(sp.firmware), factory = latest(sp.factory);
   return `<div class="card">
-    <div class="head"><span class="ico">${icon('recipe')}</span><div class="info"><h3>${esc(sp.name)}</h3><div class="sub">${esc(sp.app)} · ${esc(sp.version)}</div></div></div>
+    <div class="head"><span class="ico">${icon('recipe')}</span><div class="info"><h3>${esc(sp.name)}</h3><div class="sub">${esc(appTitle('mb_generic'))}</div></div></div>
     <div class="meta">${sp.error ? `<div class="error" style="margin:0">${esc(sp.error)}</div>` : ''}
-      ${fw ? `<div class="sub">${t('updateFile')}: <a href="api/download/${encodeURIComponent(fw)}" class="mono">${esc(fw)}</a></div>` : ''}
-      ${factory ? `<div class="sub">${t('factoryFile')}: <a href="api/download/${encodeURIComponent(factory)}" class="mono">${esc(factory)}</a></div>` : ''}</div>
-    <div class="acts"><button class="text" onclick="buildSpec('${sp.slug}')" ${sp.error || !state.toolchain || state.job.running ? 'disabled' : ''}>${t('build')}</button>
-      ${factory ? `<button class="plain" onclick="openWizard('method', null, {file: '${esc(factory)}'})">${t('install')}</button>` : ''}
+      ${dev && fw ? `<div class="sub">${t('updateFile')}: <a href="api/download/${encodeURIComponent(fw)}" class="mono">${esc(fw)}</a></div>` : ''}
+      ${dev && factory ? `<div class="sub">${t('factoryFile')}: <a href="api/download/${encodeURIComponent(factory)}" class="mono">${esc(factory)}</a></div>` : ''}</div>
+    <div class="acts">${sp.error ? '' : `<button class="text" onclick="useConfig('${sp.slug}', 'new')">${t('install')}</button>
+      <button class="plain" onclick="useConfig('${sp.slug}', 'device')">${t('applyTo')}</button>`}
       <button class="plain" onclick="editSpec('${sp.slug}')">${t('edit')}</button><span class="grow"></span>
-      <button class="warn" onclick="deleteSpec('${sp.slug}', '${esc(sp.name)}')">${t('del')}</button></div></div>`;
+      <details class="more"><summary aria-label="${t('more')}">${icon('dots')}</summary><div class="pop">
+        ${dev ? `<button onclick="buildSpec('${sp.slug}')" ${sp.error || !state.toolchain || state.job.running ? 'disabled' : ''}>${t('build')}</button>` : ''}
+        <button class="warn" onclick="deleteSpec('${sp.slug}', '${esc(sp.name)}')">${t('del')}</button></div></details></div></div>`;
+}
+
+// A config on a new ESP32 (wizard, configured) or on a linked generic device
+async function useConfig(slug, where) {
+  $$('details.more').forEach(d => { d.open = false; });
+  const text = (await api(`api/specs/${slug}`)).text;
+  const spec = await parseSpec(text).catch(() => null);
+  if (!spec) return;
+  if (where === 'new') openWizard('firmware', null, {configText: text});
+  else openWizard('recipeTarget', null, {recipe: {title: spec.name, rows: spec.rows}, configText: text, deviceOnly: true});
 }
 
 function renderDeveloper() {
-  if (specs) setHtml($('#specList'), specs.map(specCard).join(''));
+  if (!specs) { loadSpecs(); return; }
+  setHtml($('#specList'), specs.length ? specs.map(specCard).join('') : `<div class="sub" style="margin:0 2px;grid-column:1/-1">${t('noConfigs')}</div>`);
+  $('#devBlock').hidden = !state.settings.dev_mode;
   $('#buildGenericBtn').disabled = !state.toolchain || state.job.running;
   $('#buildHint').hidden = state.toolchain;
   setHtml($('#builds'), state.builds.length ? state.builds.map(b => `<div class="row"><div class="label"><a class="mono" href="api/download/${encodeURIComponent(b.file)}">${esc(b.file)}</a>
       <div class="sub">${date(b.date)} · ${(b.size / 2 ** 20).toFixed(2)} MB</div></div></div>`).join('') : `<div class="sub">${t('noBuilds')}</div>`);
 }
 
-async function loadSpecs() {
+// The configs list; a load that started before a change is thrown away
+let specsGen = 0, specsLoading = null;
+function invalidateSpecs() { specs = null; specsGen++; }
+function loadSpecs() {
+  if (!specsLoading) specsLoading = loadSpecsNow().finally(() => { specsLoading = null; });
+  return specsLoading;
+}
+async function loadSpecsNow() {
+  const gen = specsGen;
   const r = await api('api/specs');
+  if (gen !== specsGen) return loadSpecsNow();
   specs = r.specs;
   if (!$('#specExample').options.length) {
     exampleTexts = r.examples;
@@ -725,7 +757,7 @@ async function postSpec(checkOnly) {
   const r = await api('api/specs', {text: $('#specText').value, check_only: checkOnly});
   if (r.error) { specMessage(r.error); return; }
   specMessage(null, checkOnly ? t('specOk', r.spec) : t('specSaved'));
-  if (!checkOnly) loadSpecs();
+  if (!checkOnly) { invalidateSpecs(); loadSpecs(); }
 }
 async function editSpec(slug) {
   $('#specText').value = (await api(`api/specs/${slug}`)).text;
@@ -737,6 +769,7 @@ async function buildSpec(slug) { await api(`api/specs/${slug}/build`, {}); refre
 async function deleteSpec(slug, name) {
   if (!confirm(t('confirmDelete', name))) return;
   await api(`api/specs/${slug}/delete`, {});
+  invalidateSpecs();
   loadSpecs();
 }
 $('#specExample').onchange = () => { $('#specText').value = exampleTexts[$('#specExample').value] || ''; specMessage(); };
@@ -774,8 +807,6 @@ $$('#sourceFilters button').forEach(b => { b.onclick = () => {
 function render() {
   if (!state) return;
   const dev = state.settings.dev_mode;
-  $('#devTabBtn').hidden = !dev;
-  if (!dev && tab === 'developer') { showTab('devices'); return; }
   renderDevices();
   if (tab === 'catalog') renderCatalog();
   if (tab === 'developer') renderDeveloper();
@@ -883,9 +914,10 @@ async function openDevice(id, which, recipe) {
       $('#recipeNotice').innerHTML = `${esc(t('fromRecipe', recipe.title))} <button class="text" onclick="saveAndApply()">${t('saveApply')}</button>`;
       $('#recipeNotice').hidden = false;
     }
-    $('#mYaml').value = toYaml($('#mName').value, editRows);
+    $('#mYaml').value = specYaml($('#mName').value, editRows);
     renderRows();
     showManageState();
+    showEditor(editorMode === 'yaml');
   } else if (!which) setDtab('firmware');
   renderDevicePanel();
 }
@@ -910,6 +942,13 @@ function renderDevicePanel() {
   setHtml($('#dIcon'), icon('chip'));
   setHtml($('#dChip'), statusChip(s));
   $('#noIo').hidden = !(managed && !managed.io);
+  if (managed && !managed.io) {
+    const yaml = ['device:', `  name: ${p.name}`, `  app: ${r ? r.app : p.app || ''}`, `  version: ${r ? r.version : ''}`];
+    const lines = connectedText(s);
+    if (lines) yaml.push('# connected: ' + lines);
+    setHtml($('#noIo'), `<p class="sub">${t('readOnlyYaml')}</p><textarea class="yaml" readonly style="min-height:120px">${esc(yaml.join('\n'))}</textarea>
+      <div class="actions"><a class="button text" href="${esc(pageUrl(p.host))}" target="_blank" rel="noopener">${t('openPage')} ${icon('open')}</a></div>`);
+  }
   $('#ioEditor').hidden = !(managed && managed.io);
   const files = firmwareFiles(r ? r.app : p.app).sort((a, b) => newer(fileVersion(a), fileVersion(b)) ? -1 : 1);
   setHtml($('#dFirmware'), `<div class="row" style="margin-top:8px"><div class="label">${t('running')}</div><div>${r ? esc(appTitle(r.app) + ' ' + r.version) : '–'}</div></div>
@@ -943,51 +982,46 @@ function rowsFromIo(io) {
     .map(d => ({slot: d.index, type: d.type, pin: d.pin, pin2: d.pin2, inverted: d.inverted, name: d.name}));
 }
 
-function toYaml(name, rows) {
-  const lines = [`name: ${name}`, 'connections:'];
+// One YAML format everywhere (device, config, recipe, wizard): the spec of
+// tools/mb_generate.py, checked by the add-on with the generator itself
+function specYaml(name, rows) {
+  const lines = ['device:', `  name: ${name}`, '  app: generic', '', 'connections:'];
   for (const r of rows) {
     lines.push(`  - slot: ${r.slot}`, `    type: ${r.type}`, `    pin: ${r.pin}`);
     if (r.type === 'sht4x') lines.push(`    scl: ${r.pin2}`);
     if (r.inverted) lines.push('    inverted: true');
-    lines.push(`    name: ${r.name}`);
+    lines.push(`    name: ${r.name || TEXT.types[r.type]}`);
   }
   return lines.join('\n') + '\n';
 }
+const EMPTY_YAML = specYaml('My device', [{slot: 0, type: 'relay', pin: 4, pin2: 0, inverted: false, name: 'Lamp'}]);
 
-function fromYaml(text) {
-  let name = null;
-  const rows = [];
-  let current = null;
-  for (const raw of text.split('\n')) {
-    const line = raw.replace(/#.*$/, '').trimEnd();
-    if (!line.trim()) continue;
-    const item = line.match(/^\s*-\s+(.*)$/);
-    const body = item ? item[1] : line.trim();
-    const kv = body.match(/^([a-z0-9_]+)\s*:\s*(.*)$/i);
-    if (!kv) throw new Error(`cannot read “${line.trim()}”`);
-    const key = kv[1], value = kv[2].replace(/^["']|["']$/g, '');
-    if (item) { current = {slot: null, type: '', pin: null, pin2: 0, inverted: false, name: ''}; rows.push(current); }
-    if (!line.startsWith(' ') && !item) {
-      if (key === 'name') name = value;
-      else if (key !== 'connections') throw new Error(`unknown “${key}”`);
-      continue;
-    }
-    if (!current) throw new Error(`“${key}” outside a connection`);
-    if (key === 'slot') current.slot = +value;
-    else if (key === 'type') current.type = value;
-    else if (key === 'pin') current.pin = +value;
-    else if (key === 'scl') current.pin2 = +value;
-    else if (key === 'inverted') current.inverted = value === 'true';
-    else if (key === 'name') current.name = value;
-    else throw new Error(`unknown “${key}”`);
-  }
+async function parseSpec(text) {
+  const r = await api('api/specs', {text, check_only: true});
+  if (!r.spec) throw new Error(r.error || 'not valid');
+  return {name: r.spec.name, rows: rowsOf(r.spec.connections)};
+}
+
+// The commands that turn a device's draft into these connections and name
+function diffLines(io, rows, name) {
+  const before = new Map(rowsFromIo(io).map(r => [r.slot, r]));
+  const lines = [];
   for (const r of rows) {
-    if (!(r.slot >= 0 && r.slot <= 7)) throw new Error('slot must be 0-7');
-    if (!TYPES.includes(r.type)) throw new Error(`type “${r.type}”`);
-    if (!managed.io.pins.includes(r.pin) || (r.type === 'sht4x' && !managed.io.pins.includes(r.pin2))) throw new Error(`pin of slot ${r.slot}`);
+    const old = before.get(r.slot);
+    before.delete(r.slot);
+    if (old && JSON.stringify(old) === JSON.stringify(r)) continue;
+    const pins = r.type === 'sht4x' ? `${r.pin} ${r.pin2}` : `${r.pin}`;
+    lines.push(`io set ${r.slot} ${r.type} ${pins}${r.inverted ? ' inverted' : ''} ${(r.name || TEXT.types[r.type]).trim().replace(/\s+/g, ' ')}`);
   }
-  if (new Set(rows.map(r => r.slot)).size !== rows.length) throw new Error('a slot appears twice');
-  return {name, rows};
+  for (const slot of before.keys()) lines.push(`io clear ${slot}`);
+  if (name && name !== io.name) lines.push(`name ${name}`);
+  return lines;
+}
+async function sendLines(id, lines) {
+  for (const line of lines) {
+    const reply = await proxyCommand(id, line);
+    if (!reply.startsWith('ok')) throw new Error(reply.trim());
+  }
 }
 
 function renderRows() {
@@ -1011,50 +1045,59 @@ function showManageState() {
 }
 function note(text) { $('#mNotice').textContent = text; $('#mNotice').hidden = false; }
 
-function setEditorTab(yaml) {
-  if (yaml) $('#mYaml').value = toYaml($('#mName').value, editRows);
-  else {
-    try { const parsed = fromYaml($('#mYaml').value); editRows = parsed.rows; if (parsed.name) $('#mName').value = parsed.name; renderRows(); }
-    catch (e) { $('#mError').textContent = t('yamlError', e.message); $('#mError').hidden = false; return; }
-  }
-  $('#mError').hidden = true;
+let editorMode = 'form';
+try { editorMode = localStorage.getItem('mbEditor') || 'form'; } catch (e) {}
+function showEditor(yaml) {
   $('#manageUi').hidden = yaml;
   $('#manageYaml').hidden = !yaml;
   $('#tabUi').classList.toggle('on', !yaml);
   $('#tabYaml').classList.toggle('on', yaml);
 }
+async function setEditorTab(yaml) {
+  if (yaml) $('#mYaml').value = specYaml($('#mName').value, editRows);
+  else {
+    try { const parsed = await parseSpec($('#mYaml').value); editRows = parsed.rows; $('#mName').value = parsed.name; renderRows(); }
+    catch (e) { $('#mError').textContent = t('yamlError', e.message); $('#mError').hidden = false; return; }
+  }
+  $('#mError').hidden = true;
+  editorMode = yaml ? 'yaml' : 'form';
+  try { localStorage.setItem('mbEditor', editorMode); } catch (e) {}
+  showEditor(yaml);
+}
+
+// What the editor holds now, from the form or the YAML
+async function editorSpec() {
+  if ($('#manageYaml').hidden) return {name: $('#mName').value.trim(), rows: editRows};
+  return parseSpec($('#mYaml').value);
+}
 
 async function saveManage() {
   $('#mError').hidden = true;
-  let name = $('#mName').value.trim(), rows = editRows;
-  if (!$('#manageYaml').hidden) {
-    try { const parsed = fromYaml($('#mYaml').value); rows = parsed.rows; if (parsed.name) name = parsed.name; }
-    catch (e) { $('#mError').textContent = t('yamlError', e.message); $('#mError').hidden = false; return; }
-  }
-  const before = new Map(rowsFromIo(managed.io).map(r => [r.slot, r]));
-  const lines = [];
-  for (const r of rows) {
-    const old = before.get(r.slot);
-    before.delete(r.slot);
-    if (old && JSON.stringify(old) === JSON.stringify(r)) continue;
-    const pins = r.type === 'sht4x' ? `${r.pin} ${r.pin2}` : `${r.pin}`;
-    lines.push(`io set ${r.slot} ${r.type} ${pins}${r.inverted ? ' inverted' : ''} ${(r.name || TEXT.types[r.type]).trim().replace(/\s+/g, ' ')}`);
-  }
-  for (const slot of before.keys()) lines.push(`io clear ${slot}`);
-  if (name && name !== managed.io.name) lines.push(`name ${name}`);
-  try {
-    for (const line of lines) {
-      const reply = await proxyCommand(managed.id, line);
-      if (!reply.startsWith('ok')) throw new Error(reply.trim());
-    }
-  } catch (e) { $('#mError').textContent = e.message; $('#mError').hidden = false; return; }
+  let spec;
+  try { spec = await editorSpec(); }
+  catch (e) { $('#mError').textContent = t('yamlError', e.message); $('#mError').hidden = false; return; }
+  const lines = diffLines(managed.io, spec.rows, spec.name);
+  try { await sendLines(managed.id, lines); }
+  catch (e) { $('#mError').textContent = e.message; $('#mError').hidden = false; return; }
   managed.io = JSON.parse(await proxyCommand(managed.id, 'io json')).io;
   editRows = rowsFromIo(managed.io);
+  $('#mName').value = managed.io.name;
   renderRows();
-  $('#mYaml').value = toYaml(managed.io.name, editRows);
+  $('#mYaml').value = specYaml(managed.io.name, editRows);
   $('#recipeNotice').hidden = true;
   showManageState();
   note(lines.length ? t('saved') : t('unchanged'));
+}
+
+async function saveAsConfig() {
+  $('#mError').hidden = true;
+  try {
+    const spec = await editorSpec();
+    const r = await api('api/specs', {text: specYaml(spec.name, spec.rows)});
+    if (r.error) throw new Error(r.error);
+    note(t('configSaved', r.spec.name));
+    invalidateSpecs();
+  } catch (e) { $('#mError').textContent = t('yamlError', e.message); $('#mError').hidden = false; }
 }
 
 // A recipe in one go: into the draft, then a restart with it on trial
@@ -1085,6 +1128,7 @@ $('#mAdd').onclick = () => {
   renderRows();
 };
 $('#mSave').onclick = saveManage;
+$('#mSaveConfig').onclick = saveAsConfig;
 $('#mApply').onclick = applyManage;
 $('#mConfirm').onclick = async () => {
   await proxyCommand(managed.id, 'io confirm');
@@ -1107,11 +1151,12 @@ function factoryChoices() {
 
 function openWizard(step, host, extra) {
   $$('details.more').forEach(d => { d.open = false; });
-  wiz = {step: step || 'start', host: host || '', file: null, method: 'browser', backup: true, status: '', ...(extra || {})};
+  wiz = {step: step || 'start', host: host || '', file: null, method: 'browser', backup: true, status: '', configSpec: null, ...(extra || {})};
   if (wiz.step === 'method' && !wiz.file) wiz.step = 'firmware';
   renderWizard();
   if (!$('#wizardDlg').open) $('#wizardDlg').showModal();
-  if (state.settings.dev_mode && !specs) loadSpecs().then(renderWizard);
+  if (!specs) loadSpecs().then(renderWizard);
+  if (!catalogData && !recipes) loadCatalog().then(renderWizard);
 }
 function closeWizard() { wiz = null; $('#wizardDlg').close(); }
 $('#wizardDlg').addEventListener('close', () => { if (wiz && wiz.linkTimer) clearTimeout(wiz.linkTimer); wiz = null; });
@@ -1123,7 +1168,7 @@ const choice = (on, ic, title, sub, click, attrs = '') =>
 
 function renderWizard() {
   if (!wiz) return;
-  const flow = ['firmware', 'method', 'install', 'setup', 'link', 'done'];
+  const flow = ['firmware', 'configure', 'method', 'install', 'setup', 'link', 'done'];
   const n = flow.indexOf(wiz.step);
   $('#wStep').textContent = n >= 0 && !wiz.linkOnly ? t('stepOf', n + 1, flow.length) : '';
   let title = '', body = '';
@@ -1135,16 +1180,35 @@ function renderWizard() {
   } else if (wiz.step === 'recipeTarget') {
     title = t('wRecipeTarget');
     const generic = state.proxies.filter(p => { const r = running(statuses[p.id]); return r && r.app === 'mb_generic'; });
+    if (!wiz.configText) wiz.configText = specYaml(wiz.recipe.title, wiz.recipe.rows);
     body = `<div class="sub">${esc(wiz.recipe.title)}</div><div class="choices">
-      ${choice(false, 'usb', t('recipeNew'), t('recipeNewHelp'), "go('firmware')")}
-      ${generic.map(p => choice(false, 'chip', t('recipeOn', esc(p.name)), t('recipeOnHelp'), `const r = wiz.recipe; closeWizard(); openDevice('${p.id}', 'connections', r)`)).join('')}</div>`;
+      ${wiz.deviceOnly ? '' : choice(false, 'usb', t('recipeNew'), t('recipeNewHelp'), "go('firmware')")}
+      ${generic.map(p => choice(false, 'chip', t('recipeOn', esc(p.name)), t('recipeOnHelp'), `const r = wiz.recipe; closeWizard(); openDevice('${p.id}', 'connections', r)`)).join('')}</div>
+      ${wiz.deviceOnly && !generic.length ? `<p class="sub">${t('noGeneric')}</p>` : ''}`;
   } else if (wiz.step === 'firmware') {
     title = t('wPickFirmware');
     const list = factoryChoices();
     if (!wiz.file && list.length) wiz.file = (list.find(c => /^mb_generic-/.test(c.file)) || list[0]).file;
     body = list.length ? `<div class="choices">${list.map(c => choice(c.file === wiz.file, 'chip', esc(c.title), esc(c.sub), `wiz.file = '${esc(c.file)}'; renderWizard()`)).join('')}</div>
-      <div class="actions end"><button class="plain" onclick="go('start')">${t('back')}</button><button class="pri" onclick="go('method')">${t('next')}</button></div>`
+      <div class="actions end"><button class="plain" onclick="go('start')">${t('back')}</button><button class="pri" onclick="go(isGenericFile(wiz.file) ? 'configure' : 'method')">${t('next')}</button></div>`
       : `<p class="sub">${t('noFactory')}</p>`;
+  } else if (wiz.step === 'configure') {
+    title = t('wConfigure');
+    if (wiz.configText === undefined) wiz.configText = EMPTY_YAML;
+    const recipeList = catalogItems().filter(i => i.kind === 'recipe');
+    body = `<div class="sub">${t('configureHelp')}</div>
+      <div class="row"><label class="field" style="flex:1"><span>${t('startFrom')}</span><select onchange="pickConfig(this.value)">
+        <option value="">–</option><option value="empty">${t('startEmpty')}</option>
+        ${(specs || []).length ? `<optgroup label="${t('fromConfigs')}">${specs.map(sp => `<option value="config:${esc(sp.slug)}">${esc(sp.name)}</option>`).join('')}</optgroup>` : ''}
+        ${recipeList.length ? `<optgroup label="${t('fromRecipes')}">${recipeList.map((r, i) => `<option value="recipe:${i}">${esc(r.title)}</option>`).join('')}</optgroup>` : ''}
+      </select></label></div>
+      <textarea class="yaml" id="wYaml" spellcheck="false" oninput="wiz.configText = this.value; wiz.configOk = ''">${esc(wiz.configText)}</textarea>
+      <label class="check sub"><input type="checkbox" ${wiz.saveConfig ? 'checked' : ''} onchange="wiz.saveConfig = this.checked">${t('saveToConfigs')}</label>
+      ${wiz.configOk ? `<div class="notice">${esc(wiz.configOk)}</div>` : ''}
+      ${wiz.error ? `<div class="error">${esc(wiz.error)}</div>` : ''}
+      <div class="actions end"><button class="plain" onclick="go('firmware')">${t('back')}</button><span class="grow"></span>
+        <button class="plain" onclick="wiz.configSpec = null; go('method')">${t('skip')}</button>
+        <button class="pri" onclick="configureNext()">${t('next')}</button></div>`;
   } else if (wiz.step === 'method') {
     title = t('wMethod');
     if (!serialOk() && wiz.method === 'browser') { wiz.method = 'host'; if (!wiz.ports) loadPorts(); }
@@ -1159,7 +1223,7 @@ function renderWizard() {
           <div class="sub warnText">${t('portWarning')}</div>`
         : `<div class="row"><div class="label sub">${wiz.ports ? t('noPorts') : t('checking')}</div><button class="plain" onclick="loadPorts()">${t('refresh')}</button></div>`) : ''}
       ${wiz.method !== 'download' ? `<label class="check sub"><input type="checkbox" ${wiz.backup ? 'checked' : ''} onchange="wiz.backup = this.checked">${t('backupFirst')}</label>` : ''}
-      <div class="actions end"><button class="plain" onclick="go('firmware')">${t('back')}</button><button class="pri" onclick="startInstall()" ${wiz.method === 'host' && !wiz.port ? 'disabled' : ''}>${t('install')}</button></div>`;
+      <div class="actions end"><button class="plain" onclick="go(isGenericFile(wiz.file) ? 'configure' : 'firmware')">${t('back')}</button><button class="pri" onclick="startInstall()" ${wiz.method === 'host' && !wiz.port ? 'disabled' : ''}>${t('install')}</button></div>`;
   } else if (wiz.step === 'install') {
     title = t('wInstalling');
     body = `<p id="wStatus">${esc(wiz.status)}</p>${wiz.progress !== undefined ? `<div class="progress"><i style="width:${wiz.progress}%"></i></div>` : ''}
@@ -1182,14 +1246,76 @@ function renderWizard() {
           <button class="pri" type="submit" ${wiz.waiting ? 'disabled' : ''}>${t('link')}</button></div></form>`;
   } else if (wiz.step === 'done') {
     title = t('wLinked');
-    body = `<p>${esc(t('linkedText', wiz.linkedName || ''))}</p>
-      <div class="actions end"><button class="plain" onclick="closeWizard()">${t('done')}</button>
-        ${wiz.linkedId ? `<button class="pri" onclick="const w = wiz; closeWizard(); openDevice(w.linkedId, 'connections', w.recipe)">${t('setUpConnections')}</button>` : ''}</div>`;
+    const a = wiz.apply || {};
+    body = `<p>${esc(wiz.configSpec ? t('linkedName', wiz.linkedName || '') : t('linkedText', wiz.linkedName || ''))}</p>
+      ${a.state === 'applying' ? `<p class="notice">${t('applyingConfig')}</p>` : ''}
+      ${a.state === 'trial' ? `<p class="notice">${t('configOnTrial', a.trial)}</p>` : ''}
+      ${a.state === 'kept' ? `<p class="notice">${t('configKept')}</p>` : ''}
+      ${a.state === 'error' ? `<div class="error">${esc(t('configFailed', a.error))}</div>` : ''}
+      <div class="actions end">${a.state === 'trial' ? `<button class="pri" onclick="keepConfig()">${t('keep')}</button>` : `<button class="plain" onclick="closeWizard()">${t('done')}</button>`}
+        ${wiz.linkedId && a.state !== 'trial' && a.state !== 'applying' ? `<button class="${a.state === 'kept' ? 'plain' : 'pri'}" onclick="const w = wiz; closeWizard(); openDevice(w.linkedId, 'connections')">${a.state === 'kept' ? t('openDevice') : t('setUpConnections')}</button>` : ''}</div>`;
   }
   $('#wTitle').textContent = title;
   $('#wBody').innerHTML = body;
   const pass = $('#wPass');
   if (pass && !wiz.waiting) (wiz.host ? pass : $('#wHost')).focus();
+}
+
+// Generic firmware takes a configuration: the release's or an own build of a config
+function isGenericFile(file) {
+  return /^mb_generic-/.test(file) || (specs || []).some(sp => sp.factory.includes(file));
+}
+
+async function pickConfig(value) {
+  if (value === 'empty') wiz.configText = EMPTY_YAML;
+  else if (value.startsWith('config:')) wiz.configText = (await api(`api/specs/${value.slice(7)}`)).text;
+  else if (value.startsWith('recipe:')) {
+    const r = catalogItems().filter(i => i.kind === 'recipe')[+value.slice(7)];
+    wiz.configText = r.text || specYaml(r.title, rowsOf(r.connections));
+  }
+  wiz.configOk = ''; wiz.error = '';
+  renderWizard();
+}
+
+async function configureNext() {
+  try { wiz.configSpec = await parseSpec(wiz.configText); }
+  catch (e) { wiz.error = t('yamlError', e.message); renderWizard(); return; }
+  if (wiz.saveConfig) {
+    const r = await api('api/specs', {text: wiz.configText});
+    if (r.error) { wiz.error = r.error; renderWizard(); return; }
+    invalidateSpecs();
+  }
+  go('method');
+}
+
+// After linking: the configuration onto the device's draft, a restart with it
+// on trial, then the user keeps it
+async function applyConfig() {
+  const id = wiz.linkedId, spec = wiz.configSpec;
+  wiz.apply = {state: 'applying'};
+  renderWizard();
+  try {
+    const io = JSON.parse(await proxyCommand(id, 'io json')).io;
+    await sendLines(id, diffLines(io, spec.rows, spec.name));
+    try { await proxyCommand(id, 'io apply'); } catch (e) {}
+    for (let i = 0; i < 40; i++) {
+      await new Promise(r => setTimeout(r, 3000));
+      if (!wiz) return;
+      try {
+        const now = JSON.parse(await proxyCommand(id, 'io json')).io;
+        if (now.trial > 0) { wiz.apply = {state: 'trial', trial: now.trial}; renderWizard(); return; }
+      } catch (e) {}
+    }
+    throw new Error(t('notReachable'));
+  } catch (e) {
+    if (wiz) { wiz.apply = {state: 'error', error: e.message}; renderWizard(); }
+  }
+}
+async function keepConfig() {
+  try { await proxyCommand(wiz.linkedId, 'io confirm'); wiz.apply = {state: 'kept'}; }
+  catch (e) { wiz.apply = {state: 'error', error: e.message}; }
+  renderWizard();
+  loadStatuses();
 }
 
 // Install via USB in the browser (Web Serial, esptool-js 0.7.0 shipped with
@@ -1302,6 +1428,7 @@ async function startLink() {
       wiz.linkedName = added ? added.name : host;
       go('done');
       loadStatuses();
+      if (wiz.configSpec && wiz.linkedId) applyConfig();
       return;
     }
     if (s.state !== 'waiting') { wiz.waiting = false; wiz.error = t('notLinked'); renderWizard(); return; }

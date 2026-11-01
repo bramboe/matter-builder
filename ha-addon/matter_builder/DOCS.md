@@ -19,10 +19,15 @@ device's page or in the add-on.
   its BOOT button briefly (or switch its power off and on three times). The
   add-on gets a key of its own; it never stores the password. The device's
   page lists the add-on under *Programs with access*, where you can revoke it.
-- **Connections** (generic devices): what is connected to a device, edited
-  as a form or as YAML. Changes are saved as a draft on the device; *Apply*
-  restarts it with the draft on trial, and *Keep* within 2 minutes makes it
-  permanent. Without that, the device goes back by itself.
+- **Configuration**: every device's configuration as a form or as YAML.
+  For a generic device you edit its name and connections; changes are saved
+  as a draft on the device, *Apply* restarts it with the draft on trial, and
+  *Keep* within 2 minutes makes it permanent (without that, it goes back by
+  itself). Other firmware shows what it reports, read-only.
+- **Configs**: your configurations (YAML) kept in the add-on: install one on a
+  new ESP32, apply it to a linked device, or save a device's configuration as
+  one. The New device wizard asks for a configuration too and applies it once
+  the device is linked.
 - **Catalog**: firmware and recipes from the official source and from
   community sources, with a page per item.
 - **Settings**: the Wi-Fi network for configuration mode of every device,
@@ -69,14 +74,37 @@ Sources are listed under Settings, where you can add one by its GitHub name
 or remove it. To make a source of your own, start from the `template` folder
 of the project's repository.
 
-## Own devices (developer mode)
+## Configuration YAML
 
-Describe a device in YAML: its name, the application (generic) and its
-connections as factory setting.
-Wi-Fi, Thread and passwords are never in the spec: they are set on the
-device's own page. *Build* generates the project (tools/mb_generate.py) and
-produces an update file and an image for a new ESP32 over USB. The spec is
-built into the firmware (GET /spec), so adopting the device recovers it.
+One format for devices, configs, recipes and the wizard:
+
+```yaml
+device:
+  name: Shed
+  app: generic
+
+connections:
+  - slot: 0
+    type: relay        # relay, led, button, contact, motion, sht4x
+    pin: 4             # 0-7, 10, 11, 18-23
+    name: Pump
+  - { slot: 1, type: contact, pin: 5, name: Door }
+  - slot: 2
+    type: sht4x
+    pin: 6             # SDA
+    scl: 7
+    name: Climate
+```
+
+Wi-Fi, Thread and passwords never go in: they are set on the device itself.
+
+## Own builds (developer mode)
+
+In developer mode a config can also be built into firmware of its own
+(*Build* in its menu): its connections become the factory setting.
+*Build* generates the project (tools/mb_generate.py) and produces an update
+file and an image for a new ESP32 over USB. The config is built into the
+firmware (GET /spec), so adopting the device recovers it.
 
 ## Developer mode
 

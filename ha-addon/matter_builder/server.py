@@ -668,11 +668,27 @@ class Discovery:
         with lock:
             found[device["id"]] = device
         print(f"found {device['app']} {device['version']} ({device['id']}) at {host} {address}", flush=True)
+        moved(device)
         if not linked(device["id"], host, address):
             notify(device)
 
 
 discovery = Discovery()
+
+
+def moved(device):
+    """A linked device seen at another address (a new Thread address after a
+    reset or reinstall): follow it, so its card shows it again; a key it no
+    longer accepts then shows as "Link again"."""
+    proxies = load_proxies()
+    changed = False
+    for p in proxies:
+        if p.get("device_id") == device["id"] and p["host"] not in (device["host"], device["address"]):
+            print(f"{p['name']} moved from {p['host']} to {device['address']}", flush=True)
+            p["host"], p["app"] = device["address"], device.get("app")
+            changed = True
+    if changed:
+        save_proxies(proxies)
 
 
 def found_unlinked():

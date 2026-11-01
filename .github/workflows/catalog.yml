@@ -1,0 +1,46 @@
+name: Catalog
+
+# The catalog of package sources for the add-on (tools/build_catalog.py),
+# published on GitHub Pages as catalog.json. Every night, after a release
+# (release.yml starts it), and when the block or verified list changes.
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["catalog/**", "examples/**", "tools/build_catalog.py", ".github/workflows/catalog.yml"]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Catalog
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          MB_OFFICIAL_REPO: ${{ github.repository }}
+        run: python3 tools/build_catalog.py site
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

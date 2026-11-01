@@ -64,6 +64,7 @@ button:disabled{opacity:.4;cursor:default}
 .empty{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:24px;text-align:center;max-width:560px;margin:32px auto}
 .section-head{display:flex;align-items:center;gap:8px;margin:20px 2px 10px}
 .section-head:first-child{margin-top:0}
+#catalogBody .section-head:first-child{margin-top:16px}
 .filters{display:flex;gap:6px;flex-wrap:wrap}
 .filters button{min-height:30px;font-size:13px}
 .filters button.on{background:var(--chip);color:var(--primary)}
@@ -163,10 +164,17 @@ textarea.yaml{width:100%;min-height:280px;font:12px/1.5 ui-monospace,Menlo,monos
 
 <!-- Catalog -->
 <section id="catalogTab" hidden>
-  <div class="filters" id="catalogFilters">
-    <button data-filter="all" class="on" data-t="filterAll"></button>
-    <button data-filter="firmware" data-t="filterFirmware"></button>
-    <button data-filter="recipe" data-t="filterRecipes"></button>
+  <div style="display:flex;gap:16px;flex-wrap:wrap">
+    <div class="filters" id="catalogFilters">
+      <button data-filter="all" class="on" data-t="filterAll"></button>
+      <button data-filter="firmware" data-t="filterFirmware"></button>
+      <button data-filter="recipe" data-t="filterRecipes"></button>
+    </div>
+    <div class="filters" id="sourceFilters">
+      <button data-source="any" class="on" data-t="anySource"></button>
+      <button data-source="official" data-t="official"></button>
+      <button data-source="community" data-t="community"></button>
+    </div>
   </div>
   <div id="catalogBody"></div>
 </section>
@@ -249,6 +257,14 @@ textarea.yaml{width:100%;min-height:280px;font:12px/1.5 ui-monospace,Menlo,monos
   </div>
 </dialog>
 
+<!-- Catalog item -->
+<dialog id="itemDlg">
+  <div class="dlg">
+    <div class="dlg-head"><div class="info"></div><button class="icon" onclick="$('#itemDlg').close()" aria-label="Close" id="iClose"></button></div>
+    <div class="dlg-body" id="itemBody"></div>
+  </div>
+</dialog>
+
 <!-- Settings -->
 <dialog id="settingsDlg">
   <div class="dlg">
@@ -263,8 +279,14 @@ textarea.yaml{width:100%;min-height:280px;font:12px/1.5 ui-monospace,Menlo,monos
         <div class="actions" style="margin-top:0"><button class="pri" type="submit" data-t="sendAll"></button></div>
       </form>
       <div id="bulkRows"></div>
-      <h3 style="margin-top:20px" data-t="readyMade"></h3>
-      <div id="releaseInfo" class="sub"></div>
+      <h3 style="margin-top:20px" data-t="sourcesTitle"></h3>
+      <div class="sub" data-t="sourcesHelp"></div>
+      <div id="sourceList" style="margin-top:8px"></div>
+      <form id="sourceForm" class="form" style="grid-template-columns:1fr auto;align-items:end">
+        <label class="field"><span data-t="addFromLink"></span><input id="sourceRepo" autocomplete="off" spellcheck="false" placeholder="owner/name"></label>
+        <button type="submit" data-t="check"></button>
+      </form>
+      <div id="sourceResult"></div>
       <div class="actions"><button id="checkReleases" data-t="checkReleases"></button></div>
       <h3 style="margin-top:20px" data-t="devTitle"></h3>
       <label class="switch" style="margin-top:8px"><input type="checkbox" id="devMode"><span class="sub" data-t="devHelp"></span></label>
@@ -305,7 +327,7 @@ const TEXT = {
   types: {relay: 'Relay', led: 'LED', button: 'Push button', contact: 'Contact', motion: 'Motion sensor', sht4x: 'SHT4x'},
   saved: 'Saved as draft.', unchanged: 'Nothing changed.', applying: 'Restarting with the new connections…',
   trialLeft: s => `On trial: keep within ${s} s.`, kept: 'Kept.', yamlError: e => `YAML: ${e}`,
-  fromRecipe: n => `Filled in from “${n}”. Save and apply to use it.`,
+  fromRecipe: n => `Filled in from “${n}”. Nothing changes on the device until you save and apply.`, saveApply: 'Save and apply',
   running: 'Running', install: 'Install', installFile: 'Install this firmware',
   confirmUpdate: f => `Install ${f}? The device moves to Wi-Fi for a few minutes; what is connected to it is unavailable meanwhile.`,
   noFirmware: 'No firmware of this kind is available yet.', address: 'Address', network: 'Network', key: 'Key of the add-on',
@@ -318,7 +340,11 @@ const TEXT = {
   wCatalog: 'Start from the catalog', wCatalogHelp: 'Firmware and ready-made recipes',
   wPickFirmware: 'Choose the firmware', noFactory: 'No firmware for a new ESP32 yet. It appears here when a release has it, or in developer mode after a build.',
   wMethod: 'How do you want to install it?', mBrowser: 'Plug into this computer', mBrowserHelp: 'With Chrome or Edge, and Home Assistant opened over HTTPS',
-  mBrowserNo: 'Not available here: this needs Chrome or Edge, and Home Assistant over HTTPS', mDownload: 'Download the file', mDownloadHelp: 'Flash it yourself, for example with esptool, at address 0',
+  mBrowserNo: 'Not available here: this needs Chrome or Edge, and Home Assistant over HTTPS', mDownload: 'Download the file',
+  mHost: 'Plug into the Home Assistant machine', mHostHelp: 'Works in any browser; the backup goes to the share folder',
+  noPorts: 'No USB device found on the Home Assistant machine. Plug in the ESP32, then refresh.', refresh: 'Refresh', usbPort: 'USB port',
+  choosePort: 'Choose the ESP32’s port', portWarning: 'Check that this is the ESP32: everything on the chosen device is replaced.',
+  confirmPort: n => `Install on “${n}”? Everything on that device is replaced.`, mDownloadHelp: 'Flash it yourself, for example with esptool, at address 0',
   backupFirst: 'First save a backup of the whole flash', next: 'Next', back: 'Back', close: 'Close', done: 'Done',
   wInstalling: 'Installing', usbPick: 'Choose the ESP32’s USB port in the browser window.', usbConnecting: 'Connecting…', usbChip: c => `Found: ${c}`,
   wrongChip: c => `This is a ${c}, not an ESP32-C6.`, usbBackup: p => `Saving backup: ${p} %`, usbWriting: p => `Installing: ${p} %`,
@@ -332,7 +358,20 @@ const TEXT = {
   setUpConnections: 'Set up connections', wRecipeTarget: 'Where should it go?', recipeNew: 'A new ESP32', recipeNewHelp: 'Install the generic firmware first',
   recipeOn: n => `On ${n}`, recipeOnHelp: 'Replaces its connections after you save and apply',
   filterAll: 'All', filterFirmware: 'Firmware', filterRecipes: 'Recipes', official: 'Official', recipe: 'Recipe', use: 'Use',
-  firmwareSection: 'Firmware', recipeSection: 'Recipes', catalogNote: 'Everything here comes from the signed releases of the project. Community sources follow later.',
+  anySource: 'Any source', community: 'Community', verified: 'Verified', source: 'Source', version: 'Version', stars: 'GitHub stars',
+  downloads: 'Downloads', updated: 'Last release', keyFingerprint: 'Key fingerprint', maker: 'Maker',
+  catalogOffline: 'The online catalog is not reachable: this shows the official firmware and examples only.',
+  communityNotice: 'Made by the community. The Matter Builder project did not test, audit or support it.',
+  gateTitle: 'Before you install from the community',
+  gateTips: ['Community firmware and recipes are made by other people. The project did not test or audit them.',
+    'Firmware is only accepted when it is signed with the key of its source, which you pin when you add the source.',
+    'A device can always go back: hold the BOOT button for recovery, or reinstall the official firmware over USB.'],
+  gateCheck: 'I understand, and install community items at my own risk', addSourceTitle: r => `Add ${r} as a source`,
+  addSourceHelp: 'From now on, firmware from this source is only installed when it is signed with this key.',
+  addSource: 'Add source', keyMismatch: 'This key differs from the one in the catalog. The source is not added.',
+  sourcesTitle: 'Package sources', sourcesHelp: 'Where firmware comes from. Each source has a key of its own; its releases must be signed with it.',
+  addFromLink: 'Add from link (GitHub owner/name)', confirmRemoveSource: r => `Remove ${r}? Devices keep their firmware.`,
+  firmwareSection: 'Firmware', recipeSection: 'Recipes',
   noCatalog: 'Nothing found.', noRelease: 'No signed release found yet.', newEspOnly: 'For a new ESP32', updateOnly: 'Update file only',
   settings: 'Settings', allWifi: 'Wi-Fi for all devices', bulkWifiHelp: 'The network every linked device uses for configuration mode (updates, first setup).',
   wifiName: 'Network', wifiPassword: 'Password', sendAll: 'Send to all',
@@ -349,9 +388,9 @@ const TEXT = {
   standardBuilds: 'Standard firmware', genericTitle: 'Generic device', genericHelp: 'Build the standard firmware yourself, the same as the release.',
   ownBuilds: 'Own builds', noBuilds: 'Nothing built yet.', installToolchain: 'Install the toolchain first (Settings).',
   apps: {mb_generic: 'Generic device'},
-  showLog: 'Log', hideLog: 'Hide log', dismiss: 'Dismiss', since: t => `Running since ${t}`, jobDone: 'Done', jobFailed: 'Failed: see the log',
+  showLog: 'Log', hideLog: 'Hide log', dismiss: 'Dismiss', jobBusy: 'Another task is running. Wait until it is done.', since: t => `Running since ${t}`, jobDone: 'Done', jobFailed: 'Failed: see the log',
   stepN: (d, t) => `step ${d} of ${t}`,
-  jobs: {toolchain: 'Installing the toolchain', all: 'Updating all devices', build: () => 'Building the generic device', update: n => `Updating ${n}`},
+  jobs: {flash: 'Installing over USB', toolchain: 'Installing the toolchain', all: 'Updating all devices', build: () => 'Building the generic device', update: n => `Updating ${n}`},
   buildingSpec: n => `Building ${n}`, confirmUpdateAll: 'Update every device to the newest firmware of its own kind, one after the other? It stops at the first problem.',
 };
 function t(key, ...args) { const v = TEXT[key]; return typeof v === 'function' ? v(...args) : v; }
@@ -469,60 +508,175 @@ function renderDevices() {
 }
 
 // ---------------------------------------------------------------- catalog
-// For now: the firmware of the signed release and the example recipes
-function catalogItems() {
+// catalog.json from the project's GitHub Pages: the official source and every
+// community source (tools/build_catalog.py). Without it, the official release
+// and the example recipes. Firmware installs only from a source the user
+// added, with its key pinned; a recipe is only connections, no code.
+let catalogData = null, catalogError = null, catalogLoading = false, sourceFilter = 'any';
+const rowsOf = conns => (conns || []).map(x => ({slot: x.slot, type: x.type, pin: x.pin, pin2: x.scl, inverted: x.inverted, name: x.name}));
+
+function localCatalog() {
   const items = [];
-  const apps = [...new Set(state.releases.map(r => r.app))];
-  for (const app of apps) {
+  const own = (state.sources || []).find(s => s.official) || {};
+  for (const app of [...new Set(state.releases.filter(r => r.official).map(r => r.app))]) {
     const pkg = (state.packages || []).find(p => p.app === app) || {};
     const rel = state.releases.filter(r => r.app === app).sort((a, b) => newer(a.version, b.version) ? -1 : 1)[0];
     const factory = (state.release_factory || []).find(f => f.app === app && f.version === rel.version);
-    items.push({kind: 'firmware', app, title: appTitle(app), about: pkg.description || '', version: rel.version, factory: factory && factory.file});
+    items.push({kind: 'firmware', id: `${own.repo}/${app}`, source: own.repo, official: true, verified: true, app,
+      title: appTitle(app), description: pkg.description || '', version: rel.version, factory: factory && factory.file});
   }
-  for (const r of recipes || []) items.push({kind: 'recipe', ...r});
+  for (const r of recipes || []) items.push({kind: 'recipe', source: own.repo, official: true, verified: true, ...r});
   return items;
 }
+const catalogItems = () => catalogData ? catalogData.items : localCatalog();
 
-function catalogCard(it) {
-  if (it.kind === 'firmware') return `<div class="card">
-    <div class="head"><span class="ico">${icon('chip')}</span><div class="info"><h3>${esc(it.title)}</h3><div class="sub">${esc(it.version)}</div></div><span class="chip accent">${t('official')}</span></div>
-    <div class="meta"><div class="sub">${esc(it.about)}</div><div class="sub">${it.factory ? t('newEspOnly') + ' · ' + t('updateFile') : t('updateOnly')}</div></div>
-    <div class="acts">${it.factory ? `<button class="text" onclick="openWizard('method', null, {file: '${esc(it.factory)}'})">${t('install')}</button>` : ''}</div></div>`;
-  return `<div class="card">
-    <div class="head"><span class="ico">${icon('recipe')}</span><div class="info"><h3>${esc(it.title)}</h3><div class="sub">${t('apps').mb_generic}</div></div><span class="chip">${t('recipe')}</span></div>
-    <div class="meta"><div class="sub">${esc(it.rows.map(r => `${r.name} (${TEXT.types[r.type] || r.type})`).join(', '))}</div></div>
-    <div class="acts"><button class="text" onclick="useRecipe('${esc(it.id)}')">${t('use')}</button></div></div>`;
+async function loadCatalog() {
+  if (catalogLoading) return;
+  catalogLoading = true;
+  const r = await api('api/catalog').catch(e => ({error: e.message}));
+  catalogData = r.catalog && Array.isArray(r.catalog.items) ? r.catalog : null;
+  catalogError = r.error;
+  if (!catalogData && !recipes) await loadRecipes();
+  catalogLoading = false;
+  render();
 }
 
+const sourceAdded = repo => (state.sources || []).some(s => s.repo === repo);
+const badge = it => it.official ? `<span class="chip accent">${t('official')}</span>`
+  : `<span class="chip">${t('community')}</span>${it.verified ? ` <span class="chip ok">${t('verified')}</span>` : ''}`;
+
+function catalogCard(it, i) {
+  const what = it.kind === 'firmware' ? esc(it.description || '')
+    : esc(rowsOf(it.connections).map(r => `${r.name} (${TEXT.types[r.type] || r.type})`).join(', '));
+  return `<div class="card" style="cursor:pointer" onclick="openItem(${i})">
+    <div class="head"><span class="ico">${icon(it.kind === 'firmware' ? 'chip' : 'recipe')}</span>
+      <div class="info"><h3>${esc(it.title)}</h3><div class="sub">${it.kind === 'firmware' ? esc(it.version || '') : t('recipe')} · ${esc(it.maker || (it.source || '').split('/')[0])}</div></div></div>
+    <div class="meta"><div class="sub">${what}</div></div>
+    <div class="acts" style="margin-top:auto">${badge(it)}<span class="grow"></span>${it.stars ? `<span class="sub">★ ${it.stars}</span>` : ''}</div></div>`;
+}
+
+let shownItems = [];
 function renderCatalog() {
+  if (!catalogData && !catalogLoading && !recipes) loadCatalog();
   const q = catalogQuery.toLowerCase();
-  const items = catalogItems().filter(it => (catalogFilter === 'all' || it.kind === catalogFilter) &&
-    (!q || JSON.stringify(it).toLowerCase().includes(q)));
-  const fw = items.filter(i => i.kind === 'firmware'), rc = items.filter(i => i.kind === 'recipe');
-  setHtml($('#catalogBody'), `<p class="sub" style="margin:12px 2px">${t('catalogNote')}</p>` +
-    (fw.length ? `<div class="section-head"><h2>${t('firmwareSection')}</h2></div><div class="grid">${fw.map(catalogCard).join('')}</div>` : '') +
-    (rc.length ? `<div class="section-head"><h2>${t('recipeSection')}</h2></div><div class="grid">${rc.map(catalogCard).join('')}</div>` : '') +
-    (!items.length ? `<div class="empty"><p class="sub">${state.releases.length ? t('noCatalog') : t('noRelease')}</p></div>` : ''));
+  shownItems = catalogItems().filter(it => (catalogFilter === 'all' || it.kind === catalogFilter) &&
+    (sourceFilter === 'any' || (sourceFilter === 'official') === !!it.official) &&
+    (!q || `${it.title} ${it.description || ''} ${it.maker || ''} ${it.source}`.toLowerCase().includes(q)));
+  const fw = shownItems.map((it, i) => [it, i]).filter(([it]) => it.kind === 'firmware');
+  const rc = shownItems.map((it, i) => [it, i]).filter(([it]) => it.kind === 'recipe');
+  setHtml($('#catalogBody'), (catalogData ? '' : `<p class="sub" style="margin:12px 2px">${t('catalogOffline')}</p>`) +
+    (fw.length ? `<div class="section-head"><h2>${t('firmwareSection')}</h2></div><div class="grid">${fw.map(([it, i]) => catalogCard(it, i)).join('')}</div>` : '') +
+    (rc.length ? `<div class="section-head"><h2>${t('recipeSection')}</h2></div><div class="grid">${rc.map(([it, i]) => catalogCard(it, i)).join('')}</div>` : '') +
+    (!shownItems.length ? `<div class="empty"><p class="sub">${catalogLoading ? t('checking') : t('noCatalog')}</p></div>` : ''));
 }
 
-// Example specs of the generic device become recipes: their connections
+// Example specs of the generic device, when the catalog is not reachable
 async function loadRecipes() {
   const r = await api('api/specs');
   exampleTexts = r.examples || {};
   const out = [];
   for (const [id, text] of Object.entries(exampleTexts)) {
     const c = await api('api/specs', {text, check_only: true});
-    if (c.spec && c.spec.app === 'generic') {
-      out.push({id, title: c.spec.name, rows: (c.spec.connections || []).map(x => ({slot: x.slot, type: x.type, pin: x.pin, pin2: x.scl, inverted: x.inverted, name: x.name}))});
-    }
+    if (c.spec && c.spec.app === 'generic') out.push({id, title: c.spec.name, connections: c.spec.connections || []});
   }
   recipes = out;
   render();
 }
 
-function useRecipe(id) {
-  const recipe = recipes.find(r => r.id === id);
-  openWizard('recipeTarget', null, {recipe});
+// The details of a catalog item, like the Marketplace's project page
+let item = null;
+function openItem(i) {
+  item = shownItems[i];
+  renderItem();
+  if (!$('#itemDlg').open) $('#itemDlg').showModal();
+}
+function renderItem() {
+  const it = item;
+  const rows = rowsOf(it.connections);
+  const facts = [
+    [t('source'), `<a href="https://github.com/${esc(it.source)}" target="_blank" rel="noopener">${esc(it.source)}</a>`],
+    it.version ? [t('version'), esc(it.version)] : null,
+    it.stars !== undefined ? [t('stars'), esc(it.stars)] : null,
+    it.downloads !== undefined ? [t('downloads'), esc(it.downloads)] : null,
+    it.updated ? [t('updated'), esc(new Date(it.updated).toLocaleDateString('en', {dateStyle: 'medium'}))] : null,
+    it.key_sha256 ? [t('keyFingerprint'), `<span class="mono">${esc(it.key_sha256.slice(0, 16))}…</span>`] : null,
+  ].filter(Boolean);
+  const canInstall = it.kind === 'firmware' && it.factory;
+  setHtml($('#itemBody'), `<div class="head" style="display:flex;gap:10px;align-items:center"><span class="ico">${icon(it.kind === 'firmware' ? 'chip' : 'recipe')}</span>
+      <div style="flex:1"><h2>${esc(it.title)}</h2><div class="sub">${esc(it.maker || '')}</div></div>${badge(it)}</div>
+    ${it.description ? `<p>${esc(it.description)}</p>` : ''}
+    ${rows.length ? `<div style="margin:10px 0">${rows.map(r => `<div class="row"><div class="label">${esc(r.name)}</div><div class="sub">${esc(TEXT.types[r.type] || r.type)} · GPIO ${r.pin}${r.type === 'sht4x' ? ' / ' + r.pin2 : ''}</div></div>`).join('')}</div>` : ''}
+    ${facts.map(([k, v]) => `<div class="row"><div class="label sub">${k}</div><div>${v}</div></div>`).join('')}
+    ${it.official ? '' : `<div class="banner" style="margin-top:12px;background:var(--warnchip)"><span class="grow sub" style="color:var(--fg)">${t('communityNotice')}</span></div>`}
+    ${it.kind === 'firmware' && !it.factory ? `<p class="sub">${t('updateOnly')}</p>` : ''}
+    <div class="actions end"><button class="plain" onclick="$('#itemDlg').close()">${t('close')}</button>
+      ${canInstall ? `<button class="pri" onclick="installItem()">${t('install')}</button>` : ''}
+      ${it.kind === 'recipe' ? `<button class="pri" onclick="useItem()">${t('use')}</button>` : ''}</div>`);
+}
+
+// Community items need the user's consent once, like the Marketplace
+function communityGate(then) {
+  if (item.official || state.settings.community_ok) { then(); return; }
+  setHtml($('#itemBody'), `<h2>${t('gateTitle')}</h2><ul class="steps">${TEXT.gateTips.map(x => `<li class="sub">${esc(x)}</li>`).join('')}</ul>
+    <label class="check" style="margin-top:12px"><input type="checkbox" id="gateOk">${t('gateCheck')}</label>
+    <div class="actions end"><button class="plain" onclick="renderItem()">${t('back')}</button>
+      <button class="pri" id="gateGo">${t('next')}</button></div>`);
+  $('#gateGo').onclick = async () => {
+    if (!$('#gateOk').checked) return;
+    await api('api/settings', {community_ok: true});
+    await refresh();
+    then();
+  };
+}
+
+function useItem() {
+  communityGate(() => {
+    const recipe = {id: item.id, title: item.title, rows: rowsOf(item.connections)};
+    $('#itemDlg').close();
+    openWizard('recipeTarget', null, {recipe});
+  });
+}
+
+function installItem() {
+  communityGate(async () => {
+    if (!sourceAdded(item.source)) { addSourceFlow(item.source, item.key_sha256, () => installItem()); return; }
+    $('#itemDlg').close();
+    openWizard('method', null, {file: item.factory});
+  });
+}
+
+// Adding a source pins its key: the user sees the fingerprint first
+async function addSourceFlow(repo, expected, then) {
+  const dlgOpen = $('#itemDlg').open;
+  const target = dlgOpen ? $('#itemBody') : $('#sourceResult');
+  setHtml(target, `<p class="sub">${t('checking')}</p>`);
+  const p = await api('api/sources/preview', {repo});
+  if (p.error) {
+    setHtml(target, `<div class="error">${esc(p.error)}</div>${dlgOpen ? `<div class="actions end"><button class="plain" onclick="renderItem()">${t('back')}</button></div>` : ''}`);
+    return;
+  }
+  const mismatch = expected && expected !== p.fingerprint;
+  setHtml(target, `<h2>${t('addSourceTitle', esc(p.repo))}</h2>
+    <p class="sub">${esc(p.description)}</p>
+    <div class="row"><div class="label sub">${t('maker')}</div><div>${esc(p.owner)}</div></div>
+    <div class="row"><div class="label sub">${t('stars')}</div><div>${esc(p.stars)}</div></div>
+    <div class="row"><div class="label sub">${t('keyFingerprint')}</div><div class="mono">${esc(p.fingerprint.match(/.{1,16}/g).join(' '))}</div></div>
+    ${mismatch ? `<div class="error">${t('keyMismatch')}</div>` : `<p class="sub">${t('addSourceHelp')}</p>`}
+    <div class="actions end"><button class="plain" id="srcCancel">${t('back')}</button>
+      ${mismatch ? '' : `<button class="pri" id="srcAdd">${t('addSource')}</button>`}</div>`);
+  $('#srcCancel').onclick = () => { if (dlgOpen) renderItem(); else setHtml(target, ''); };
+  if (!mismatch) $('#srcAdd').onclick = async () => {
+    setHtml(target, `<p class="sub">${t('checking')}</p>`);
+    const r = await api('api/sources/add', {repo: p.repo, fingerprint: p.fingerprint});
+    if (r.error) { setHtml(target, `<div class="error">${esc(r.error)}</div>`); return; }
+    await refresh();
+    if (dlgOpen) then && then(); else setHtml(target, '');
+  };
+}
+async function removeSource(repo) {
+  if (!confirm(t('confirmRemoveSource', repo))) return;
+  await api('api/sources/remove', {repo});
+  refresh();
 }
 
 // ---------------------------------------------------------------- developer
@@ -600,7 +754,7 @@ function showTab(name) {
   $('#searchBox').hidden = name === 'developer';
   $('#search').placeholder = name === 'catalog' ? t('searchCatalog') : t('searchDevices');
   $('#search').value = name === 'catalog' ? catalogQuery : query;
-  if (name === 'catalog' && !recipes) loadRecipes();
+  if (name === 'catalog' && !catalogData) loadCatalog();
   if (name === 'developer' && !specs) loadSpecs();
   render();
 }
@@ -609,6 +763,11 @@ $('#search').oninput = () => { if (tab === 'catalog') catalogQuery = $('#search'
 $$('#catalogFilters button').forEach(b => { b.onclick = () => {
   catalogFilter = b.dataset.filter;
   $$('#catalogFilters button').forEach(x => x.classList.toggle('on', x === b));
+  render();
+}; });
+$$('#sourceFilters button').forEach(b => { b.onclick = () => {
+  sourceFilter = b.dataset.source;
+  $$('#sourceFilters button').forEach(x => x.classList.toggle('on', x === b));
   render();
 }; });
 
@@ -721,7 +880,7 @@ async function openDevice(id, which, recipe) {
     if (recipe) {
       editRows = recipe.rows.map(r => ({...r, pin: managed.io.pins.includes(r.pin) ? r.pin : managed.io.pins[0],
         pin2: managed.io.pins.includes(r.pin2) ? r.pin2 : managed.io.pins[1]}));
-      $('#recipeNotice').textContent = t('fromRecipe', recipe.title);
+      $('#recipeNotice').innerHTML = `${esc(t('fromRecipe', recipe.title))} <button class="text" onclick="saveAndApply()">${t('saveApply')}</button>`;
       $('#recipeNotice').hidden = false;
     }
     $('#mYaml').value = toYaml($('#mName').value, editRows);
@@ -898,6 +1057,12 @@ async function saveManage() {
   note(lines.length ? t('saved') : t('unchanged'));
 }
 
+// A recipe in one go: into the draft, then a restart with it on trial
+async function saveAndApply() {
+  await saveManage();
+  if ($('#mError').hidden && managed && managed.io.changed) applyManage();
+}
+
 // After "apply" the device restarts: wait until it answers, then show the trial
 async function applyManage() {
   try { await proxyCommand(managed.id, 'io apply'); } catch (e) {}
@@ -982,12 +1147,19 @@ function renderWizard() {
       : `<p class="sub">${t('noFactory')}</p>`;
   } else if (wiz.step === 'method') {
     title = t('wMethod');
-    if (!serialOk() && wiz.method === 'browser') wiz.method = 'download';
+    if (!serialOk() && wiz.method === 'browser') { wiz.method = 'host'; if (!wiz.ports) loadPorts(); }
     body = `<div class="sub mono">${esc(wiz.file)}</div><div class="choices">
       ${choice(wiz.method === 'browser', 'usb', t('mBrowser'), serialOk() ? t('mBrowserHelp') : t('mBrowserNo'), "wiz.method = 'browser'; renderWizard()", serialOk() ? '' : 'disabled')}
+      ${choice(wiz.method === 'host', 'chip', t('mHost'), t('mHostHelp'), "wiz.method = 'host'; loadPorts()")}
       ${choice(wiz.method === 'download', 'download', t('mDownload'), t('mDownloadHelp'), "wiz.method = 'download'; renderWizard()")}</div>
-      ${wiz.method === 'browser' ? `<label class="check sub"><input type="checkbox" ${wiz.backup ? 'checked' : ''} onchange="wiz.backup = this.checked">${t('backupFirst')}</label>` : ''}
-      <div class="actions end"><button class="plain" onclick="go('firmware')">${t('back')}</button><button class="pri" onclick="startInstall()">${t('install')}</button></div>`;
+      ${wiz.method === 'host' ? (wiz.ports && wiz.ports.length
+        ? `<div class="row"><label class="field" style="flex:1"><span>${t('usbPort')}</span><select onchange="wiz.port = this.value || null; renderWizard()">
+              <option value="">${t('choosePort')}</option>${wiz.ports.map(p => `<option value="${esc(p.path)}" ${p.path === wiz.port ? 'selected' : ''}>${esc(p.name)}${isEspressif(p) ? ' (ESP32)' : ''}</option>`).join('')}</select></label>
+            <button class="plain" onclick="loadPorts()">${t('refresh')}</button></div>
+          <div class="sub warnText">${t('portWarning')}</div>`
+        : `<div class="row"><div class="label sub">${wiz.ports ? t('noPorts') : t('checking')}</div><button class="plain" onclick="loadPorts()">${t('refresh')}</button></div>`) : ''}
+      ${wiz.method !== 'download' ? `<label class="check sub"><input type="checkbox" ${wiz.backup ? 'checked' : ''} onchange="wiz.backup = this.checked">${t('backupFirst')}</label>` : ''}
+      <div class="actions end"><button class="plain" onclick="go('firmware')">${t('back')}</button><button class="pri" onclick="startInstall()" ${wiz.method === 'host' && !wiz.port ? 'disabled' : ''}>${t('install')}</button></div>`;
   } else if (wiz.step === 'install') {
     title = t('wInstalling');
     body = `<p id="wStatus">${esc(wiz.status)}</p>${wiz.progress !== undefined ? `<div class="progress"><i style="width:${wiz.progress}%"></i></div>` : ''}
@@ -1022,7 +1194,49 @@ function renderWizard() {
 
 // Install via USB in the browser (Web Serial, esptool-js 0.7.0 shipped with
 // the add-on): optional full-flash backup first, then the factory image at 0
+const isEspressif = p => /espressif|usb_jtag|esp32/i.test(p.path + p.name);
+
+async function loadPorts() {
+  if (wiz.portsLoading) return;
+  wiz.portsLoading = true;
+  wiz.ports = null;
+  renderWizard();
+  const r = await api('api/serial');
+  if (!wiz) return;
+  wiz.portsLoading = false;
+  // Espressif's own USB first; nothing chosen for the user: other ports may be a
+  // Zigbee stick or another device that must not be touched
+  wiz.ports = (r.ports || []).sort((a, b) => isEspressif(b) - isEspressif(a));
+  if (!wiz.ports.some(p => p.path === wiz.port)) wiz.port = null;
+  renderWizard();
+}
+
+// On the Home Assistant machine: the add-on runs esptool as a job; follow it here
+async function installOnHost() {
+  const port = wiz.ports.find(p => p.path === wiz.port);
+  if (!port || !confirm(t('confirmPort', port.name))) return;
+  wiz.step = 'install'; wiz.error = ''; wiz.progress = 0; wiz.status = t('usbConnecting');
+  renderWizard();
+  const r = await api('api/flash', {port: wiz.port, file: wiz.file, backup: wiz.backup});
+  if (!r.started) { wiz.error = r.error || t('jobBusy'); renderWizard(); return; }
+  for (;;) {
+    await new Promise(res => setTimeout(res, 1500));
+    if (!wiz) return;
+    const j = await api('api/job');
+    const p = j.progress || {};
+    wiz.status = p.phase || t('usbConnecting');
+    wiz.progress = p.total ? Math.round(100 * p.done / p.total) : 0;
+    if (!j.running) {
+      if (j.ok) { wiz.status = ''; go('setup'); }
+      else { wiz.error = (j.log.trim().split('\n').filter(l => !l.startsWith('==')).pop() || t('jobFailed')); renderWizard(); }
+      return;
+    }
+    renderWizard();
+  }
+}
+
 async function startInstall() {
+  if (wiz.method === 'host') { installOnHost(); return; }
   if (wiz.method === 'download') {
     const a = document.createElement('a');
     a.href = `api/download/${encodeURIComponent(wiz.file)}`;
@@ -1103,7 +1317,9 @@ function renderSettings() {
   const dev = state.settings.dev_mode;
   $('#devMode').checked = dev;
   $('#devSettings').hidden = !dev;
-  $('#releaseInfo').textContent = state.release ? t('signedRelease', state.release) : (state.release_error || t('noReleases'));
+  setHtml($('#sourceList'), (state.sources || []).map(s => `<div class="row"><div class="label">${esc(s.repo)}
+      <div class="sub">${s.error ? esc(s.error) : s.release ? t('signedRelease', esc(s.release)) : t('noReleases')}</div></div>
+      ${s.official ? `<span class="chip accent">${t('official')}</span>` : `<button class="warn" onclick="removeSource('${esc(s.repo)}')">${t('remove')}</button>`}</div>`).join(''));
   const sys = state.system;
   $('#system').textContent = `${sys.cores} ${t('cores')} · ${gb(sys.memory)} ${t('memory')} · ${gb(sys.disk_free)} ${t('disk')}`;
   $('#systemAdvice').textContent = t('fewCores');
@@ -1122,7 +1338,8 @@ $('#bulkWifi').onsubmit = async e => {
   $('#bulkRows').innerHTML = (r.results || []).map(x => `<div class="row"><div class="label">${esc(x.name)}<div class="sub">${esc(x.text)}</div></div>
     <span class="chip ${x.ok ? 'ok' : 'bad'}">${x.ok ? 'OK' : '!'}</span></div>`).join('');
 };
-$('#checkReleases').onclick = async () => { await api('api/releases/check', {}); refresh(); };
+$('#checkReleases').onclick = async () => { await api('api/releases/check', {}); catalogData = null; refresh(); };
+$('#sourceForm').onsubmit = e => { e.preventDefault(); const repo = $('#sourceRepo').value.trim().replace(/^https:\/\/github\.com\//, '').replace(/\/$/, ''); if (repo) addSourceFlow(repo); };
 $('#devMode').onchange = async () => { await api('api/settings', {dev_mode: $('#devMode').checked}); refresh(); };
 $('#toolchainBtn').onclick = async () => { await api('api/toolchain', {}); refresh(); };
 
@@ -1131,7 +1348,7 @@ document.addEventListener('click', e => {
   $$('details.more[open]').forEach(d => { if (!d.contains(e.target)) d.open = false; });
 });
 
-for (const [sel, ic] of [['#dClose', 'close'], ['#wClose', 'close'], ['#sClose', 'close'], ['#emptyIcon', 'chip']]) $(sel).innerHTML = icon(ic);
+for (const [sel, ic] of [['#dClose', 'close'], ['#wClose', 'close'], ['#sClose', 'close'], ['#iClose', 'close'], ['#emptyIcon', 'chip']]) $(sel).innerHTML = icon(ic);
 applyTexts();
 showTab('devices');
 refresh().then(loadStatuses);

@@ -1,0 +1,11 @@
+# A recipe: a generic device with its connections, nothing else. Wi-Fi,
+# Thread and passwords are set on the device itself, never here.
+device:
+  name: Example
+  app: generic
+  board: esp32-c6
+  version: 0.1.0
+
+connections:
+  - { slot: 0, type: relay, pin: 4, name: Lamp }
+  - { slot: 1, type: button, pin: 5, name: Switch }

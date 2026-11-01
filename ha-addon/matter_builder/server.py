@@ -50,16 +50,26 @@ RELEASE_KEY = HERE / "release-key.pem"
 # Where ready-made firmware comes from: GitHub releases, signed (see
 # .github/workflows/release.yml); the add-on option "releases_repo" overrides it
 DEFAULT_RELEASES_REPO = "bramboe/matter-builder"
+# Other package sources (GitHub repositories) keep their public key here, at
+# the root of their default branch; the add-on pins it when a source is added
+SOURCE_KEY_FILE = "matter-builder-key.pem"
+REPO_NAME = re.compile(r"^[A-Za-z0-9-]{1,39}/[A-Za-z0-9._-]{1,100}$")
+# The catalog of all package sources, built nightly by .github/workflows/catalog.yml
+DEFAULT_CATALOG_URL = "https://bramboe.github.io/matter-builder/catalog.json"
 SUPERVISOR_TOKEN = os.environ.get("SUPERVISOR_TOKEN", "")
 FIRMWARE = DATA / "firmware"
 FACTORY = FIRMWARE / "factory"  # images for a new ESP32 (USB)
 JOB_LOG = DATA / "job.log"
+# Flash backups before installing over USB on this machine: in Home
+# Assistant's share folder, so they can be fetched over Samba or the file editor
+BACKUPS = Path(os.environ.get("MB_BACKUPS", "/share/matter-builder/backups"))
 
 lock = threading.Lock()
 job = {"kind": None, "running": False, "ok": None, "started": 0, "title": ""}
 links = {}  # link id -> request on its way (the password only lives here)
 found = {}  # device id -> a Matter Builder device seen on the network
-release_state = {"release": None, "images": [], "factory": [], "packages": [], "error": None, "checked": 0}
+release_state = {"release": None, "images": [], "factory": [], "packages": [], "sources": [], "error": None, "checked": 0}
+catalog_cache = {"data": None, "error": None, "fetched": 0}
 
 
 # ---------------------------------------------------------------- storage
@@ -252,6 +262,7 @@ def resolve(host):
 
 ANSI = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
 STEP = re.compile(r"^\[(\d+)/(\d+)\]")
+PERCENT = re.compile(r"\((\d+) ?%\)")  # esptool: "Writing at 0x00010000... (12 %)"
 
 
 def clean_log(text):
@@ -269,6 +280,9 @@ def progress(text):
         match = STEP.match(line)
         if match:
             done, total = int(match.group(1)), int(match.group(2))
+        match = PERCENT.search(line)
+        if match:
+            done, total = int(match.group(1)), 100
     return {"phase": phase, "done": done, "total": total}
 
 
@@ -370,11 +384,15 @@ def update_proxy(proxy, image):
 
 # ---------------------------------------------------------------- releases
 
-def releases_repo():
+def option(name, default):
     try:
-        return json.loads((DATA / "options.json").read_text()).get("releases_repo") or DEFAULT_RELEASES_REPO
+        return json.loads((DATA / "options.json").read_text()).get(name) or default
     except (OSError, ValueError):
-        return DEFAULT_RELEASES_REPO
+        return default
+
+
+def releases_repo():
+    return option("releases_repo", DEFAULT_RELEASES_REPO)
 
 
 def download(url, timeout=60, accept="application/octet-stream"):
@@ -383,37 +401,112 @@ def download(url, timeout=60, accept="application/octet-stream"):
         return reply.read()
 
 
-def signature_ok(manifest, signature):
-    """ECDSA P-256 over SHA-256, checked with openssl against the add-on's key."""
+def key_fingerprint(pem):
+    """SHA-256 of an ECDSA P-256 public key (DER), or None when it is not one."""
+    with tempfile.TemporaryDirectory() as tmp:
+        (Path(tmp) / "k").write_bytes(pem)
+        text = subprocess.run(["openssl", "pkey", "-pubin", "-in", str(Path(tmp) / "k"), "-noout", "-text"],
+                              capture_output=True, text=True)
+        if text.returncode != 0 or "prime256v1" not in text.stdout and "P-256" not in text.stdout:
+            return None
+        der = subprocess.run(["openssl", "pkey", "-pubin", "-in", str(Path(tmp) / "k"), "-outform", "DER"],
+                             capture_output=True)
+    return hashlib.sha256(der.stdout).hexdigest() if der.returncode == 0 else None
+
+
+def signature_ok(manifest, signature, key_pem):
+    """ECDSA P-256 over SHA-256, checked with openssl against a source's key."""
     with tempfile.TemporaryDirectory() as tmp:
         (Path(tmp) / "m").write_bytes(manifest)
         (Path(tmp) / "s").write_bytes(signature)
-        result = subprocess.run(["openssl", "dgst", "-sha256", "-verify", str(RELEASE_KEY), "-signature",
+        (Path(tmp) / "k").write_bytes(key_pem)
+        result = subprocess.run(["openssl", "dgst", "-sha256", "-verify", str(Path(tmp) / "k"), "-signature",
                                  str(Path(tmp) / "s"), str(Path(tmp) / "m")], capture_output=True)
     return result.returncode == 0
 
 
-def check_releases():
-    """The latest release: only kept when its manifest's signature is valid."""
-    repo = releases_repo()
+def sources():
+    """The project's own releases first (its key ships with the add-on), then
+    the package sources added by the user, each with the key pinned then."""
+    own = releases_repo()
+    out = [{"repo": own, "key": RELEASE_KEY.read_text(), "official": True}]
+    for src in load_settings().get("sources", []):
+        if src.get("repo") != own:
+            out.append({"repo": src["repo"], "key": src["key"], "official": False})
+    return out
+
+
+def check_source(src):
+    """A source's latest release, only when its manifest's signature is valid."""
+    result = {"repo": src["repo"], "official": src["official"], "release": None, "error": None, "data": {}, "assets": {}}
     try:
-        info = json.loads(download(f"https://api.github.com/repos/{repo}/releases/latest", 20,
+        info = json.loads(download(f"https://api.github.com/repos/{src['repo']}/releases/latest", 20,
                                      accept="application/vnd.github+json"))
         assets = {a["name"]: a["browser_download_url"] for a in info.get("assets", [])}
         manifest = download(assets["manifest.json"])
         signature = download(assets["manifest.json.sig"])
     except (OSError, ValueError, KeyError) as err:
-        release_state.update(images=[], factory=[], packages=[], error=f"{repo}: {err}", checked=int(time.time()))
-        return
-    if not signature_ok(manifest, signature):
-        release_state.update(images=[], factory=[], packages=[], error="signature does not match: release ignored",
-                             checked=int(time.time()))
-        return
-    data = json.loads(manifest)
-    def present(kind):
-        return [dict(img, url=assets[img["file"]]) for img in data.get(kind, []) if img["file"] in assets]
-    release_state.update(release=data.get("release"), images=present("images"), factory=present("factory"),
-                         packages=data.get("packages", []), error=None, checked=int(time.time()))
+        result["error"] = f"{src['repo']}: {err}"
+        return result
+    if not signature_ok(manifest, signature, src["key"].encode()):
+        result["error"] = f"{src['repo']}: signature does not match: release ignored"
+        return result
+    result.update(data=json.loads(manifest), assets=assets)
+    result["release"] = result["data"].get("release")
+    return result
+
+
+def check_releases():
+    """All sources; an image name that two sources use is taken from the first."""
+    results = [check_source(src) for src in sources()]
+    merged = {"images": [], "factory": [], "packages": []}
+    seen = set()
+    for res in results:
+        for kind in ("images", "factory"):
+            for img in res["data"].get(kind, []):
+                if img["file"] in res["assets"] and (kind, img["file"]) not in seen:
+                    seen.add((kind, img["file"]))
+                    merged[kind].append(dict(img, url=res["assets"][img["file"]], source=res["repo"], official=res["official"]))
+        for pkg in res["data"].get("packages", []):
+            merged["packages"].append(dict(pkg, source=res["repo"], official=res["official"]))
+    own = results[0]
+    release_state.update(release=own["release"], error=own["error"], checked=int(time.time()),
+                         sources=[{k: r[k] for k in ("repo", "official", "release", "error")} for r in results], **merged)
+
+
+def preview_source(repo):
+    """What the user confirms before adding a source: its key's fingerprint."""
+    if not REPO_NAME.match(repo):
+        return {"error": "not a GitHub repository (owner/name)"}
+    try:
+        info = json.loads(download(f"https://api.github.com/repos/{repo}", 20, accept="application/vnd.github+json"))
+    except urllib.error.HTTPError as err:
+        return {"error": f"{repo} was not found on GitHub" if err.code == 404 else f"{repo}: {err}"}
+    except (OSError, ValueError) as err:
+        return {"error": f"{repo}: {err}"}
+    try:
+        pem = download(f"https://raw.githubusercontent.com/{repo}/HEAD/{SOURCE_KEY_FILE}", 20)
+    except urllib.error.HTTPError as err:
+        return {"error": f"{repo} is not a package source: it has no {SOURCE_KEY_FILE}" if err.code == 404 else f"{repo}: {err}"}
+    except OSError as err:
+        return {"error": f"{repo}: {err}"}
+    fingerprint = key_fingerprint(pem)
+    if not fingerprint:
+        return {"error": f"{repo} has no valid {SOURCE_KEY_FILE}"}
+    return {"repo": repo, "fingerprint": fingerprint, "key": pem.decode(), "description": info.get("description") or "",
+            "stars": info.get("stargazers_count", 0), "owner": info.get("owner", {}).get("login", "")}
+
+
+def catalog():
+    """The catalog of package sources, fetched at most once an hour."""
+    if catalog_cache["data"] is None or time.time() - catalog_cache["fetched"] > 3600:
+        try:
+            catalog_cache.update(data=json.loads(download(option("catalog_url", DEFAULT_CATALOG_URL), 20,
+                                                          accept="application/json")), error=None)
+        except (OSError, ValueError) as err:
+            catalog_cache["error"] = str(err)
+        catalog_cache["fetched"] = time.time()
+    return {"catalog": catalog_cache["data"], "error": catalog_cache["error"]}
 
 
 def releases_loop():
@@ -436,6 +529,43 @@ def release_image(name, kind="images"):
             raise ValueError("downloaded firmware does not match the signed hash")
         path.write_bytes(data)
     return path
+
+
+# ---------------------------------------------------------------- USB on this machine
+
+def serial_ports():
+    """USB serial ports on the Home Assistant machine (the add-on has "uart"),
+    by their stable name when there is one."""
+    ports, seen = [], set()
+    by_id = Path("/dev/serial/by-id")
+    for link in sorted(by_id.glob("*")) if by_id.exists() else []:
+        target = str(link.resolve())
+        seen.add(target)
+        ports.append({"path": str(link), "name": link.name.removeprefix("usb-").replace("_", " ")})
+    for dev in sorted(Path("/dev").glob("tty[UA][SC][BM]*")):
+        if str(dev) not in seen:
+            ports.append({"path": str(dev), "name": dev.name})
+    return ports
+
+
+def flash_on_host(port, image, backup):
+    """A factory image at 0 with esptool, after a backup of the whole flash."""
+    esptool = ["python3", "-m", "esptool", "--chip", "esp32c6", "-p", port, "-b", "460800"]
+    if backup:
+        BACKUPS.mkdir(parents=True, exist_ok=True)
+        target = BACKUPS / f"backup-esp32c6-{time.strftime('%Y%m%d-%H%M%S')}.bin"
+        log(f"== Backup of the whole flash to {target}")
+        if not run_logged([*esptool, "read_flash", "0", "ALL", str(target)]):
+            return False
+    log(f"== Installing {image.name}")
+    return run_logged([*esptool, "write_flash", "0x0", str(image)])
+
+
+def run_logged(cmd):
+    with JOB_LOG.open("a") as out:
+        result = subprocess.run(cmd, stdout=out, stderr=subprocess.STDOUT)
+    log(f"== exit {result.returncode}")
+    return result.returncode == 0
 
 
 # ---------------------------------------------------------------- discovery
@@ -723,15 +853,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path == "/esptool.js":
             # esptool-js 0.7.0 (Apache-2.0, www/esptool-js.LICENSE): USB flashing in the browser
             return self.reply((HERE / "www" / "esptool.js").read_bytes(), ctype="text/javascript; charset=utf-8")
+        if path == "/api/catalog":
+            return self.reply(catalog())
+        if path == "/api/serial":
+            return self.reply({"ports": serial_ports()})
         if path == "/api/state":
             with lock:
                 current = dict(job)
             proxies = [{k: p.get(k) for k in ("id", "name", "host", "added", "app")} for p in load_proxies()]
             return self.reply({"proxies": proxies, "found": found_unlinked(), "toolchain": toolchain_ready(),
                                "builds": builds(), "job": current,
-                               "releases": [{k: i[k] for k in ("file", "app", "version")} for i in release_state["images"]],
-                               "release_factory": [{k: i[k] for k in ("file", "app", "version")}
+                               "releases": [{k: i[k] for k in ("file", "app", "version", "source", "official")}
+                                            for i in release_state["images"]],
+                               "release_factory": [{k: i[k] for k in ("file", "app", "version", "source", "official")}
                                                    for i in release_state["factory"]],
+                               "sources": release_state["sources"],
                                "packages": release_state["packages"],
                                "release": release_state["release"], "release_error": release_state["error"],
                                "settings": load_settings(), "system": system_info()})
@@ -827,8 +963,47 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path == "/api/releases/check":
             check_releases()
             return self.reply({"ok": release_state["error"] is None, "error": release_state["error"]})
+        if path == "/api/flash":
+            port = str(data.get("port", ""))
+            if port not in [p["path"] for p in serial_ports()]:
+                return self.reply({"error": "unknown USB port"}, 400)
+            name = Path(str(data.get("file", ""))).name
+            image = FACTORY / name
+            if not image.is_file():
+                try:
+                    image = release_image(name, "factory")
+                except (OSError, ValueError) as err:
+                    return self.reply({"error": str(err)}, 502)
+            if image is None or not image.is_file():
+                return self.reply({"error": "unknown firmware"}, 400)
+            backup = bool(data.get("backup", True))
+            started = start_job("flash", name, lambda: flash_on_host(port, image, backup))
+            return self.reply({"started": started})
+        if path == "/api/sources/preview":
+            return self.reply(preview_source(str(data.get("repo", "")).strip()))
+        if path == "/api/sources/add":
+            found_source = preview_source(str(data.get("repo", "")).strip())
+            if "error" in found_source:
+                return self.reply(found_source, 400)
+            if found_source["fingerprint"] != data.get("fingerprint"):
+                return self.reply({"error": "the key changed since it was shown: check the source again"}, 409)
+            settings = load_settings()
+            settings["sources"] = [x for x in settings.get("sources", []) if x["repo"] != found_source["repo"]] + [
+                {"repo": found_source["repo"], "key": found_source["key"], "fingerprint": found_source["fingerprint"],
+                 "added": int(time.time())}]
+            save_settings(settings)
+            check_releases()
+            return self.reply({"ok": True})
+        if path == "/api/sources/remove":
+            settings = load_settings()
+            settings["sources"] = [x for x in settings.get("sources", []) if x["repo"] != data.get("repo")]
+            save_settings(settings)
+            check_releases()
+            return self.reply({"ok": True})
         if path == "/api/settings":
             settings = load_settings()
+            if "community_ok" in data:
+                settings["community_ok"] = bool(data["community_ok"])
             if "dev_mode" in data:
                 settings["dev_mode"] = bool(data["dev_mode"])
             save_settings(settings)

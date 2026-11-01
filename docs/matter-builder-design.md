@@ -452,10 +452,10 @@ settings: {}              # following the package's schema
 
 ### 16.6 Order of work
 1. Factory images and package descriptions in the release and the manifest. (Done 2026-11-01.)
-2. Installing without building for `generic` (§16.5), with the pages of §16.4.
-3. Flashing on the HA host (§16.5, way 2).
-4. The package format with schema, and the first package in a source of its own.
-5. Package sources in the add-on, plus the template repository.
-6. Catalog: the Action, `catalog.json` on Pages, the block list and the Catalog page.
+2. Installing without building for `generic` (§16.5), with the pages of §16.4. (Done 2026-11-01, add-on 0.8.)
+3. Flashing on the HA host (§16.5, way 2). (Done 2026-11-01, add-on 0.9.)
+4. The package format with schema, and the first package in a source of its own. (Format 1 without a settings schema; first source still to do.)
+5. Package sources in the add-on, plus the template repository. (Add-on 0.9; template in `template/`.)
+6. Catalog: the Action, `catalog.json` on Pages, the block list and the Catalog page. (`tools/build_catalog.py`, `.github/workflows/catalog.yml`, `catalog/`.)
 7. Flash page on GitHub Pages (§16.5, way 3).
 8. Documentation: "making a package" and "sharing a recipe".

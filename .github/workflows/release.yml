@@ -19,6 +19,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 env:
   IDF_IMAGE: espressif/idf:v5.5.5
@@ -72,3 +73,5 @@ jobs:
         run: |
           gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes "Signed firmware for the ESP32-C6" \
             /mnt/mb/firmware/*.bin /mnt/mb/firmware/factory/*.bin /mnt/mb/firmware/manifest.json /mnt/mb/firmware/manifest.json.sig
+          # A release made with this token starts no other workflow by itself
+          gh workflow run catalog.yml --ref main

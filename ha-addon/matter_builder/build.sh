@@ -2,6 +2,8 @@
 # Builds one application for the ESP32-C6 from the sources in the image:
 #   build.sh generic         the generic device   (mb_generic-<version>.bin)
 #   build.sh spec <file>     a device spec (tools/mb_generate.py): <name>-<version>.bin
+#   build.sh project <dir>   an ESP-IDF project of a package source, on mb_core
+#                            from these sources (MB_COMPONENTS): <project>-<version>.bin
 # Each also gives factory/<project>-<version>-factory.bin for a new ESP32 (USB).
 # Nothing user-specific is built in: Wi-Fi, Thread, the password and what is
 # connected are set on the device's own page. Images land in $MB_DATA/firmware.
@@ -17,6 +19,7 @@ export CCACHE_DIR="$DATA/ccache"
 case "$APP" in
     generic) TITLE="Generic device" ;;
     spec) TITLE="Device from spec"; SPEC_FILE="${2:?usage: build.sh spec <file>}" ;;
+    project) TITLE="Package"; PROJECT_SRC="${2:?usage: build.sh project <dir>}" ;;
     *) echo "unknown application: $APP"; exit 2 ;;
 esac
 
@@ -32,6 +35,12 @@ if [ -f "$WORK/firmware/$APP/main/secrets.example.h" ]; then
 fi
 
 PROJECT_DIR="$WORK/firmware/$APP"
+export MB_COMPONENTS="$WORK/components"
+if [ "$APP" = project ]; then
+    PROJECT_DIR="$(cd "$PROJECT_SRC" && pwd)"
+    BUILD="$DATA/build/project-$(basename "$PROJECT_DIR")"
+    mkdir -p "$BUILD"
+fi
 if [ "$APP" = spec ]; then
     PROJECT_DIR="$DATA/work/spec"
     python3 "$WORK/tools/mb_generate.py" "$SPEC_FILE" "$PROJECT_DIR"

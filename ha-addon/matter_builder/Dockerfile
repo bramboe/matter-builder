@@ -10,8 +10,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         python3-dev python3-venv python3-pip unzip openssl \
     && rm -rf /var/lib/apt/lists/*
 
-# Finding devices on the network (mDNS) for the add-on's own server
-RUN python3 -m pip install --no-cache-dir --break-system-packages zeroconf==0.149.16
+# Finding devices on the network (mDNS) for the add-on's own server, and
+# esptool for installing over USB on the Home Assistant machine
+RUN python3 -m pip install --no-cache-dir --break-system-packages zeroconf==0.149.16 esptool==4.8.1
 
 # esp-matter at a fixed commit (release/v1.6), downloaded once into /data
 # (±6 GB) by toolchain.sh, together with the Python packages: the IDF

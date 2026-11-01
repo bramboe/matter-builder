@@ -1,7 +1,7 @@
 # Matter Builder: builds, links and updates the Matter/Thread proxies
 # (ESP32) of this repo from Home Assistant.
 name: Matter Builder
-version: "0.8.0"
+version: "0.9.1"
 slug: matter_builder
 description: Build, link and update ESP32 Matter/Thread proxies
 arch:
@@ -15,6 +15,11 @@ host_network: true
 ingress: true
 # Only for a notification when a new device is found
 homeassistant_api: true
+# USB serial ports, for installing on an ESP32 plugged into this machine
+uart: true
+# Flash backups go to /share/matter-builder/backups
+map:
+  - share:rw
 ingress_port: 8099
 panel_icon: mdi:chip
 panel_title: Matter Builder

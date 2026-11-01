@@ -1,12 +1,13 @@
 """Writes manifest.json for the firmware images in a folder and signs it.
 
-    MB_SIGNING_KEY=<PEM> python3 tools/release_manifest.py <folder> <release>
+    MB_SIGNING_KEY=<PEM> python3 tools/release_manifest.py <folder> <release> [<source root>]
 
 The manifest lists every update image (<project>-<version>.bin) with its
 application, version, chip, size and SHA-256; "factory" lists the images for a
 new ESP32 over USB (factory/<project>-<version>-factory.bin, bootloader,
 partition table and app in one) the same way, and "packages" what each
-firmware is, from firmware/*/package.yaml. Factory images have a list of their
+firmware is, from firmware/*/package.yaml and packages/*/package.yaml of the
+source root (this repository, or a package source's checkout). Factory images have a list of their
 own so an add-on that does not know them never offers one as an update. The
 signature
 (manifest.json.sig) is ECDSA P-256 over SHA-256 of manifest.json, made with
@@ -36,9 +37,9 @@ def image(path, stem):
             "size": len(data), "sha256": hashlib.sha256(data).hexdigest()}
 
 
-def packages(apps):
+def packages(apps, root):
     out = []
-    for path in sorted(ROOT.glob("firmware/*/package.yaml")):
+    for path in sorted([*root.glob("firmware/*/package.yaml"), *root.glob("packages/*/package.yaml")]):
         package = parse_yaml(path.read_text())
         missing = [k for k in PACKAGE_FIELDS if k not in package]
         if missing:
@@ -48,13 +49,13 @@ def packages(apps):
     return out
 
 
-def main(folder, release):
+def main(folder, release, root=ROOT):
     folder = Path(folder)
     images = [image(p, p.stem) for p in sorted(folder.glob("*.bin"))]
     factory = [image(p, p.stem.removesuffix("-factory")) for p in sorted(folder.glob("factory/*-factory.bin"))]
     manifest = folder / "manifest.json"
     manifest.write_text(json.dumps({"release": release, "images": images, "factory": factory,
-                                    "packages": packages({i["app"] for i in images})}, indent=2) + "\n")
+                                    "packages": packages({i["app"] for i in images}, Path(root))}, indent=2) + "\n")
 
     key = os.environ.get("MB_SIGNING_KEY", "")
     if not key:
@@ -71,4 +72,4 @@ def main(folder, release):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1], sys.argv[2])
+    main(*sys.argv[1:4])

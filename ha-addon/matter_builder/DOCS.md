@@ -11,8 +11,10 @@ device's page or in the add-on.
 
 ## What the add-on does
 
-- **Proxies**: the devices you linked, with their firmware, network and
-  connected devices, and a button to update them.
+- **Devices**: the devices you linked, with their state, firmware and what
+  is connected, and *Update to …* when a newer firmware of their kind exists.
+  Devices found on the network but not linked yet show up with *Adopt*.
+- **New device**: a wizard that installs firmware on a new ESP32 and links it.
 - **Linking**: give the address and password of a device's page, then press
   its BOOT button briefly (or switch its power off and on three times). The
   add-on gets a key of its own; it never stores the password. The device's
@@ -21,11 +23,11 @@ device's page or in the add-on.
   as a form or as YAML. Changes are saved as a draft on the device; *Apply*
   restarts it with the draft on trial, and *Keep* within 2 minutes makes it
   permanent. Without that, the device goes back by itself.
-- **All proxies**: send the Wi-Fi network for configuration mode to every
-  linked device at once, or update every device to the newest firmware of its
-  own kind, one after the other.
-- **Firmware**: ready-made firmware to install, and in **developer mode** your
-  own builds.
+- **Catalog**: firmware and recipes from the official source and from
+  community sources, with a page per item.
+- **Settings**: the Wi-Fi network for configuration mode of every device,
+  package sources, developer mode. *Update all* (top bar) updates every device
+  to the newest firmware of its own kind, one after the other.
 
 ## Ready-made firmware
 
@@ -35,12 +37,37 @@ signed by the project; the add-on checks the signature against the key it
 ships with and the hash of every image before installing anything. A release
 that does not match is ignored.
 
-Each firmware in a release also has a **factory image** for a new ESP32:
-open it under *Firmware*, connect the ESP32 with USB to the computer you use
-Home Assistant on, and choose *Install via USB*. That needs Chrome or Edge and
-Home Assistant opened over HTTPS; a backup of the whole flash is saved first
-unless you untick it. The ESP32 then opens its setup network, where you choose
-its password and network; link it here afterwards.
+Each firmware in a release also has a **factory image** for a new ESP32.
+*New device* installs it in one of three ways:
+
+- **Plug into this computer**: over USB from the browser. Needs Chrome or
+  Edge, and Home Assistant opened over HTTPS. The flash backup is downloaded.
+- **Plug into the Home Assistant machine**: the add-on flashes it itself with
+  esptool; works in any browser. The flash backup goes to
+  `/share/matter-builder/backups`.
+- **Download the file**: flash it yourself at address 0.
+
+The ESP32 then opens its setup network, where you choose its password and
+network; link it afterwards, and the wizard continues with its connections.
+
+## Catalog and package sources
+
+The catalog (built nightly on the project's GitHub Pages) lists firmware and
+recipes from every package source: GitHub repositories with the topic
+`matter-builder-package`.
+
+- A **recipe** is a generic device's connections, nothing else. *Use* puts it
+  on a new ESP32 or fills in a linked generic device's connections; nothing
+  changes on the device until you save and apply.
+- **Firmware** from a community source is only installed after you added the
+  source: the add-on then pins the source's key (you see its fingerprint
+  first), and from then on only accepts releases signed with that key.
+- The first community install asks you to confirm that the project did not
+  test or audit community items.
+
+Sources are listed under Settings, where you can add one by its GitHub name
+or remove it. To make a source of your own, start from the `template` folder
+of the project's repository.
 
 ## Own devices (developer mode)
 

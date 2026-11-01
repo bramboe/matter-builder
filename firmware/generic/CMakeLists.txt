@@ -9,8 +9,16 @@ set(MATTER_SDK_PATH ${ESP_MATTER_PATH}/connectedhomeip/connectedhomeip)
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 
+# mb_core: next to this project in the repository, or wherever MB_COMPONENTS
+# says (a package source building against a matter-builder checkout)
+if(DEFINED ENV{MB_COMPONENTS})
+    set(MB_COMPONENTS $ENV{MB_COMPONENTS})
+else()
+    set(MB_COMPONENTS "${CMAKE_CURRENT_LIST_DIR}/../../components")
+endif()
+
 set(EXTRA_COMPONENT_DIRS
-    "${CMAKE_CURRENT_LIST_DIR}/../../components"
+    "${MB_COMPONENTS}"
     "${MATTER_SDK_PATH}/config/esp32/components"
     "${ESP_MATTER_PATH}/components")
 

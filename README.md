@@ -38,7 +38,8 @@ design, including package sources and the catalog.
 | `ha-addon/matter_builder` | The Home Assistant add-on |
 | `tools/mb_generate.py` | Turns a device spec (YAML) into a project |
 | `tools/release_manifest.py` | Writes and signs a release manifest |
-| `examples/` | Example device specs |
+| `examples/` | Example device specs, and `examples/components/` (a component: a connection type of its own) |
+| `components/mb_driver` | The interface for components |
 | `.github/workflows/release.yml` | Builds and signs a release for a tag `v*` |
 | `.github/workflows/catalog.yml`, `tools/build_catalog.py`, `catalog/` | The catalog of package sources on GitHub Pages, with the block and verified lists |
 | `template/` | Start of a package source of your own |

@@ -16,6 +16,7 @@
 #include "nvs.h"
 
 #include "ble_scan.h"
+#include "io.h"
 #include "ir.h"
 
 namespace io {
@@ -86,6 +87,8 @@ esp_timer_handle_t trial_timer = nullptr;
 int64_t trial_end_us = 0;
 char device_name[33] = {};
 char last_ir[24] = "";  // the last infrared code received, for learning codes
+bool bluetooth = false;   // a connection listens to Bluetooth
+bool ble_pairing = false;
 Slot factory[SLOTS] = {};
 const char* factory_name = nullptr;
 
@@ -152,7 +155,45 @@ bool safe_pin(int pin) {
     return false;
 }
 
-bool is_output(Type type) { return type == Type::relay || type == Type::led; }
+// Component types: a type id from the name, so stored connections keep
+// their type when other components come or go
+constexpr int MAX_DRIVERS = 16;
+Driver drivers[MAX_DRIVERS];
+uint8_t driver_ids[MAX_DRIVERS];
+int driver_count = 0;
+
+uint8_t id_of(const char* name) {
+    uint8_t crc = 0;
+    for (const char* c = name; *c; ++c) {
+        crc ^= static_cast<uint8_t>(*c);
+        for (int bit = 0; bit < 8; ++bit) crc = (crc & 0x80) ? static_cast<uint8_t>((crc << 1) ^ 0x07) : static_cast<uint8_t>(crc << 1);
+    }
+    return static_cast<uint8_t>(0x40 | (crc & 0x3F));
+}
+
+const Driver* driver_of(Type type) {
+    for (int i = 0; i < driver_count; ++i) {
+        if (driver_ids[i] == static_cast<uint8_t>(type)) return &drivers[i];
+    }
+    return nullptr;
+}
+
+const char* type_name(Type type) {
+    if (static_cast<int>(type) < TYPE_COUNT) return TYPE_NAMES[static_cast<int>(type)];
+    const Driver* d = driver_of(type);
+    return d != nullptr ? d->type : "unknown";
+}
+
+int pin_count(Type type) {
+    if (const Driver* d = driver_of(type)) return d->pins;
+    if (type == Type::none || type == Type::ble_sensor || type == Type::ble_presence) return 0;
+    return type == Type::sht4x ? 2 : 1;
+}
+
+bool is_output(Type type) {
+    if (const Driver* d = driver_of(type)) return d->matter == Matter::on_off || d->matter == Matter::dimmable;
+    return type == Type::relay || type == Type::led;
+}
 bool is_input(Type type) { return type == Type::button || type == Type::contact || type == Type::motion; }
 bool is_ir(Type type) { return type == Type::ir_send || type == Type::ir_receive; }
 bool is_ble(Type type) { return type == Type::ble_sensor || type == Type::ble_presence; }
@@ -286,6 +327,8 @@ void setup_pins() {
             ir::start_send(s.pin);
         } else if (s.type == Type::ir_receive) {
             ir::start_receive(s.pin, on_ir_code);
+        } else if (const Driver* d = driver_of(s.type)) {
+            if (!d->setup(i, s)) ESP_LOGE(TAG, "Connection %d (%s): setup failed", i, d->type);
         } else if (s.type == Type::sht4x) {
             i2c_master_bus_config_t bus_config = {};
             bus_config.i2c_port = I2C_NUM_0;
@@ -391,6 +434,10 @@ void poll_task(void*) {
                 l.next_climate = now + CLIMATE_US;
                 read_sht4x(i);
             }
+            if (const Driver* d = driver_of(s.type)) {
+                if (d->poll) d->poll(i, s, now);
+                continue;
+            }
             if (s.type == Type::ble_presence && l.active && now - l.seen_us > PRESENCE_US) {
                 l.active = false;
                 if (listener.input) listener.input(i, false);
@@ -424,11 +471,14 @@ std::string json_text(const char* text) {
 }
 
 std::string slot_json(const Slot& s, int i, bool with_state) {
-    std::string out = "{\"index\":" + std::to_string(i) + ",\"type\":\"" + TYPE_NAMES[static_cast<int>(s.type)] +
+    std::string out = "{\"index\":" + std::to_string(i) + ",\"type\":\"" + type_name(s.type) +
                       "\",\"pin\":" + std::to_string(s.pin) + ",\"pin2\":" + std::to_string(s.pin2) +
                       ",\"inverted\":" + ((s.flags & INVERTED) ? "true" : "false") + ",\"name\":" + json_text(s.name);
     if (is_ir(s.type)) out += ",\"code\":\"" + code_text(s.data) + "\"";
     if (is_ble(s.type)) out += ",\"mac\":\"" + mac_text(s.data) + "\"";
+    if (const Driver* d = driver_of(s.type); d != nullptr && d->number_label) {
+        out += ",\"number\":" + std::to_string(number_of(s));
+    }
     if (with_state) {
         const Live& l = live[i];
         out += ",\"on\":" + std::string(l.on ? "true" : "false") + ",\"level\":" + std::to_string(l.level) +
@@ -463,9 +513,10 @@ int parse_pin(const std::string& text) {
 bool pin_taken(int pin, int except, Type type) {
     for (int i = 0; i < SLOTS; ++i) {
         const Slot& d = draft[i];
-        if (i == except || d.type == Type::none || is_ble(d.type)) continue;
+        const int pins = pin_count(d.type);
+        if (i == except || pins == 0) continue;
         if (is_ir(type) && d.type == type && d.pin == pin) continue;
-        if (d.pin == pin || (d.type == Type::sht4x && d.pin2 == pin)) return true;
+        if (d.pin == pin || (pins == 2 && d.pin2 == pin)) return true;
     }
     return false;
 }
@@ -484,6 +535,42 @@ int pins_of(Type type, int index, int pin) {
     return count;
 }
 
+// io set <n> <component type> [<pin> [<pin2>]] [n=<number>] [inverted] <name...>
+std::string set_component(const std::vector<std::string>& args, int index, Type type) {
+    const Driver* d = driver_of(type);
+    size_t next = 4;
+    int pins[2] = {0, 0};
+    for (int p = 0; p < d->pins; ++p) {
+        pins[p] = next < args.size() ? parse_pin(args[next++]) : -1;
+        if (pins[p] < 0) return "not a usable pin\n";
+    }
+    if (d->pins == 2 && pins[0] == pins[1]) return "two different pins\n";
+    Slot s = {};
+    s.type = type;
+    s.pin = static_cast<uint8_t>(pins[0]);
+    s.pin2 = static_cast<uint8_t>(pins[1]);
+    if (d->number_label && next < args.size() && args[next].rfind("n=", 0) == 0) {
+        const long value = std::strtol(args[next++].c_str() + 2, nullptr, 10);
+        if (value < 0 || value > 65535) return "number 0-65535\n";
+        s.data[0] = value & 0xFF;
+        s.data[1] = value >> 8;
+    }
+    if (next < args.size() && args[next] == "inverted") {
+        s.flags |= INVERTED;
+        ++next;
+    }
+    std::string label;
+    for (; next < args.size(); ++next) label += (label.empty() ? "" : " ") + args[next];
+    if (label.empty()) label = d->title;
+    std::strncpy(s.name, label.c_str(), sizeof(s.name) - 1);
+    std::lock_guard<std::mutex> guard(lock);
+    for (int p = 0; p < d->pins; ++p) {
+        if (pin_taken(pins[p], index, type)) return "pin already in use\n";
+    }
+    draft[index] = s;
+    return store("draft", draft) ? "ok: 'io apply' to use it\n" : "storing failed\n";
+}
+
 std::string cmd_set(const std::vector<std::string>& args) {
     // io set <n> <type> <pin> [<pin2>] [inverted] <name...>
     // io set <n> ir_send|ir_receive <pin> <code> <name...>
@@ -495,6 +582,12 @@ std::string cmd_set(const std::vector<std::string>& args) {
     int type = -1;
     for (int t = 1; t < TYPE_COUNT; ++t) {
         if (args[3] == TYPE_NAMES[t]) type = t;
+    }
+    for (int d = 0; d < driver_count; ++d) {
+        if (args[3] == drivers[d].type) type = driver_ids[d];
+    }
+    if (index >= 0 && type >= 0 && driver_of(static_cast<Type>(type)) != nullptr) {
+        return set_component(args, index, static_cast<Type>(type));
     }
     if (index < 0 || type < 0) {
         return "connection 0-7 and type relay|led|button|contact|motion|sht4x|ir_send|ir_receive|ble_sensor|ble_presence\n";
@@ -550,6 +643,73 @@ std::string cmd_set(const std::vector<std::string>& args) {
 }
 
 }  // namespace
+
+void register_driver(const Driver& driver) {
+    if (driver_count >= MAX_DRIVERS) return;
+    const uint8_t id = id_of(driver.type);
+    for (int i = 0; i < driver_count; ++i) {
+        if (driver_ids[i] == id) {
+            ESP_LOGE(TAG, "Component type %s clashes with %s: rename one", driver.type, drivers[i].type);
+            return;
+        }
+    }
+    drivers[driver_count] = driver;
+    driver_ids[driver_count++] = id;
+}
+
+void report_input(int slot, bool active) {
+    if (slot < 0 || slot >= SLOTS || live[slot].active == active) return;
+    live[slot].active = active;
+    if (listener.input) listener.input(slot, active);
+}
+
+void report_press(int slot) {
+    if (!listener.button) return;
+    listener.button(slot, Press::initial, 0);
+    listener.button(slot, Press::short_release, 0);
+    listener.button(slot, Press::multi_complete, 1);
+}
+
+void report_climate(int slot, int16_t centi_celsius, uint16_t centi_percent) {
+    {
+        std::lock_guard<std::mutex> guard(lock);
+        live[slot].have_climate = true;
+        live[slot].centi_celsius = centi_celsius;
+        live[slot].centi_percent = centi_percent;
+    }
+    if (listener.climate) listener.climate(slot, centi_celsius, centi_percent);
+}
+
+void report_output(int slot, bool on) {
+    live[slot].on = on;
+    if (listener.output) listener.output(slot, on);
+}
+
+Type type_named(const char* name) {
+    for (int t = 1; t < TYPE_COUNT; ++t) {
+        if (std::strcmp(name, TYPE_NAMES[t]) == 0) return static_cast<Type>(t);
+    }
+    for (int d = 0; d < driver_count; ++d) {
+        if (std::strcmp(name, drivers[d].type) == 0) return static_cast<Type>(driver_ids[d]);
+    }
+    return Type::none;
+}
+
+uint16_t number_of(const Slot& s) { return static_cast<uint16_t>(s.data[0] | (s.data[1] << 8)); }
+
+int matter_of(int index) {
+    const Type type = running[index].type;
+    if (const Driver* d = driver_of(type)) return static_cast<int>(d->matter);
+    switch (type) {
+        case Type::relay: case Type::ir_send: return 0;
+        case Type::led: return 1;
+        case Type::button: case Type::ir_receive: return 2;
+        case Type::contact: return 3;
+        case Type::motion: case Type::ble_presence: return 4;
+        case Type::sht4x: case Type::ble_sensor: return 5;
+        default: return -1;
+    }
+}
 
 bool parse_code(const char* text, uint8_t* data) {
     unsigned address = 0, command = 0;
@@ -625,19 +785,19 @@ void start() {
         ESP_LOGE(TAG, "New connections keep crashing: back to the previous ones");
         set_trial_boots(0);
     }
-    bool bluetooth = false;
+    bluetooth = false;
     for (int i = 0; i < SLOTS; ++i) {
         const Type t = running[i].type;
-        if (t != Type::none && !is_ble(t) &&
-            (!safe_pin(running[i].pin) || (t == Type::sht4x && !safe_pin(running[i].pin2)))) {
+        if (t != Type::none && static_cast<int>(t) >= TYPE_COUNT && driver_of(t) == nullptr) {
+            running[i].type = Type::none;  // a component this firmware does not have
+        }
+        if (t != Type::none && pin_count(t) > 0 &&
+            (!safe_pin(running[i].pin) || (pin_count(t) == 2 && !safe_pin(running[i].pin2)))) {
             running[i].type = Type::none;  // never drive a pin that is not safe
         }
         bluetooth = bluetooth || is_ble(running[i].type);
     }
     setup_pins();
-    if (bluetooth) {
-        ble_scan::start(on_ble_advert);  // only when a connection needs it
-    }
     for (int i = 0; i < SLOTS; ++i) {
         if (is_input(running[i].type)) {
             live[i].raw = live[i].active = input_level_active(running[i]);
@@ -657,6 +817,14 @@ bool climate(int index, int16_t& centi_celsius, uint16_t& centi_percent) {
     return live[index].have_climate;
 }
 
+bool needs_bluetooth() { return bluetooth; }
+
+void start_bluetooth(bool shared_with_pairing) {
+    if (bluetooth) ble_scan::start(on_ble_advert, shared_with_pairing);  // only when a connection needs it
+}
+
+void set_ble_pairing(bool on) { ble_pairing = on; }
+
 bool is_momentary(int index) { return index >= 0 && index < SLOTS && running[index].type == Type::ir_send; }
 
 void set_output(int index, bool on, uint8_t level) {
@@ -666,6 +834,14 @@ void set_output(int index, bool on, uint8_t level) {
             ESP_LOGW(TAG, "Connection %d: sending the IR code failed", index);
         }
         return;
+    }
+    if (index >= 0 && index < SLOTS) {
+        if (const Driver* d = driver_of(running[index].type)) {
+            live[index].on = on;
+            if (level > 0) live[index].level = level;
+            if (d->output) d->output(index, running[index], on, live[index].level);
+            return;
+        }
     }
     if (index < 0 || index >= SLOTS || !is_output(running[index].type)) {
         return;
@@ -762,10 +938,20 @@ std::string state_json() {
     {
         std::lock_guard<std::mutex> guard(lock);
         out += ",\"ir_last\":" + json_text(last_ir);
+        out += std::string(",\"bluetooth\":\"") + (ble_scan::scanning() ? "on" : bluetooth ? "starting" : "off") +
+               "\",\"ble_pairing\":" + (ble_pairing ? "true" : "false");
     }
     out += ",\"pins\":[";
     for (size_t i = 0; i < sizeof(SAFE_PINS); ++i) {
         out += (i ? "," : "") + std::to_string(SAFE_PINS[i]);
+    }
+    out += "],\"drivers\":[";
+    for (int i = 0; i < driver_count; ++i) {
+        const Driver& d = drivers[i];
+        static const char* MATTER[] = {"on_off", "dimmable", "button", "contact", "occupancy", "climate"};
+        out += (i ? ",{" : "{") + std::string("\"type\":") + json_text(d.type) + ",\"title\":" + json_text(d.title) +
+               ",\"matter\":\"" + MATTER[static_cast<int>(d.matter)] + "\",\"pins\":" + std::to_string(d.pins) +
+               ",\"number\":" + (d.number_label ? json_text(d.number_label) : std::string("null")) + "}";
     }
     out += "],\"slots\":[";
     for (int i = 0; i < SLOTS; ++i) {

@@ -15,28 +15,21 @@
 #include <string>
 #include <vector>
 
+#include "mb_driver.h"
+
 namespace io {
 
 constexpr int SLOTS = 8;
 
-enum class Type : uint8_t { none, relay, led, button, contact, motion, sht4x, ir_send, ir_receive, ble_sensor, ble_presence };
+// Slot, Type and the component interface: components/mb_driver
 
-struct Slot {
-    Type type;
-    uint8_t pin;    // the only pin, or SDA for the SHT4x; none for Bluetooth
-    uint8_t pin2;   // SCL for the SHT4x
-    uint8_t flags;  // INVERTED
-    char name[24];
-    uint8_t data[8];  // IR: protocol (1 = NEC), address, command (little endian); Bluetooth: MAC
-};
-constexpr uint8_t IR_NEC = 1;
-constexpr uint8_t INVERTED = 1;  // relay active low, or input active high/low swapped
 
 enum class Press : uint8_t { initial, short_release, long_press, long_release, multi_complete };
 
 // Matter's side: set before start(), called from the polling task
 struct Listener {
     void (*input)(int slot, bool active);                     // contact closed, motion seen
+    void (*output)(int slot, bool on);                        // an output that changed by itself
     void (*button)(int slot, Press press, uint8_t count);     // count: presses for multi_complete
     void (*climate)(int slot, int16_t centi_celsius, uint16_t centi_percent);
 };
@@ -56,6 +49,12 @@ void set_factory(const Slot* slots, const char* name);
 // Loads the connections (the draft during a trial) and starts the pins
 void start();
 
+// Bluetooth, for the connections that listen to it: started after Matter,
+// sharing its stack when pairing over Bluetooth is on
+bool needs_bluetooth();
+void start_bluetooth(bool shared_with_pairing);
+void set_ble_pairing(bool on);  // for the state: shown on the page
+
 // The connections of this boot
 const Slot& slot(int index);
 
@@ -69,6 +68,15 @@ bool is_momentary(int index);  // an IR code to send: "on" only for a moment
 
 // Every output off, before a restart
 void stop_outputs();
+
+// What a connection is in Matter, for built-in and component types alike
+// (0: on/off, 1: dimmable, 2: button, 3: contact, 4: occupancy, 5: climate, -1: none)
+int matter_of(int index);
+
+// The generated registry (main/components_registry.cpp), before start()
+void register_components();
+// A type by its name: built-in or from a component (Type::none: unknown)
+Type type_named(const char* name);
 
 // The device's name, shown by controllers and on the page
 std::string name();

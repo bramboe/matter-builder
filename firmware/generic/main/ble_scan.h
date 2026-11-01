@@ -22,6 +22,10 @@ struct Advert {
 
 using Handler = void (*)(const Advert& advert);
 
-void start(Handler on_advert);
+// shared: Matter runs the Bluetooth stack (pairing over Bluetooth is on), so
+// scanning joins it once it is up; otherwise the stack is started here, after
+// Matter has let go of it
+void start(Handler on_advert, bool shared);
+bool scanning();
 
 }  // namespace ble_scan

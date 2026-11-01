@@ -5,7 +5,11 @@
 #include <string>
 #include <vector>
 
+#include <platform/CHIPDeviceLayer.h>
 #include <platform/ESP32/OpenthreadLauncher.h>
+#if CONFIG_ENABLE_CHIPOBLE
+#include <platform/internal/BLEManager.h>
+#endif
 
 #include "boot_guard.h"
 #include "commands.h"
@@ -13,6 +17,7 @@
 #include "esp_log.h"
 #include "esp_system.h"
 #include "http_api.h"
+#include "io.h"
 #include "io.h"
 #include "matter_device.h"
 #include "matter_info.h"
@@ -58,20 +63,54 @@ std::string cmd_matter(const std::vector<std::string>& args) {
 
 std::string cmd_json(const std::vector<std::string>&) { return io::state_json(); }
 
+// Pairing over Bluetooth: a phone pairs the device directly, without the
+// setup network, and gives it the Thread network. Off by default: Bluetooth
+// then stays free (and only runs for connections that listen to it), which
+// leaves about 30 KB more memory and the whole radio to Thread.
+bool ble_pairing_enabled() {
+#if CONFIG_ENABLE_CHIPOBLE
+    uint8_t value = 0;
+    nvs_handle_t nvs;
+    if (nvs_open("io", NVS_READONLY, &nvs) == ESP_OK) {
+        nvs_get_u8(nvs, "blepair", &value);
+        nvs_close(nvs);
+    }
+    return value != 0;
+#else
+    return false;
+#endif
+}
+
+std::string cmd_pairing(const std::vector<std::string>& args) {
+    if (args.size() == 3 && args[1] == "ble" && (args[2] == "on" || args[2] == "off")) {
+#if CONFIG_ENABLE_CHIPOBLE
+        nvs_handle_t nvs;
+        if (nvs_open("io", NVS_READWRITE, &nvs) != ESP_OK) return "storing failed\n";
+        nvs_set_u8(nvs, "blepair", args[2] == "on" ? 1 : 0);
+        nvs_commit(nvs);
+        nvs_close(nvs);
+        return "ok, after the next restart\n";
+#else
+        return "this firmware has no pairing over Bluetooth\n";
+#endif
+    }
+    return std::string("pairing over Bluetooth: ") + (ble_pairing_enabled() ? "on" : "off") + "\n";
+}
+
 #ifdef HAS_SPEC
 void load_spec_factory() {
     io::Slot slots[io::SLOTS] = {};
-    const char* names[] = {"none", "relay", "led", "button", "contact", "motion", "sht4x",
-                           "ir_send", "ir_receive", "ble_sensor", "ble_presence"};
     for (int i = 0; i < SPEC_CONNECTION_COUNT; ++i) {
         const SpecConnection& c = SPEC_CONNECTIONS[i];
         if (c.slot < 0 || c.slot >= io::SLOTS) continue;
         io::Slot& s = slots[c.slot];
-        for (int t = 0; t < 11; ++t) {
-            if (std::strcmp(c.type, names[t]) == 0) s.type = static_cast<io::Type>(t);
-        }
+        s.type = io::type_named(c.type);  // built-in or from a component (registered first)
         if (c.code[0]) io::parse_code(c.code, s.data);
         if (c.mac[0]) io::parse_mac(c.mac, s.data);
+        if (!c.code[0] && !c.mac[0]) {
+            s.data[0] = c.number & 0xFF;
+            s.data[1] = (c.number >> 8) & 0xFF;
+        }
         s.pin = static_cast<uint8_t>(c.pin);
         s.pin2 = static_cast<uint8_t>(c.scl);
         s.flags = c.inverted ? io::INVERTED : 0;
@@ -98,6 +137,8 @@ extern "C" void app_main() {
         ESP_LOGE("main", "NVS unavailable (%s)", esp_err_to_name(err));
     }
 
+    io::register_components();  // component types, before the connections or the spec load
+
     mb_core::App app = {};
     app.vendor_name = "Matter Builder";
     app.product_name = "Matter Builder device";
@@ -116,6 +157,7 @@ extern "C" void app_main() {
     app.stop = io::stop_outputs;
     app.config_mode_start = io::start;  // the connections work without Matter
     app.state_json = io::state_json;
+    app.ble_pairing = ble_pairing_enabled;
     mb_core::init(app);
     // Also in configuration mode
     add_command("io", "io [json|set|clear|test|apply|confirm|cancel]  connections\n", io::command);
@@ -139,6 +181,17 @@ extern "C" void app_main() {
     set_openthread_platform_config(&thread_config);
 
     matter_device::start();
+    // Matter starts its Bluetooth layer; without pairing over Bluetooth it lets
+    // go of it again, and the connections that listen start their own
+    const bool pairing = ble_pairing_enabled();
+    io::set_ble_pairing(pairing);
+#if CONFIG_ENABLE_CHIPOBLE
+    if (!pairing) {
+        (void) chip::DeviceLayer::PlatformMgr().ScheduleWork(
+            [](intptr_t) { chip::DeviceLayer::Internal::BLEMgr().Shutdown(); });
+    }
+#endif
+    io::start_bluetooth(pairing);
     net::start();
     add_command("wifi", "wifi [ssid <name>|password <pw>|clear|config [minutes]]  Wi-Fi for configuration mode\n",
                 config_mode::command);
@@ -146,6 +199,8 @@ extern "C" void app_main() {
                 thread_dataset::command);
     add_command("access", "access [json|revoke <n>]                programs with a token of their own\n",
                 program_access::command);
+    add_command("pairing", "pairing [ble on|off]                    pairing over Bluetooth (after a restart)\n",
+                cmd_pairing);
     add_command("matter", "matter [open|fabrics|remove <n>|json]   pairing codes, pairing window, controllers\n",
                 cmd_matter);
     console_start();

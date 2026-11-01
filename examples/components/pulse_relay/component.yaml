@@ -1,0 +1,14 @@
+# A Matter Builder component: one connection type for the generic firmware.
+# Use it in a config with:
+#   components:
+#     - source: github:bramboe/matter-builder/examples/components/pulse_relay@v0.1.7
+#   connections:
+#     - { slot: 0, type: pulse_relay, pin: 4, number: 2, name: Garage door }
+format: 1
+type: pulse_relay
+title: Pulse relay
+description: A relay that switches on for a number of seconds, then off by itself (a garage door opener, a door buzzer).
+matter: on_off
+pins: 1
+number: Seconds on
+requires: []

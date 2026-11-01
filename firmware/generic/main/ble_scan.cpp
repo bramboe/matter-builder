@@ -3,6 +3,8 @@
 #include <cstring>
 
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "host/ble_hs.h"
 #include "nimble/nimble_port.h"
 #include "nimble/nimble_port_freertos.h"
@@ -15,6 +17,8 @@ const char* TAG = "ble";
 
 Handler handler = nullptr;
 uint8_t own_addr_type = 0;
+bool shared_stack = false;
+volatile bool is_scanning = false;
 
 constexpr uint16_t BTHOME_UUID = 0xFCD2;
 constexpr uint16_t ENVIRONMENT_UUID = 0x181A;  // pvvx and ATC1441 custom formats
@@ -103,7 +107,9 @@ void scan() {
     const int rc = ble_gap_disc(own_addr_type, BLE_HS_FOREVER, &params, on_gap, nullptr);
     if (rc != 0 && rc != BLE_HS_EALREADY) {
         ESP_LOGE(TAG, "Starting the scan failed (%d)", rc);
+        return;
     }
+    is_scanning = true;
 }
 
 void on_sync() {
@@ -119,17 +125,38 @@ void host_task(void*) {
     nimble_port_freertos_deinit();
 }
 
+// Matter starts and stops its Bluetooth layer on its own schedule: wait for it
+void start_task(void*) {
+    for (int i = 0; i < 300; ++i) {  // up to a minute
+        vTaskDelay(pdMS_TO_TICKS(200));
+        if (shared_stack && ble_hs_synced()) {
+            scan();  // passive scanning next to Matter's advertising
+            ESP_LOGI(TAG, "Listening for Bluetooth advertisements (shared with Matter pairing)");
+            vTaskDelete(nullptr);
+        }
+        if (!shared_stack && !ble_hs_is_enabled() && i >= 10) {
+            if (nimble_port_init() != ESP_OK) {
+                ESP_LOGE(TAG, "Bluetooth unavailable");
+                vTaskDelete(nullptr);
+            }
+            ble_hs_cfg.sync_cb = on_sync;
+            ble_hs_cfg.reset_cb = on_reset;
+            nimble_port_freertos_init(host_task);
+            vTaskDelete(nullptr);
+        }
+    }
+    ESP_LOGE(TAG, "Bluetooth did not become free: no scanning");
+    vTaskDelete(nullptr);
+}
+
 }  // namespace
 
-void start(Handler on_advert) {
+void start(Handler on_advert, bool shared) {
     handler = on_advert;
-    if (nimble_port_init() != ESP_OK) {
-        ESP_LOGE(TAG, "Bluetooth unavailable");
-        return;
-    }
-    ble_hs_cfg.sync_cb = on_sync;
-    ble_hs_cfg.reset_cb = on_reset;
-    nimble_port_freertos_init(host_task);
+    shared_stack = shared;
+    xTaskCreate(start_task, "ble_start", 3072, nullptr, 4, nullptr);
 }
+
+bool scanning() { return is_scanning; }
 
 }  // namespace ble_scan

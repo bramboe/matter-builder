@@ -28,6 +28,7 @@ firmware from here that is signed with this source's key.
 |---|---|
 | `packages/<name>/` | Firmware: an ESP-IDF project on `mb_core` with a `package.yaml` (see `packages/README.md`) |
 | `recipes/*.yaml` | Recipes: a generic device's connections, no code |
+| `components/<type>/` | Components: a connection type of its own for the generic firmware (`component.yaml` + an ESP-IDF component on `mb_driver`; see Matter Builder's `examples/components/pulse_relay`). Others use one with `source: github:<you>/<repo>/components/<type>@<tag>` |
 | `matter-builder-key.pem` | The public key the add-on pins |
 | `.github/workflows/release.yml` | Builds, signs and publishes for a tag `v<version>` |
 

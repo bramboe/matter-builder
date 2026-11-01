@@ -49,8 +49,14 @@ void to_configuration_mode(const char* why) {
     ESP_LOGE(TAG, "%s, and configuration mode could not be requested", why);
 }
 
+// Waiting for a phone to pair it over Bluetooth, which also brings the network
+bool waiting_for_ble_pairing() {
+    const auto pairing = mb_core::app().ble_pairing;
+    return pairing != nullptr && pairing() && !chip::DeviceLayer::ThreadStackMgr().IsThreadProvisioned();
+}
+
 void on_attach_limit(void*) {
-    if (!attached) {
+    if (!attached && !waiting_for_ble_pairing()) {
         to_configuration_mode("Not attached to the Thread network after 3 minutes");
     }
 }
@@ -82,7 +88,9 @@ void provision(intptr_t) {
     const size_t length = thread_dataset::wanted(tlvs, sizeof(tlvs), &source);
     auto& thread = chip::DeviceLayer::ThreadStackMgr();
     if (length == 0) {
-        if (!thread.IsThreadProvisioned()) {
+        if (!thread.IsThreadProvisioned() && waiting_for_ble_pairing()) {
+            ESP_LOGW(TAG, "No Thread network yet: waiting to be paired over Bluetooth");
+        } else if (!thread.IsThreadProvisioned()) {
             to_configuration_mode("No Thread network set");
         } else if (thread.IsThreadAttached()) {
             on_attached();

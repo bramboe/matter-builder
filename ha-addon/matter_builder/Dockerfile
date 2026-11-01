@@ -19,6 +19,8 @@ RUN python3 -m pip install --no-cache-dir --break-system-packages zeroconf==0.14
 # Python environment lives there too, so it survives restarts and updates
 ENV ESP_MATTER_COMMIT=fe1efc6cdf62f19b5ca44213900333a6aad7a8b2
 ENV IDF_PYTHON_ENV_PATH=/data/toolchain/python_env
+# Components of configs, fetched from GitHub once per tag or commit
+ENV MB_COMPONENT_CACHE=/data/component-cache
 
 # The firmware sources this version builds (copied in by tools/addon_sync.sh)
 COPY src /opt/octo-matter

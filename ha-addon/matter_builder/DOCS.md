@@ -112,6 +112,53 @@ connections:
 
 Wi-Fi, Thread and passwords never go in: they are set on the device itself.
 
+## Pairing over Bluetooth
+
+A device can be paired directly by a phone over Bluetooth (Matter's own
+pairing, as most Matter devices do), also the first time: the phone gives it
+the Thread network, so the setup network is not needed. It is a switch on
+the device's page and in the device's Info here, off by default, and takes
+effect after a restart:
+
+- **Off**: pairing goes with the code (QR) over the network. Matter lets go
+  of Bluetooth right after starting; Bluetooth only runs for Bluetooth
+  connections. More memory free, and the whole radio for Thread.
+- **On**: Matter keeps Bluetooth for pairing (also for adding a controller
+  while the pairing window is open); Bluetooth connections listen along.
+  It costs memory (the Bluetooth layer stays loaded) and radio time.
+
+A device without a Thread network waits to be paired over Bluetooth while
+the switch is on, instead of opening its setup network after 3 minutes.
+
+## What a device needs
+
+Devices, configs and catalog items show what they need: their network
+(Thread or Wi-Fi) and Bluetooth when it is used for what they do, such as a
+Bluetooth thermometer or a package that controls a device over Bluetooth.
+The add-on refuses a config whose connections need more than the board has,
+and IR or Bluetooth connections on generic firmware older than 0.1.3.
+
+## Components
+
+A component adds a connection type of its own to the generic firmware: a
+folder with a `component.yaml` (type, title, which Matter device it is, how
+many pins, an optional number setting) and an ESP-IDF component that
+registers it (`components/mb_driver`). A config lists its components:
+
+```yaml
+components:
+  - source: github:owner/repo/path/to/component@v1.0.0   # a tag or commit
+  - source: local:examples/components/pulse_relay        # in this repository
+connections:
+  - { slot: 0, type: pulse_relay, pin: 4, number: 2, name: Gate }
+```
+
+The editors then offer the type with its fields. A component is code, so a
+config with components is installed after a build (developer mode), or as a
+package from the catalog; a device only accepts types its firmware has.
+`examples/components/pulse_relay` is an example: a relay that switches on
+for a number of seconds.
+
 ## Own builds (developer mode)
 
 In developer mode a config can also be built into firmware of its own

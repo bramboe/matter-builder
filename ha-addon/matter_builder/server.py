@@ -847,7 +847,8 @@ ALLOWED_COMMANDS = ("io ", "name ", "wifi ssid ", "wifi password ")
 
 
 def allowed(line):
-    return line in ("io json", "json", "wifi json", "matter", "matter open") or line.startswith(ALLOWED_COMMANDS)
+    return line in ("io json", "json", "wifi json", "matter", "matter open", "pairing", "pairing ble on",
+                    "pairing ble off", "reboot") or line.startswith(ALLOWED_COMMANDS)
 
 
 def version_key(name):

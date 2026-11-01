@@ -14,6 +14,15 @@ passwords, bed MAC/PIN: those are set on the device's own page):
     connections:                # generic only: factory setting, editable on the page
       - { slot: 0, type: relay, pin: 4, name: Pump }
       - { slot: 1, type: sht4x, pin: 6, scl: 7, name: Climate }
+      - { slot: 2, type: pulse_relay, pin: 5, number: 2, name: Gate }
+    components:                 # connection types of their own, built in (developer mode)
+      - source: github:owner/repo/path/to/component@v1.0.0
+      - source: local:examples/components/pulse_relay
+
+A component is a folder with a component.yaml (type, title, matter, pins,
+number, requires) and an ESP-IDF component that calls io::register_driver()
+(components/mb_driver). GitHub sources are pinned to a tag or commit and kept
+in a cache (MB_COMPONENT_CACHE).
 
 The project is the application's own folder (firmware/<app>) plus a
 generated main/spec_defaults.h and main/spec.yaml (built into the firmware,
@@ -22,8 +31,10 @@ give the same project.
 """
 
 import json
+import os
 import re
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -170,7 +181,7 @@ def check(spec):
     """The validated spec, with defaults filled in. Raises SpecError."""
     if not isinstance(spec, dict) or not isinstance(spec.get("device"), dict):
         raise SpecError("the spec needs a “device:” section")
-    unknown = set(spec) - {"device", "connections"}
+    unknown = set(spec) - {"device", "connections", "components"}
     if unknown:
         raise SpecError(f"unknown section “{sorted(unknown)[0]}”")
     device = spec["device"]
@@ -189,6 +200,11 @@ def check(spec):
     version = str(device.get("version", "0.1.0"))
     number = version_number(version)
 
+    components = load_components(spec.get("components") or [])
+    if components and app != "generic":
+        raise SpecError("components: only for app generic")
+    drivers = {c["type"]: c for c in components}
+
     connections = spec.get("connections") or []
     if connections and app != "generic":
         raise SpecError("connections: only for app generic")
@@ -198,14 +214,23 @@ def check(spec):
     for c in connections:
         if not isinstance(c, dict):
             raise SpecError("connections: each one is a mapping")
-        unknown = set(c) - {"slot", "type", "pin", "scl", "name", "inverted", "code", "mac"}
+        unknown = set(c) - {"slot", "type", "pin", "scl", "pin2", "name", "inverted", "code", "mac", "number"}
         if unknown:
             raise SpecError(f"connections: unknown “{sorted(unknown)[0]}”")
         slot, kind = c.get("slot"), c.get("type")
         if not isinstance(slot, int) or not 0 <= slot <= 7 or slot in slots:
             raise SpecError(f"connections: slot 0-7, each once (got {slot})")
-        if kind not in TYPES:
-            raise SpecError(f"connection {slot}: type one of {', '.join(sorted(TYPES))}")
+        driver = drivers.get(kind)
+        if kind not in TYPES and driver is None:
+            raise SpecError(f"connection {slot}: type one of {', '.join(sorted(TYPES | set(drivers)))}")
+        number = 0
+        if driver is not None:
+            if driver.get("number"):
+                number = c.get("number", 0)
+                if not isinstance(number, int) or not 0 <= number <= 65535:
+                    raise SpecError(f"connection {slot}: number 0-65535 ({driver['number']})")
+            elif "number" in c:
+                raise SpecError(f"connection {slot}: {kind} takes no number")
         code = mac = ""
         if kind in BLE_TYPES:
             mac = str(c.get("mac") or "")
@@ -213,6 +238,8 @@ def check(spec):
                 raise SpecError(f"connection {slot}: mac like AA:BB:CC:DD:EE:FF")
             mac = mac.upper()
             used = []
+        elif driver is not None:
+            used = [c.get("pin"), c.get("pin2")][:driver["pins"]]
         else:
             used = [c.get("pin")] + ([c.get("scl")] if kind == "sht4x" else [])
         if kind in IR_TYPES:
@@ -235,17 +262,95 @@ def check(spec):
         if '"' in label or "\\" in label:
             raise SpecError(f"connection {slot}: no quotes in the name")
         slots.add(slot)
-        clean.append({"slot": slot, "type": kind, "pin": c.get("pin", 0) if kind not in BLE_TYPES else 0,
-                      "scl": c.get("scl", 0) or 0, "inverted": bool(c.get("inverted", False)), "name": label,
-                      **({"code": code} if code else {}), **({"mac": mac} if mac else {})})
+        second = (c.get("pin2", 0) if driver is not None else c.get("scl", 0)) or 0
+        clean.append({"slot": slot, "type": kind, "pin": c.get("pin", 0) if used else 0,
+                      "scl": second, "inverted": bool(c.get("inverted", False)), "name": label,
+                      **({"code": code} if code else {}), **({"mac": mac} if mac else {}),
+                      **({"number": number} if driver is not None and driver.get("number") else {})})
     if '"' in name or "\\" in name:
         raise SpecError("device.name: no quotes")
-    requires = requirements(clean)
+    requires = sorted(set(requirements(clean)) | {r for d in components for r in d["requires"]})
     if "bluetooth" in requires and not BOARD_CAPS[board]["bluetooth"]:
         raise SpecError(f"the Bluetooth connections need a board with Bluetooth, and {board} has none")
     return {"name": name, "slug": slug_of(name), "app": app, "board": board, "version": version,
             "version_number": number, "connections": sorted(clean, key=lambda x: x["slot"]),
-            "requires": requires, "network": BOARD_CAPS[board]["network"][0]}
+            "requires": requires, "network": BOARD_CAPS[board]["network"][0],
+            "components": [{"source": d["source"], "type": d["type"], "path": d["path"]} for d in components],
+            "drivers": [{k: d[k] for k in ("type", "title", "description", "matter", "pins", "number")} for d in components]}
+
+
+# ---------------------------------------------------------------- components
+
+COMPONENT_TYPE = re.compile(r"^[a-z][a-z0-9_]{1,23}$")
+MATTER_KINDS = {"on_off", "dimmable", "button", "contact", "occupancy", "climate"}
+GITHUB_SOURCE = re.compile(r"^github:([A-Za-z0-9-]+)/([A-Za-z0-9._-]+)((?:/[A-Za-z0-9._-]+)*)@([A-Za-z0-9._/-]+)$")
+
+
+def fetch(source):
+    """The folder of a component source: local:<path in this repository>, or
+    github:<owner>/<repo>[/<path>]@<tag or commit> (cloned once into the cache)."""
+    if source.startswith("local:"):
+        path = (ROOT / source[6:]).resolve()
+        if ROOT not in path.parents or not path.is_dir():
+            raise SpecError(f"components: {source} is not a folder of this repository")
+        return path
+    m = GITHUB_SOURCE.match(source)
+    if not m:
+        raise SpecError(f"components: source like github:owner/repo/path@v1.0 or local:path (got {source})")
+    owner, repo, sub, ref = m.groups()
+    cache = Path(os.environ.get("MB_COMPONENT_CACHE", Path.home() / ".cache" / "matter-builder" / "components"))
+    target = cache / f"{owner}__{repo}__{ref.replace('/', '_')}"
+    if not target.exists():
+        url = f"https://github.com/{owner}/{repo}.git"
+        tmp = target.with_suffix(".tmp")
+        shutil.rmtree(tmp, ignore_errors=True)
+        tmp.parent.mkdir(parents=True, exist_ok=True)
+        ok = subprocess.run(["git", "clone", "--quiet", "--depth", "1", "--branch", ref, url, str(tmp)],
+                            capture_output=True).returncode == 0
+        if not ok:  # a commit, not a tag or branch
+            shutil.rmtree(tmp, ignore_errors=True)
+            ok = (subprocess.run(["git", "clone", "--quiet", url, str(tmp)], capture_output=True).returncode == 0 and
+                  subprocess.run(["git", "-C", str(tmp), "checkout", "--quiet", ref], capture_output=True).returncode == 0)
+        if not ok:
+            shutil.rmtree(tmp, ignore_errors=True)
+            raise SpecError(f"components: could not fetch {source}")
+        tmp.rename(target)
+    path = (target / sub.lstrip("/")).resolve()
+    if target.resolve() not in [path, *path.parents] or not path.is_dir():
+        raise SpecError(f"components: {source} has no folder {sub or '/'}")
+    return path
+
+
+def load_components(sources):
+    if not isinstance(sources, list):
+        raise SpecError("components: a list")
+    out = []
+    for entry in sources:
+        source = entry.get("source") if isinstance(entry, dict) else entry
+        if not isinstance(source, str):
+            raise SpecError("components: each one has a source")
+        path = fetch(source)
+        yaml_file = path / "component.yaml"
+        if not yaml_file.is_file() or not (path / "CMakeLists.txt").is_file():
+            raise SpecError(f"components: {source} has no component.yaml and CMakeLists.txt")
+        meta = parse_yaml(yaml_file.read_text())
+        kind = str(meta.get("type", ""))
+        if not COMPONENT_TYPE.match(kind) or kind in TYPES:
+            raise SpecError(f"components: {source}: type a new lowercase name (got {kind})")
+        if meta.get("matter") not in MATTER_KINDS:
+            raise SpecError(f"components: {kind}: matter one of {', '.join(sorted(MATTER_KINDS))}")
+        pins = meta.get("pins", 1)
+        if pins not in (0, 1, 2):
+            raise SpecError(f"components: {kind}: pins 0, 1 or 2")
+        requires = meta.get("requires", [])
+        if not isinstance(requires, list):
+            requires = [r.strip() for r in str(requires).strip("[]").split(",") if r.strip()]
+        if any(d["type"] == kind for d in out):
+            raise SpecError(f"components: {kind} twice")
+        out.append({"source": source, "type": kind, "path": str(path), "title": str(meta.get("title") or kind),
+                    "description": str(meta.get("description") or ""), "matter": meta["matter"], "pins": pins,
+                    "number": str(meta["number"]) if meta.get("number") else None, "requires": requires})
+    return out
 
 
 # ---------------------------------------------------------------- generation
@@ -254,7 +359,7 @@ def spec_header(spec):
     rows = []
     for c in spec["connections"]:
         rows.append(f'    {{{c["slot"]}, "{c["type"]}", {c["pin"]}, {c["scl"]}, {"true" if c["inverted"] else "false"}, '
-                    f'"{c["name"]}", "{c.get("code", "")}", "{c.get("mac", "")}"}},')
+                    f'"{c["name"]}", "{c.get("code", "")}", "{c.get("mac", "")}", {c.get("number", 0)}}},')
     return "\n".join([
         "// Generated by tools/mb_generate.py from main/spec.yaml: do not edit.",
         "#pragma once",
@@ -272,14 +377,43 @@ def spec_header(spec):
         "    const char* name;",
         "    const char* code;  // IR: nec:<address>:<command>",
         "    const char* mac;   // Bluetooth",
+        "    int number;        // the setting of a component type",
         "};",
         "",
         f"constexpr int SPEC_CONNECTION_COUNT = {len(spec['connections'])};",
         f"constexpr SpecConnection SPEC_CONNECTIONS[{max(len(spec['connections']), 1)}] = {{",
-        *(rows or ['    {-1, "", 0, 0, false, "", "", ""},']),
+        *(rows or ['    {-1, "", 0, 0, false, "", "", "", 0},']),
         "};",
         "",
     ])
+
+
+def add_components(out, components):
+    """The components into the project (ESP-IDF finds <project>/components),
+    the registry that registers them, and main's dependency on them."""
+    for c in components:
+        shutil.copytree(c["path"], out / "components" / c["type"],
+                        ignore=shutil.ignore_patterns("build*", ".git", "managed_components"))
+    names = [c["type"] for c in components]
+    (out / "main" / "components_registry.cpp").write_text("\n".join([
+        "// Generated by tools/mb_generate.py: the components of this config.",
+        "",
+        '#include "io.h"',
+        "",
+        *[f"void mb_register_{n}();" for n in names],
+        "",
+        "namespace io {",
+        "",
+        "void register_components() {",
+        *[f"    mb_register_{n}();" for n in names],
+        "}",
+        "",
+        "}  // namespace io",
+        "",
+    ]))
+    cmake = (out / "main" / "CMakeLists.txt").read_text()
+    cmake = cmake.replace("REQUIRES mb_core mb_driver", "REQUIRES mb_core mb_driver " + " ".join(names), 1)
+    (out / "main" / "CMakeLists.txt").write_text(cmake)
 
 
 def generate(spec_path, out):
@@ -310,6 +444,8 @@ def generate(spec_path, out):
         shutil.copy(secrets, out / "main" / "secrets.h")
 
     (out / "main" / "spec_defaults.h").write_text(spec_header(spec))
+    if spec["components"]:
+        add_components(out, spec["components"])
     (out / "main" / "spec.yaml").write_text(text)
     (out / "build-manifest.json").write_text(json.dumps(
         {"spec": spec, "app_source": APPS[spec["app"]]}, indent=2) + "\n")

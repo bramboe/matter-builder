@@ -169,6 +169,7 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
         <label class="field" id="ioPinField"><span id="ioPinLabel"></span><select id="ioPin"></select></label>
         <label class="field" id="ioPin2Field"><span>SCL</span><select id="ioPin2"></select></label>
         <label class="field" id="ioMacField"><span data-t="mac"></span><input id="ioMac" maxlength="17" placeholder="AA:BB:CC:DD:EE:FF" autocomplete="off" spellcheck="false"></label>
+        <label class="field" id="ioNumberField"><span id="ioNumberLabel"></span><input id="ioNumber" type="number" min="0" max="65535" value="0"></label>
         <label class="field" id="ioCodeField"><span data-t="irCode"></span><input id="ioCode" maxlength="13" placeholder="nec:00FF:A25D" autocomplete="off" spellcheck="false"></label>
         <button type="button" class="text" id="ioUseLast" hidden></button>
         <label class="row" id="ioInvertedRow" style="min-height:40px;border:0"><input type="checkbox" id="ioInverted"><span class="label" data-t="inverted"></span></label>
@@ -194,6 +195,9 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
       <div class="sub" id="pairHelp" style="margin-top:10px"></div>
       </div>
       <div id="fabrics" style="margin-top:8px"></div>
+      <label class="row" style="border-top:1px solid var(--line)"><span class="label"><span data-t="blePairing"></span>
+        <span class="sub" style="display:block" data-t="blePairingHelp"></span></span><input type="checkbox" id="blePairing"></label>
+      <div class="row" id="bluetoothRow"><div class="label" data-t="bluetooth"></div><div class="sub" id="bluetoothState">–</div></div>
       <details><summary data-t="deviceNetwork"></summary>
         <div class="row"><div class="label" data-t="device"></div><div id="product" class="sub">–</div></div>
         <div class="row"><div class="label"><span data-t="vidPid"></span><div class="sub" data-t="testIds"></div></div><div id="ids" class="sub">–</div></div>
@@ -315,6 +319,10 @@ const TEXT = {
   ble_presenceHelp: 'A Bluetooth tag with a fixed address: present while it was seen in the last minute. Phones change their address, so they do not work.',
   mac: 'Bluetooth address', irCode: 'IR code (nec:address:command)', useLast: c => `Use the last code received: ${c}`,
   send: 'Send', here: 'here', away: 'away',
+  blePairing: 'Pair over Bluetooth', bluetooth: 'Bluetooth',
+  blePairingHelp: 'Lets a phone pair this device directly, also its first time, and give it the Thread network. Costs memory and radio time; off is fine when you pair with the code. Takes effect after a restart.',
+  bleOn: 'listening', bleStarting: 'starting', bleOff: 'off (no Bluetooth connection)', blePairingOn: 'pairing on',
+  confirmBlePairing: on => `${on ? 'Turn on' : 'Turn off'} pairing over Bluetooth and restart now?`,
   relayHelp: 'An output: on or off. Appears as a plug in Home Assistant and Apple Home.',
   ledHelp: 'An output with brightness (PWM). Appears as a dimmable light.',
   buttonHelp: 'An input to ground. Short, double and long presses become events.',
@@ -438,7 +446,7 @@ function ioCard(d) {
   const running = r && r.type === d.type && (isBle(d.type) || r.pin === d.pin);
   const pins = isBle(d.type) ? d.mac : d.type === 'sht4x' ? `SDA ${d.pin} · SCL ${d.pin2}` : `${t('pin')} ${d.pin}`;
   return `<div class="card"><div class="tile"><div class="icon">${icon(isOutput(d.type) ? 'light' : 'bt')}</div>
-      <div class="info"><div class="name">${esc(d.name)}</div><div class="state">${t(d.type)} · ${pins}${d.inverted ? ' · ⇅' : ''}</div></div>
+      <div class="info"><div class="name">${esc(d.name)}</div><div class="state">${driverOf(d.type) ? esc(driverOf(d.type).title) : t(d.type)} · ${pins}${d.inverted ? ' · ⇅' : ''}</div></div>
       <div class="sub">${esc(liveText(d, r))}</div></div>
     <div class="features">
       ${isOutput(d.type) && running ? `<button onclick="ioTest(${d.index}, ${!r.on})">${r.on ? t('testOff') : t('testOn')}</button>` : ''}
@@ -471,13 +479,28 @@ function fillPins(keep) {
   else if (pins.length > 1) $('#ioPin2').value = pins[1];
 }
 
+// Component types of this firmware (state.io.drivers), next to the built-in ones
+const driverOf = type => ((state && state.io && state.io.drivers) || []).find(d => d.type === type);
+
+function fillTypes() {
+  const all = [...TYPES, ...((state && state.io && state.io.drivers) || []).map(d => d.type)];
+  if ([...$('#ioType').options].map(o => o.value).join() === all.join()) return;
+  const keep = $('#ioType').value;
+  $('#ioType').innerHTML = all.map(type => `<option value="${type}"></option>`).join('');
+  if (all.includes(keep)) $('#ioType').value = keep;
+}
+
 function updateIoForm() {
-  for (const o of $('#ioType').options) o.textContent = t(o.value);
+  fillTypes();
+  for (const o of $('#ioType').options) o.textContent = driverOf(o.value) ? driverOf(o.value).title : t(o.value);
   const type = $('#ioType').value;
-  $('#ioTypeHelp').textContent = t(type + 'Help');
+  const d = driverOf(type);
+  $('#ioTypeHelp').textContent = d ? '' : t(type + 'Help');
+  $('#ioNumberField').hidden = !(d && d.number);
+  if (d && d.number) $('#ioNumberLabel').textContent = d.number;
   $('#ioPinLabel').textContent = type === 'sht4x' ? t('pinSda') : t('pin');
-  $('#ioPin2Field').hidden = type !== 'sht4x';
-  $('#ioPinField').hidden = isBle(type);
+  $('#ioPin2Field').hidden = type !== 'sht4x' && !(d && d.pins === 2);
+  $('#ioPinField').hidden = isBle(type) || (d && d.pins === 0);
   $('#ioMacField').hidden = !isBle(type);
   $('#ioCodeField').hidden = !isIr(type);
   $('#ioInvertedRow').hidden = type === 'sht4x' || isIr(type) || isBle(type);
@@ -487,6 +510,7 @@ function updateIoForm() {
 }
 
 function renderIo() {
+  renderBluetooth();
   const io = state.io;
   $('#ioTrial').hidden = !io.trial;
   if (io.trial) $('#ioTrialText').textContent = t('trialText', io.trial);
@@ -509,6 +533,7 @@ function ioEdit(index) {
   $('#ioName').value = d.name;
   $('#ioInverted').checked = d.inverted;
   $('#ioMac').value = d.mac || '';
+  $('#ioNumber').value = d.number || 0;
   $('#ioCode').value = d.code || '';
   fillPins(false);
   $('#ioPin').value = d.pin;
@@ -532,13 +557,22 @@ async function ioTest(index, on) {
 $('#ioType').innerHTML = TYPES.map(type => `<option value="${type}"></option>`).join('');
 $('#ioType').onchange = () => { fillPins(true); updateIoForm(); };
 $('#ioUseLast').onclick = () => { $('#ioCode').value = state.io.ir_last; };
+$('#blePairing').onchange = async () => {
+  const on = $('#blePairing').checked;
+  if (!confirm(t('confirmBlePairing', on))) { $('#blePairing').checked = !on; return; }
+  await run(`pairing ble ${on ? 'on' : 'off'}`);
+  await run('reboot');
+};
 $('#ioForm').onsubmit = async e => {
   e.preventDefault();
   const index = editing !== null ? editing : state.io.draft.findIndex(d => d.type === 'none');
   if (index < 0) return;
   const type = $('#ioType').value;
   const name = $('#ioName').value.trim().replace(/\s+/g, ' ') || t(type);
-  const pins = isBle(type) ? $('#ioMac').value.trim() : type === 'sht4x' ? `${$('#ioPin').value} ${$('#ioPin2').value}`
+  const d = driverOf(type);
+  const pins = d ? [d.pins > 0 ? $('#ioPin').value : null, d.pins > 1 ? $('#ioPin2').value : null,
+      d.number ? `n=${+$('#ioNumber').value || 0}` : null].filter(x => x !== null).join(' ')
+    : isBle(type) ? $('#ioMac').value.trim() : type === 'sht4x' ? `${$('#ioPin').value} ${$('#ioPin2').value}`
     : isIr(type) ? `${$('#ioPin').value} ${$('#ioCode').value.trim()}` : $('#ioPin').value;
   const inverted = $('#ioInverted').checked && !$('#ioInvertedRow').hidden;
   const reply = await cmd(`io set ${index} ${type} ${pins}${inverted ? ' inverted' : ''} ${name}`);
@@ -586,6 +620,14 @@ async function refresh() {
 }
 
 // Pairing code, QR, commissioning window and paired controllers
+function renderBluetooth() {
+  if (!state || !state.io) return;
+  const io = state.io;
+  $('#blePairing').checked = !!io.ble_pairing;
+  const scan = io.bluetooth === 'on' ? t('bleOn') : io.bluetooth === 'starting' ? t('bleStarting') : t('bleOff');
+  $('#bluetoothState').textContent = io.ble_pairing ? `${t('blePairingOn')} · ${scan}` : scan;
+}
+
 async function loadMatter() {
   if (loadingMatter) return;
   loadingMatter = true;

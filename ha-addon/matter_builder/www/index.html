@@ -367,7 +367,10 @@ const TEXT = {
     ir_send: 'IR code to send', ir_receive: 'IR code to receive', ble_sensor: 'Bluetooth thermometer', ble_presence: 'Bluetooth presence'},
   irCode: 'IR code', irCodeHint: 'nec:00FF:A25D', useLastCode: c => `Use ${c}`, noLastCode: 'Point a remote at an IR receiver of this device to learn a code.',
   mac: 'Bluetooth address', macHint: 'AA:BB:CC:DD:EE:FF',
-  needsLabel: 'Needs', needsBluetooth: 'This firmware uses Bluetooth for what it does (not only for pairing): the ESP32 needs Bluetooth, and shares its radio between Bluetooth and the network.', firmwareTooOld: v => `IR and Bluetooth connections need generic firmware ${v} or newer: update the device first (Firmware tab).`,
+  needsLabel: 'Needs', components: 'Components',
+  missingComponent: type => `This device's firmware has no “${type}” (a component): install firmware built with that component first.`,
+  componentsHelp: 'Connection types of their own, built into the firmware: change them in YAML; installing needs a build (developer mode) or a package.',
+  needsBuild: 'This config uses components: build it first (Configs › menu › Build, developer mode), or install it as a package from the catalog.', needsBluetooth: 'This firmware uses Bluetooth for what it does (not only for pairing): the ESP32 needs Bluetooth, and shares its radio between Bluetooth and the network.', firmwareTooOld: v => `IR and Bluetooth connections need generic firmware ${v} or newer: update the device first (Firmware tab).`,
   needCode: n => `${n}: an IR code like nec:00FF:A25D`, needMac: n => `${n}: a Bluetooth address like AA:BB:CC:DD:EE:FF`, liveSend: 'Send', liveHere: 'here', liveAway: 'away', liveSeen: s => `seen ${s} s ago`,
   saved: 'Saved as draft.', unchanged: 'Nothing changed.', applying: 'Restarting with the new connections…',
   trialLeft: s => `On trial: keep within ${s} s.`, kept: 'Kept.', yamlError: e => `YAML: ${e}`,
@@ -399,6 +402,10 @@ const TEXT = {
   pagePassword: 'Password of the page', link: 'Link', wrongPassword: 'Wrong password.',
   pressBoot: s => `Now press the device’s BOOT button briefly (${s} s left). Button out of reach? Switch its power off and on three times.`,
   notLinked: 'Not linked: the BOOT button was not pressed in time.', wLinked: 'Linked', linkedText: n => `${n} is linked. Set up what is connected to it next.`, linkedName: n => `${n} is linked.`,
+  blePairing: 'Pair over Bluetooth', blePairingOn: 'pairing on',
+  blePairingHelp: 'Lets a phone pair the device directly, also its first time, and give it the Thread network. Costs memory and radio time; off is fine when you pair with the code. The device restarts.',
+  ble_on: 'listening', ble_starting: 'starting', ble_off: 'off (no Bluetooth connection)',
+  confirmBlePairing: on => `${on ? 'Turn on' : 'Turn off'} pairing over Bluetooth? The device restarts.`,
   addToHa: 'Home Assistant', addToHaBtn: 'Add to Home Assistant',
   addToHaHelp: 'Adds it to Home Assistant’s Matter integration over the network, next to Apple Home or another controller.',
   confirmAddToHa: 'Open a pairing window on the device and add it to Home Assistant now? This takes a minute or two on Thread.',
@@ -523,6 +530,12 @@ const needChips = list => list.length ? `<div class="needs">${list.map(n => `<sp
 const rowsNeed = rows => rows.some(r => isBle(r.type)) ? ['bluetooth'] : [];
 const pkgOf = app => (state.packages || []).find(p => p.app === app);
 
+// A connection type the device's firmware does not have (a component)
+function missingType(rows, drivers) {
+  const r = rows.find(x => !TYPES.includes(x.type) && !(drivers || []).some(d => d.type === x.type));
+  return r ? r.type : null;
+}
+
 // IR and Bluetooth connections need generic firmware 0.1.3 or newer
 const MIN_NEW_TYPES = '0.1.3';
 function tooOld(r, rows) {
@@ -589,7 +602,8 @@ const TYPE_ICON = {
   ble_sensor: 'M11 2h1l5 5-3.5 3.5L17 14l-5 5h-1v-6.5L7.5 16 6 14.5 10.5 10 6 5.5 7.5 4l3.5 3.5V2m2 3.8v3.4L14.7 7.5 13 5.8m0 7v3.4l1.7-1.7L13 12.8Z',
   ble_presence: 'M11 2h1l5 5-3.5 3.5L17 14l-5 5h-1v-6.5L7.5 16 6 14.5 10.5 10 6 5.5 7.5 4l3.5 3.5V2m2 3.8v3.4L14.7 7.5 13 5.8m0 7v3.4l1.7-1.7L13 12.8Z',
 };
-const typeIcon = type => `<svg viewBox="0 0 24 24"><path d="${TYPE_ICON[type] || ICON.chip}"/></svg>`;
+const MATTER_ICON = {on_off: 'relay', dimmable: 'led', button: 'button', contact: 'contact', occupancy: 'motion', climate: 'sht4x'};
+const typeIcon = (type, driver) => `<svg viewBox="0 0 24 24"><path d="${TYPE_ICON[type] || (driver && TYPE_ICON[MATTER_ICON[driver.matter]]) || ICON.chip}"/></svg>`;
 const isOutputType = type => type === 'relay' || type === 'led';
 const EDITORS = {};
 let editorPref = 'visual';
@@ -600,19 +614,25 @@ class ConfigEditor {
     this.id = id; this.host = null; this.name = ''; this.rows = []; this.pins = SAFE_PINS;
     this.mode = editorPref; this.yaml = ''; this.error = ''; this.open = new Set(); this.cardYaml = {};
     this.picking = false; this.live = null; this.tester = null; this.onChange = null;
+    this.components = []; this.drivers = [];  // component types: from the config, or from the device
     EDITORS[id] = this;
   }
   get ref() { return `EDITORS['${this.id}']`; }
+  driver(type) { return this.drivers.find(d => d.type === type) || null; }
+  types() { return [...TYPES, ...this.drivers.map(d => d.type)]; }
+  title(type) { const d = this.driver(type); return d ? d.title : TEXT.types[type] || type; }
+  help(type) { const d = this.driver(type); return d ? (d.description || '') : TEXT.typeHelp[type] || ''; }
+  pinCount(type) { const d = this.driver(type); return d ? d.pins : isBle(type) ? 0 : type === 'sht4x' ? 2 : 1; }
   mount(host) { this.host = host; this.render(); }
   load(name, rows, pins) {
     this.name = name; this.rows = rows.map(r => ({...r})); if (pins) this.pins = pins;
-    this.yaml = specYaml(name, this.rows); this.error = ''; this.open.clear(); this.cardYaml = {}; this.picking = false;
+    this.yaml = specYaml(name, this.rows, this.components, this.drivers); this.error = ''; this.open.clear(); this.cardYaml = {}; this.picking = false;
     this.render();
   }
   // A YAML text (a config or recipe): shown as it is in the YAML mode
   async loadText(text) {
     this.yaml = text; this.cardYaml = {}; this.open.clear();
-    try { const s = await parseSpec(text); this.name = s.name; this.rows = s.rows; this.error = ''; }
+    try { const s = await parseSpec(text); this.name = s.name; this.rows = s.rows; this.components = s.components; this.drivers = s.drivers; this.error = ''; }
     catch (e) { this.error = t('yamlError', e.message); this.mode = 'yaml'; }
     this.changed();
   }
@@ -624,9 +644,9 @@ class ConfigEditor {
 
   async setMode(mode) {
     if (mode === this.mode) return;
-    if (mode === 'yaml') this.yaml = specYaml(this.name, this.rows);
+    if (mode === 'yaml') this.yaml = specYaml(this.name, this.rows, this.components, this.drivers);
     else {
-      try { const s = await parseSpec(this.yaml); this.name = s.name; this.rows = s.rows; this.error = ''; }
+      try { const s = await parseSpec(this.yaml); this.name = s.name; this.rows = s.rows; this.components = s.components; this.drivers = s.drivers; this.error = ''; }
       catch (e) { this.error = t('yamlError', e.message); this.render(); return; }
     }
     this.mode = mode; this.error = '';
@@ -637,10 +657,10 @@ class ConfigEditor {
   async get() {
     if (this.mode === 'yaml') {
       const s = await parseSpec(this.yaml);
-      this.name = s.name; this.rows = s.rows; this.error = '';
+      this.name = s.name; this.rows = s.rows; this.components = s.components; this.drivers = s.drivers; this.error = '';
       return s;
     }
-    const rows = this.rows.map(r => ({...r, name: (r.name || '').trim() || TEXT.types[r.type],
+    const rows = this.rows.map(r => ({...r, name: (r.name || '').trim() || this.title(r.type),
       code: isIr(r.type) ? normalCode(r.code) : '', mac: isBle(r.type) ? (r.mac || '').trim().toUpperCase() : '',
       pin: isBle(r.type) ? 0 : r.pin}));
     for (const r of rows) {
@@ -649,14 +669,14 @@ class ConfigEditor {
     }
     return {name: this.name.trim(), rows};
   }
-  text() { return this.mode === 'yaml' ? this.yaml : specYaml(this.name.trim(), this.rows); }
+  text() { return this.mode === 'yaml' ? this.yaml : specYaml(this.name.trim(), this.rows, this.components, this.drivers); }
 
   // Who else uses a pin; IR codes of the same kind share their LED or receiver
   usedBy(pin, slot) {
     const me = this.row(slot), type = me ? me.type : null;
     const r = this.rows.find(x => x.slot !== slot && !isBle(x.type) && !(isIr(type) && x.type === type) &&
       (x.pin === pin || (x.type === 'sht4x' && x.pin2 === pin)));
-    return r ? (r.name || TEXT.types[r.type]) : null;
+    return r ? (r.name || this.title(r.type)) : null;
   }
   freePin(slot, not) { return this.pins.find(p => p !== not && !this.usedBy(p, slot)); }
   row(slot) { return this.rows.find(r => r.slot === slot); }
@@ -681,13 +701,14 @@ class ConfigEditor {
     const slot = [0, 1, 2, 3, 4, 5, 6, 7].find(s => !this.row(s));
     if (slot === undefined) return;
     const pin = this.freePin(slot);
-    const r = {slot, type, pin, pin2: 0, inverted: false, name: '', code: '', mac: ''};
+    const r = {slot, type, pin, pin2: 0, inverted: false, name: '', code: '', mac: '', number: 0};
     this.rows.push(r);
     // A second IR code of the same kind starts on the first one's LED or receiver
     const same = isIr(type) && this.rows.find(x => x.slot !== slot && x.type === type);
     if (same) r.pin = same.pin;
     if (isBle(type)) r.pin = 0;
-    if (type === 'sht4x') r.pin2 = this.freePin(slot, pin);
+    if (type === 'sht4x' || this.pinCount(type) === 2) r.pin2 = this.freePin(slot, pin);
+    if (this.pinCount(type) === 0) r.pin = 0;
     this.rows.sort((a, b) => a.slot - b.slot);
     this.picking = false; this.open.add(slot);
     this.changed();
@@ -695,7 +716,7 @@ class ConfigEditor {
   duplicate(slot) {
     const from = this.row(slot), to = [0, 1, 2, 3, 4, 5, 6, 7].find(s => !this.row(s));
     if (to === undefined) return;
-    const r = {...from, slot: to, name: `${from.name || TEXT.types[from.type]} 2`, pin: undefined, pin2: 0};
+    const r = {...from, slot: to, name: `${from.name || this.title(from.type)} 2`, pin: undefined, pin2: 0};
     this.rows.push(r);
     r.pin = this.freePin(to);
     if (r.type === 'sht4x') r.pin2 = this.freePin(to, r.pin);
@@ -717,7 +738,7 @@ class ConfigEditor {
     try {
       const s = await parseSpec(text);
       if (s.rows.length !== 1) throw new Error(t('oneConnection'));
-      const r = {...s.rows[0], slot};
+      const r = {...s.rows[0], slot, number: s.rows[0].number || 0};
       const clash = [r.pin, r.type === 'sht4x' ? r.pin2 : null].map(p => p !== null && this.usedBy(p, slot)).find(Boolean);
       if (clash) throw new Error(t('pinTaken', clash));
       this.rows = this.rows.map(x => x.slot === slot ? r : x);
@@ -757,21 +778,23 @@ class ConfigEditor {
            <button class="pri" onclick="${ref}.doneCardYaml(${r.slot})">${t('done')}</button></div>`
       : `<div class="ed-fields">
           <label class="field"><span>${t('type')}</span><select onchange="${ref}.set(${r.slot}, 'type', this.value)">
-            ${TYPES.map(x => `<option value="${x}" ${x === r.type ? 'selected' : ''}>${esc(TEXT.types[x])}</option>`).join('')}</select></label>
-          ${isBle(r.type) ? `<label class="field"><span>${t('mac')}</span><input value="${esc(r.mac)}" placeholder="${t('macHint')}" maxlength="17" spellcheck="false" oninput="${ref}.setQuiet(${r.slot}, 'mac', this.value)"></label>`
+            ${this.types().map(x => `<option value="${x}" ${x === r.type ? 'selected' : ''}>${esc(this.title(x))}</option>`).join('')}</select></label>
+          ${this.driver(r.type) && this.pinCount(r.type) === 0 ? '' : isBle(r.type) ? `<label class="field"><span>${t('mac')}</span><input value="${esc(r.mac)}" placeholder="${t('macHint')}" maxlength="17" spellcheck="false" oninput="${ref}.setQuiet(${r.slot}, 'mac', this.value)"></label>`
             : `<label class="field"><span>${r.type === 'sht4x' ? 'SDA' : t('pin')}</span>${this.pinSelect(r.slot, 'pin', r.pin)}</label>`}
           ${r.type === 'sht4x' ? `<label class="field"><span>SCL</span>${this.pinSelect(r.slot, 'pin2', r.pin2)}</label>` : ''}
+          ${this.driver(r.type) && this.pinCount(r.type) === 2 ? `<label class="field"><span>${t('pin')} 2</span>${this.pinSelect(r.slot, 'pin2', r.pin2)}</label>` : ''}
+          ${this.driver(r.type) && this.driver(r.type).number ? `<label class="field"><span>${esc(this.driver(r.type).number)}</span><input type="number" min="0" max="65535" value="${r.number || 0}" oninput="${ref}.setQuiet(${r.slot}, 'number', +this.value)"></label>` : ''}
           ${isIr(r.type) ? `<label class="field"><span>${t('irCode')}</span><input value="${esc(r.code)}" placeholder="${t('irCodeHint')}" maxlength="13" spellcheck="false" oninput="${ref}.setQuiet(${r.slot}, 'code', this.value)"></label>` : ''}
-          <label class="field"><span>${t('name')}</span><input maxlength="23" value="${esc(r.name)}" placeholder="${esc(TEXT.types[r.type])}" oninput="${ref}.setQuiet(${r.slot}, 'name', this.value)"></label>
+          <label class="field"><span>${t('name')}</span><input maxlength="23" value="${esc(r.name)}" placeholder="${esc(this.title(r.type))}" oninput="${ref}.setQuiet(${r.slot}, 'name', this.value)"></label>
         </div>
-        <div class="sub" style="margin-top:8px">${esc(TEXT.typeHelp[r.type])}</div>
+        <div class="sub" style="margin-top:8px">${esc(this.help(r.type))}</div>
         ${isIr(r.type) && this.irLast !== undefined ? (this.irLast ? `<div class="actions" style="margin-top:6px"><button class="text" onclick="${ref}.set(${r.slot}, 'code', '${esc(this.irLast)}')">${esc(t('useLastCode', this.irLast))}</button></div>`
           : `<div class="sub" style="margin-top:6px">${t('noLastCode')}</div>`) : ''}
         ${r.type !== 'sht4x' && !isIr(r.type) && !isBle(r.type) ? `<label class="switch" style="margin-top:10px"><input type="checkbox" ${r.inverted ? 'checked' : ''} onchange="${ref}.set(${r.slot}, 'inverted', this.checked)"><span class="sub">${t('invertedHelp')}</span></label>` : ''}`;
     return `<div class="ed-item ${open ? 'open' : ''}">
       <div class="ed-item-head" onclick="if (!event.target.closest('details,button')) ${ref}.toggle(${r.slot})">
-        <span class="ico">${typeIcon(r.type)}</span>
-        <div class="info"><b>${esc(r.name || TEXT.types[r.type])}</b><div class="sub">${esc(TEXT.types[r.type])} · ${pins}${r.inverted ? ' · ' + t('invertedShort') : ''}</div></div>
+        <span class="ico">${typeIcon(r.type, this.driver(r.type))}</span>
+        <div class="info"><b>${esc(r.name || this.title(r.type))}</b><div class="sub">${esc(this.title(r.type))} · ${pins}${r.inverted ? ' · ' + t('invertedShort') : ''}</div></div>
         ${live ? `<span class="chip">${esc(live)}</span>` : ''}
         ${canTest ? (r.type === 'ir_send' ? `<button class="plain" onclick="${ref}.tester(${r.slot}, true)">${t('liveSend')}</button>`
           : `<button class="plain" onclick="${ref}.tester(${r.slot}, ${!l.on})">${l.on ? t('liveTurnOff') : t('liveTurnOn')}</button>`) : ''}
@@ -802,11 +825,14 @@ class ConfigEditor {
     this.host.innerHTML = `${head}
       <div class="ed-item"><div class="ed-item-head" style="cursor:default"><span class="ico">${icon('chip')}</span>
         <label class="field" style="flex:1"><span>${t('deviceName')}</span><input maxlength="32" value="${esc(this.name)}" oninput="${ref}.setName(this.value)"></label></div></div>
+      ${this.components.length ? `<div class="ed-section"><h3>${t('components')}</h3></div>
+        <div class="sub" style="margin:-4px 2px 6px">${t('componentsHelp')}</div>
+        ${this.components.map(c => `<div class="row"><div class="label mono">${esc(c.source)}</div></div>`).join('')}` : ''}
       <div class="ed-section"><h3>${t('connections')}</h3><span class="sub">${t('ofEight', this.rows.length)}</span></div>
       ${this.rows.length ? this.rows.map(r => this.card(r)).join('') : `<div class="sub" style="margin:4px 2px 8px">${t('nothingConnected')}</div>`}
       ${this.picking ? `<div class="ed-item open"><div class="ed-item-head" style="cursor:default"><b style="flex:1;font-weight:500">${t('addConnection')}</b>
           <button class="icon" onclick="${ref}.picking = false; ${ref}.render()" aria-label="${t('close')}">${icon('close')}</button></div>
-          <div class="ed-item-body"><div class="choices" style="margin:0">${TYPES.map(x => `<button class="choice" onclick="${ref}.add('${x}')"><span class="ico">${typeIcon(x)}</span><span><b>${esc(TEXT.types[x])}</b><span class="sub">${esc(TEXT.typeHelp[x])}</span></span></button>`).join('')}</div></div></div>`
+          <div class="ed-item-body"><div class="choices" style="margin:0">${this.types().map(x => `<button class="choice" onclick="${ref}.add('${x}')"><span class="ico">${typeIcon(x, this.driver(x))}</span><span><b>${esc(this.title(x))}</b><span class="sub">${esc(this.help(x))}</span></span></button>`).join('')}</div></div></div>`
         : `<button class="ed-add" onclick="${ref}.picking = true; ${ref}.render()" ${full ? 'disabled' : ''}>${icon('plus')} ${full ? t('allUsed') : t('addConnection')}</button>`}
       ${error}`;
   }
@@ -819,7 +845,7 @@ class ConfigEditor {
 // added, with its key pinned; a recipe is only connections, no code.
 let catalogData = null, catalogError = null, catalogLoading = false, sourceFilter = 'any';
 const rowsOf = conns => (conns || []).map(x => ({slot: x.slot, type: x.type, pin: x.pin, pin2: x.scl, inverted: x.inverted, name: x.name,
-  code: x.code || '', mac: x.mac || ''}));
+  code: x.code || '', mac: x.mac || '', number: x.number || 0}));
 
 function localCatalog() {
   const items = [];
@@ -1011,7 +1037,9 @@ async function useConfig(slug, where) {
   const text = (await api(`api/specs/${slug}`)).text;
   const spec = await parseSpec(text).catch(() => null);
   if (!spec) return;
-  if (where === 'new') openWizard('firmware', null, {configText: text});
+  const sp = (specs || []).find(x => x.slug === slug);
+  if (spec.components.length && where === 'new' && !(sp && sp.factory.length)) { alert(t('needsBuild')); return; }
+  if (where === 'new') openWizard('firmware', null, {configText: text, file: sp && sp.factory.length ? sp.factory[sp.factory.length - 1] : null});
   else openWizard('recipeTarget', null, {recipe: {title: spec.name, rows: spec.rows}, configText: text, deviceOnly: true});
 }
 
@@ -1218,6 +1246,8 @@ async function openDevice(id, which, recipe) {
   } catch (e) { managed = {id, io: null}; }
   if (managed.io) {
     devEditor.mount($('#devEditor'));
+    devEditor.drivers = managed.io.drivers || [];
+    devEditor.components = [];
     devEditor.load(managed.io.name, rowsFromIo(managed.io), managed.io.pins);
     $('#mSave').classList.remove('pri');
     if (recipe) {
@@ -1282,10 +1312,20 @@ function renderDevicePanel() {
     <div class="row"><div class="label">${t('key')}<div class="sub mono">${token ? esc(token) : '••••••••••••••••'}</div></div>
       <button class="text" onclick="toggleToken('${p.id}')">${token ? t('hide') : t('show')}</button>
       ${token ? `<button class="text" onclick="copyToken('${p.id}')">${t('copy')}</button>` : ''}</div>
+    ${s && s.io && s.io.ble_pairing !== undefined ? `<div class="row"><div class="label">${t('blePairing')}<div class="sub">${t('blePairingHelp')}</div></div>
+      <label class="switch"><input type="checkbox" ${s.io.ble_pairing ? 'checked' : ''} onchange="setBlePairing('${p.id}', this.checked)"></label></div>
+      <div class="row"><div class="label">Bluetooth</div><div class="sub">${esc(s.io.ble_pairing ? t('blePairingOn') + ' · ' : '')}${esc(t('ble_' + s.io.bluetooth) || s.io.bluetooth)}</div></div>` : ''}
     ${r ? `<div class="row"><div class="label">${t('addToHa')}<div class="sub">${t('addToHaHelp')}</div></div>
       <button onclick="addToHa('${p.id}')" ${state.job.running ? 'disabled' : ''}>${t('addToHaBtn')}</button></div>` : ''}
     <div class="actions"><button class="plain" onclick="renameProxy('${p.id}')">${t('rename')}</button><span class="grow"></span>
       <button class="warn" onclick="forgetProxy('${p.id}')">${t('forget')}</button></div>`);
+}
+
+// Pairing over Bluetooth on the device; it restarts to use it
+async function setBlePairing(id, on) {
+  if (!confirm(t('confirmBlePairing', on))) { render(); return; }
+  try { await proxyCommand(id, `pairing ble ${on ? 'on' : 'off'}`); await proxyCommand(id, 'reboot'); } catch (e) {}
+  setTimeout(loadStatuses, 15000);
 }
 
 // Into Home Assistant's Matter fabric, next to Apple Home or another controller
@@ -1315,39 +1355,46 @@ async function copyToken(id) {
 function rowsFromIo(io) {
   return io.draft.filter(d => d.type !== 'none')
     .map(d => ({slot: d.index, type: d.type, pin: isBle(d.type) ? 0 : d.pin, pin2: d.pin2, inverted: d.inverted, name: d.name,
-      code: d.code || '', mac: d.mac || ''}));
+      code: d.code || '', mac: d.mac || '', number: d.number || 0}));
 }
 
 // One YAML format everywhere (device, config, recipe, wizard): the spec of
 // tools/mb_generate.py, checked by the add-on with the generator itself
-function specYaml(name, rows) {
+function specYaml(name, rows, components = [], drivers = []) {
   const lines = ['device:', `  name: ${name}`, '  app: generic', '', 'connections:'];
   for (const r of rows) {
+    const d = drivers.find(x => x.type === r.type);
     lines.push(`  - slot: ${r.slot}`, `    type: ${r.type}`);
-    if (isBle(r.type)) lines.push(`    mac: ${r.mac}`); else lines.push(`    pin: ${r.pin}`);
+    if (isBle(r.type)) lines.push(`    mac: ${r.mac}`); else if (!d || d.pins > 0) lines.push(`    pin: ${r.pin}`);
     if (r.type === 'sht4x') lines.push(`    scl: ${r.pin2}`);
+    if (d && d.pins === 2) lines.push(`    pin2: ${r.pin2}`);
+    if (d && d.number) lines.push(`    number: ${r.number || 0}`);
     if (isIr(r.type)) lines.push(`    code: ${r.code}`);
     if (r.inverted) lines.push('    inverted: true');
-    lines.push(`    name: ${r.name || TEXT.types[r.type]}`);
+    lines.push(`    name: ${r.name || (d ? d.title : TEXT.types[r.type])}`);
   }
+  if (components.length) lines.push('', 'components:', ...components.map(c => `  - source: ${c.source}`));
   return lines.join('\n') + '\n';
 }
 
 async function parseSpec(text) {
   const r = await api('api/specs', {text, check_only: true});
   if (!r.spec) throw new Error(r.error || 'not valid');
-  return {name: r.spec.name, rows: rowsOf(r.spec.connections)};
+  return {name: r.spec.name, rows: rowsOf(r.spec.connections), components: (r.spec.components || []).map(c => ({source: c.source})),
+    drivers: r.spec.drivers || []};
 }
 
 // The commands that turn a device's draft into these connections and name
-function diffLines(io, rows, name) {
+function diffLines(io, rows, name, drivers = []) {
   const before = new Map(rowsFromIo(io).map(r => [r.slot, r]));
   const lines = [];
   for (const r of rows) {
     const old = before.get(r.slot);
     before.delete(r.slot);
     if (old && JSON.stringify(old) === JSON.stringify(r)) continue;
-    const where = isBle(r.type) ? r.mac : r.type === 'sht4x' ? `${r.pin} ${r.pin2}` : isIr(r.type) ? `${r.pin} ${r.code}` : `${r.pin}`;
+    const d = drivers.find(x => x.type === r.type);
+    const where = d ? [d.pins > 0 ? r.pin : null, d.pins > 1 ? r.pin2 : null, d.number ? `n=${r.number || 0}` : null].filter(x => x !== null).join(' ')
+      : isBle(r.type) ? r.mac : r.type === 'sht4x' ? `${r.pin} ${r.pin2}` : isIr(r.type) ? `${r.pin} ${r.code}` : `${r.pin}`;
     lines.push(`io set ${r.slot} ${r.type} ${where}${r.inverted && !isIr(r.type) && !isBle(r.type) ? ' inverted' : ''} ${(r.name || TEXT.types[r.type]).trim().replace(/\s+/g, ' ')}`);
   }
   for (const slot of before.keys()) lines.push(`io clear ${slot}`);
@@ -1374,10 +1421,12 @@ async function saveManage() {
   let spec;
   try { spec = await devEditor.get(); }
   catch (e) { $('#mError').textContent = t('yamlError', e.message); $('#mError').hidden = false; return; }
+  const missing = missingType(spec.rows, managed.io.drivers);
+  if (missing) { $('#mError').textContent = t('missingComponent', missing); $('#mError').hidden = false; return; }
   if (tooOld(running(statuses[managed.id]), spec.rows)) {
     $('#mError').textContent = t('firmwareTooOld', MIN_NEW_TYPES); $('#mError').hidden = false; return;
   }
-  const lines = diffLines(managed.io, spec.rows, spec.name);
+  const lines = diffLines(managed.io, spec.rows, spec.name, devEditor.drivers);
   try { await sendLines(managed.id, lines); }
   catch (e) { $('#mError').textContent = e.message; $('#mError').hidden = false; return; }
   managed.io = JSON.parse(await proxyCommand(managed.id, 'io json')).io;
@@ -1579,6 +1628,10 @@ async function pickConfig(value) {
 async function configureNext() {
   try { wiz.configSpec = await wizEditor.get(); }
   catch (e) { wiz.error = t('yamlError', e.message); renderWizard(); return; }
+  // Components are code: only firmware built from a config has them
+  if (wizEditor.components.length && !(specs || []).some(sp => sp.factory.includes(wiz.file))) {
+    wiz.error = t('needsBuild'); renderWizard(); return;
+  }
   if (wiz.saveConfig) {
     const r = await api('api/specs', {text: wizEditor.text()});
     if (r.error) { wiz.error = r.error; renderWizard(); return; }
@@ -1597,7 +1650,9 @@ async function applyConfig() {
     const io = JSON.parse(await proxyCommand(id, 'io json')).io;
     const st = await api(`api/proxy/${id}/status`);
     if (tooOld(running(st), spec.rows)) throw new Error(t('firmwareTooOld', MIN_NEW_TYPES));
-    await sendLines(id, diffLines(io, spec.rows, spec.name));
+    const missing = missingType(spec.rows, io.drivers);
+    if (missing) throw new Error(t('missingComponent', missing));
+    await sendLines(id, diffLines(io, spec.rows, spec.name, (io.drivers || []).concat(spec.drivers || [])));
     try { await proxyCommand(id, 'io apply'); } catch (e) {}
     for (let i = 0; i < 40; i++) {
       await new Promise(r => setTimeout(r, 3000));

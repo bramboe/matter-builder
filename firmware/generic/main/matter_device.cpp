@@ -103,7 +103,7 @@ void on_input(int index, bool active) {
         const bool on = (arg & 1) != 0;
         const uint16_t ep = endpoint_of[i];
         if (ep == 0) return;
-        if (io::slot(i).type == io::Type::contact) {
+        if (io::matter_of(i) == 3) {
             esp_matter_attr_val_t value = esp_matter_bool(on);
             attribute::update(ep, BooleanState::Id, BooleanState::Attributes::StateValue::Id, &value);
         } else {
@@ -132,6 +132,16 @@ void on_button(int index, io::Press press, uint8_t count) {
             case io::Press::multi_complete: ev::send_multi_press_complete(ep, 0, count); break;
         }
     }, static_cast<intptr_t>(index) | (static_cast<intptr_t>(press) << 8) | (static_cast<intptr_t>(count) << 16));
+}
+
+// An output that changed by itself (a component, e.g. a pulse that ended)
+void on_output(int index, bool on) {
+    (void) chip::DeviceLayer::PlatformMgr().ScheduleWork([](intptr_t arg) {
+        const int i = static_cast<int>(arg >> 1);
+        if (endpoint_of[i] == 0) return;
+        esp_matter_attr_val_t value = esp_matter_bool((arg & 1) != 0);
+        attribute::update(endpoint_of[i], OnOff::Id, OnOff::Attributes::OnOff::Id, &value);
+    }, (static_cast<intptr_t>(index) << 1) | (on ? 1 : 0));
 }
 
 void update_climate(int i) {
@@ -184,39 +194,36 @@ void add_climate_sensor(endpoint_t* ep) {
     endpoint::humidity_sensor::add(ep, &humidity);
 }
 
-// The device type of a connection on its endpoint
+// The device type of a connection on its endpoint (io::matter_of: built-in
+// and component types alike)
 void add_device_type(endpoint_t* ep, int i) {
-    switch (io::slot(i).type) {
-        case io::Type::relay:
-        case io::Type::ir_send: {
+    switch (io::matter_of(i)) {
+        case 0: {
             endpoint::on_off_plug_in_unit::config_t config;
             endpoint::on_off_plug_in_unit::add(ep, &config);
             break;
         }
-        case io::Type::led: {
+        case 1: {
             endpoint::dimmable_light::config_t config;
             endpoint::dimmable_light::add(ep, &config);
             break;
         }
-        case io::Type::button:
-        case io::Type::ir_receive:
+        case 2:
             add_generic_switch(ep);
             break;
-        case io::Type::contact: {
+        case 3: {
             endpoint::contact_sensor::config_t config;
             config.boolean_state.state_value = io::input_active(i);
             endpoint::contact_sensor::add(ep, &config);
             break;
         }
-        case io::Type::motion:
-        case io::Type::ble_presence:
+        case 4:
             add_occupancy_sensor(ep, i);
             break;
-        case io::Type::sht4x:
-        case io::Type::ble_sensor:
+        case 5:
             add_climate_sensor(ep);
             break;
-        case io::Type::none:
+        default:
             break;
     }
 }
@@ -275,13 +282,13 @@ void after_start() {
             esp_matter_attr_val_t device_name = esp_matter_char_str(const_cast<char*>(text), std::strlen(text));
             attribute::update(endpoint_of[i], BridgedDeviceBasicInformation::Id,
                               BridgedDeviceBasicInformation::Attributes::NodeLabel::Id, &device_name);
-            const io::Type type = io::slot(i).type;
-            if (type == io::Type::sht4x || type == io::Type::ble_sensor) update_climate(i);
+            const int kind = io::matter_of(i);
+            if (kind == 5) update_climate(i);
             // Inputs may have changed before Matter listened (Bluetooth starts first)
-            if (type == io::Type::contact) {
+            if (kind == 3) {
                 esp_matter_attr_val_t value = esp_matter_bool(io::input_active(i));
                 attribute::update(endpoint_of[i], BooleanState::Id, BooleanState::Attributes::StateValue::Id, &value);
-            } else if (type == io::Type::motion || type == io::Type::ble_presence) {
+            } else if (kind == 4) {
                 esp_matter_attr_val_t value = esp_matter_bitmap8(io::input_active(i) ? 1 : 0);
                 attribute::update(endpoint_of[i], OccupancySensing::Id, OccupancySensing::Attributes::Occupancy::Id, &value);
             }
@@ -314,6 +321,7 @@ void start() {
     listener.input = on_input;
     listener.button = on_button;
     listener.climate = on_climate;
+    listener.output = on_output;
     io::set_listener(listener);
     esp_matter::set_custom_device_instance_info_provider(&device_info);
     create_endpoints();

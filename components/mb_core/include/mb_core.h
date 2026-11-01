@@ -32,6 +32,10 @@ struct App {
     // the page as a JSON object ("{...}"), merged with the mode's own fields
     void (*config_mode_start)();
     std::string (*state_json)();
+    // Pairing over Bluetooth is on (nullptr: never): a device without a Thread
+    // network then waits for a phone to pair it, which brings the network,
+    // instead of going to configuration mode
+    bool (*ble_pairing)();
 };
 
 // Call first thing in app_main, before anything else of mb_core

@@ -450,7 +450,12 @@ settings: {}              # following the package's schema
   3. **Without HA**: a flash page of the project on GitHub Pages, with the same esptool-js; the page checks the signature and hash in the browser (WebCrypto, P-256). Fits "works without HA" and is not an external web flasher: the page comes from this repository. The firmware then has to be on Pages too, since release files can probably not be fetched from a web page (CORS); to check.
 - No dependency on web.esphome.io or Espressif's flasher. Anyone can always flash the factory image with esptool themselves.
 
-### 16.6 Order of work
+### 16.6 Requirements, Bluetooth pairing and components (2026-11-01)
+- **Requirements.** A board says what it has (`BOARD_CAPS` in `tools/mb_generate.py`: network and Bluetooth); a config needs Bluetooth for Bluetooth connections, a package says `requires` and `network` in its `package.yaml`. The add-on shows them as labels and refuses what a board or firmware cannot do.
+- **Pairing over Bluetooth** (CHIPoBLE) is built into the generic firmware and switched on the device (`pairing ble on|off`, off by default). Off, Matter lets go of Bluetooth after starting and the scanner starts its own stack when a connection listens; on, Matter keeps it and the scanner joins. `USE_BLE_ONLY_FOR_COMMISSIONING` is off, since Matter would otherwise release the Bluetooth memory for good after pairing. Costs ±100 KB flash always; RAM only while on.
+- **Components** add connection types to the generic firmware: `component.yaml` plus an ESP-IDF component using `components/mb_driver` (`io::register_driver`, `report_*`). Configs list them under `components:` (`github:owner/repo/path@ref`, pinned, cached; or `local:path`); the generator copies them into the project and writes `main/components_registry.cpp`. A type's id comes from its name, so stored connections keep their type. Building is developer mode or a package source's CI; ordinary users get them as packages.
+
+### 16.7 Order of work
 1. Factory images and package descriptions in the release and the manifest. (Done 2026-11-01.)
 2. Installing without building for `generic` (§16.5), with the pages of §16.4. (Done 2026-11-01, add-on 0.8.)
 3. Flashing on the HA host (§16.5, way 2). (Done 2026-11-01, add-on 0.9.)

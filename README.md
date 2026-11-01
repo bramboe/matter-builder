@@ -81,13 +81,9 @@ before it installs anything.
 | Part | State |
 |---|---|
 | Generic device 0.1.3 (released) | Tested on an ESP32-C6: setup access point, linking, connections with trial and rollback, IR send, Bluetooth presence next to Thread |
-| Generic device 0.1.4 (not released) | Pairing over Bluetooth and components; works with pairing off. With pairing on, the C6 crashed after boot and the boot guard switched slots: being investigated |
+| Generic device 0.1.4 (not released) | Tested on an ESP32-C6: pairing over Bluetooth (paired with a phone, then stable with two controllers and Bluetooth presence next to it; 174 KB free with pairing on, 199 KB off), components build |
 | Add-on 0.15.0 | Devices, Catalog and Configs tabs; visual and YAML editor; flashing on the Home Assistant host; adding a device to Home Assistant |
 | Catalog | Built nightly on GitHub Pages from repositories with the topic `matter-builder-package` |
-
-Known issue: in configuration mode the serial console only knows `help`,
-`system`, `revert`, `reboot` and `password`; `thread` and `wifi` work only
-on the settings page.
 
 ## License
 

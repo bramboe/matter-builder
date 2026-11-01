@@ -6,6 +6,7 @@ never stored. Builds and updates run one at a time as a "job" with a log.
 Only the standard library: the image is Espressif's ESP-IDF image.
 """
 
+import base64
 import hashlib
 import http.server
 import ipaddress
@@ -531,6 +532,110 @@ def release_image(name, kind="images"):
     return path
 
 
+# ---------------------------------------------------------------- Home Assistant's Matter server
+
+# The Matter Server add-on listens on the host network; so does this add-on
+MATTER_SERVER = ("127.0.0.1", 5580)
+
+
+def matter_server(command, args, timeout=300):
+    """One command to the Matter server's WebSocket API, and its answer.
+    A small client of its own: the add-on has no WebSocket library."""
+    sock = socket.create_connection(MATTER_SERVER, timeout=10)
+    sock.settimeout(timeout)
+    try:
+        key = base64.b64encode(os.urandom(16)).decode()
+        sock.sendall((f"GET /ws HTTP/1.1\r\nHost: {MATTER_SERVER[0]}:{MATTER_SERVER[1]}\r\nUpgrade: websocket\r\n"
+                      f"Connection: Upgrade\r\nSec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n\r\n").encode())
+        head = b""
+        while b"\r\n\r\n" not in head:
+            chunk = sock.recv(1024)
+            if not chunk:
+                raise OSError("Matter server closed the connection")
+            head += chunk
+        status_line = head.split(b"\r\n")[0].decode(errors="replace")
+        if " 101 " not in status_line:
+            raise OSError(f"Matter server refused: {status_line}")
+        rest = head.split(b"\r\n\r\n", 1)[1]
+
+        def read(n):
+            nonlocal rest
+            while len(rest) < n:
+                chunk = sock.recv(65536)
+                if not chunk:
+                    raise OSError("Matter server closed the connection")
+                rest += chunk
+            data, rest = rest[:n], rest[n:]
+            return data
+
+        def send(opcode, payload):
+            mask = os.urandom(4)
+            size = len(payload)
+            header = bytes([0x80 | opcode]) + (bytes([0x80 | size]) if size < 126 else
+                                               bytes([0x80 | 126]) + struct.pack(">H", size) if size < 65536 else
+                                               bytes([0x80 | 127]) + struct.pack(">Q", size))
+            sock.sendall(header + mask + bytes(b ^ mask[i % 4] for i, b in enumerate(payload)))
+
+        def receive():
+            message = b""
+            while True:
+                first, second = read(2)
+                size = second & 0x7F
+                if size == 126:
+                    size = struct.unpack(">H", read(2))[0]
+                elif size == 127:
+                    size = struct.unpack(">Q", read(8))[0]
+                payload = read(size)
+                opcode = first & 0x0F
+                if opcode == 9:
+                    send(10, payload)
+                    continue
+                if opcode == 8:
+                    raise OSError("Matter server closed the connection")
+                message += payload
+                if first & 0x80:
+                    return json.loads(message)
+
+        receive()  # server info first
+        message_id = secrets.token_hex(4)
+        send(1, json.dumps({"message_id": message_id, "command": command, "args": args}).encode())
+        while True:
+            reply = receive()
+            if reply.get("message_id") == message_id:
+                if "error_code" in reply:
+                    raise OSError(f"Matter server: {reply.get('details') or reply['error_code']}")
+                return reply.get("result")
+    finally:
+        sock.close()
+
+
+def add_to_ha(proxy):
+    """A device into Home Assistant's Matter fabric: a pairing window on the
+    device, then the Matter server commissions it over the network."""
+    log(f"== Adding {proxy['name']} to Home Assistant")
+    status, text = command(proxy, "matter open")
+    log(text.strip())
+    if status != 200:
+        return False
+    status, text = command(proxy, "matter")
+    try:
+        code = json.loads(text)["qr"]
+    except (ValueError, KeyError):
+        log("!! The device gave no pairing code")
+        return False
+    log("== Commissioning over the network (a minute or two on Thread)")
+    try:
+        node = matter_server("commission_with_code", {"code": code, "network_only": True})
+    except (OSError, ValueError) as err:
+        if "already commissioned into this fabric" in str(err):
+            log("== Already in Home Assistant")
+            return True
+        log(f"!! {err}")
+        return False
+    log(f"== Added: Matter node {node.get('node_id') if isinstance(node, dict) else node}")
+    return True
+
+
 # ---------------------------------------------------------------- USB on this machine
 
 def serial_ports():
@@ -735,12 +840,13 @@ def examples():
 # ---------------------------------------------------------------- management
 
 # What the management pages may send to a proxy: its connections, name,
-# and Wi-Fi; nothing that changes access or the firmware
+# and Wi-Fi, and its Matter pairing (the code, and a window for one more
+# controller such as Home Assistant); nothing that changes access or the firmware
 ALLOWED_COMMANDS = ("io ", "name ", "wifi ssid ", "wifi password ")
 
 
 def allowed(line):
-    return line in ("io json", "json") or line.startswith(ALLOWED_COMMANDS)
+    return line in ("io json", "json", "matter", "matter open") or line.startswith(ALLOWED_COMMANDS)
 
 
 def version_key(name):
@@ -1047,6 +1153,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if proxy.get("app") and not image.name.startswith(proxy["app"] + "-"):
                     return self.reply({"error": "firmware for another application"}, 400)
                 started = start_job("update", proxy["name"], lambda: update_proxy(proxy, image))
+                return self.reply({"started": started})
+            if parts[3] == "add_to_ha":
+                started = start_job("matter", proxy["name"], lambda: add_to_ha(proxy))
                 return self.reply({"started": started})
             if parts[3] == "command":
                 line = str(data.get("line", "")).strip()

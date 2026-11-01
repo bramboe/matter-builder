@@ -384,6 +384,9 @@ const TEXT = {
   pagePassword: 'Password of the page', link: 'Link', wrongPassword: 'Wrong password.',
   pressBoot: s => `Now press the device’s BOOT button briefly (${s} s left). Button out of reach? Switch its power off and on three times.`,
   notLinked: 'Not linked: the BOOT button was not pressed in time.', wLinked: 'Linked', linkedText: n => `${n} is linked. Set up what is connected to it next.`, linkedName: n => `${n} is linked.`,
+  addToHa: 'Home Assistant', addToHaBtn: 'Add to Home Assistant',
+  addToHaHelp: 'Adds it to Home Assistant’s Matter integration over the network, next to Apple Home or another controller.',
+  confirmAddToHa: 'Open a pairing window on the device and add it to Home Assistant now? This takes a minute or two on Thread.',
   setUpConnections: 'Set up connections', openDevice: 'Open device', wRecipeTarget: 'Where should it go?', recipeNew: 'A new ESP32', recipeNewHelp: 'Install the generic firmware first',
   recipeOn: n => `On ${n}`, recipeOnHelp: 'Replaces its connections after you save and apply',
   filterAll: 'All', filterFirmware: 'Firmware', filterRecipes: 'Recipes', official: 'Official', recipe: 'Recipe', use: 'Use',
@@ -419,7 +422,7 @@ const TEXT = {
   apps: {mb_generic: 'Generic device'},
   showLog: 'Log', hideLog: 'Hide log', dismiss: 'Dismiss', jobBusy: 'Another task is running. Wait until it is done.', since: t => `Running since ${t}`, jobDone: 'Done', jobFailed: 'Failed: see the log',
   stepN: (d, t) => `step ${d} of ${t}`,
-  jobs: {flash: 'Installing over USB', toolchain: 'Installing the toolchain', all: 'Updating all devices', build: () => 'Building the generic device', update: n => `Updating ${n}`},
+  jobs: {matter: n => `Adding ${n} to Home Assistant`, flash: 'Installing over USB', toolchain: 'Installing the toolchain', all: 'Updating all devices', build: () => 'Building the generic device', update: n => `Updating ${n}`},
   buildingSpec: n => `Building ${n}`, confirmUpdateAll: 'Update every device to the newest firmware of its own kind, one after the other? It stops at the first problem.',
 };
 function t(key, ...args) { const v = TEXT[key]; return typeof v === 'function' ? v(...args) : v; }
@@ -1074,7 +1077,8 @@ async function loadJob() {
   $('#taskbar').hidden = false;
   const jobs = TEXT.jobs;
   $('#jobTitle').textContent = j.kind === 'build' && j.title.startsWith('spec:') ? t('buildingSpec', j.title.slice(5))
-    : j.kind === 'update' && j.title === 'all' ? jobs.all : j.kind === 'update' ? jobs.update(j.title) : j.kind === 'build' ? jobs.build(j.title) : jobs[j.kind] || j.title;
+    : j.kind === 'update' && j.title === 'all' ? jobs.all : j.kind === 'update' ? jobs.update(j.title) : j.kind === 'build' ? jobs.build(j.title)
+    : j.kind === 'matter' ? jobs.matter(j.title) : jobs[j.kind] || j.title;
   const p = j.progress || {};
   $('#jobState').textContent = j.running ? [t('since', date(j.started)), p.phase, p.total ? t('stepN', p.done, p.total) : ''].filter(Boolean).join(' · ')
     : j.ok ? t('jobDone') : t('jobFailed');
@@ -1207,8 +1211,18 @@ function renderDevicePanel() {
     <div class="row"><div class="label">${t('key')}<div class="sub mono">${token ? esc(token) : '••••••••••••••••'}</div></div>
       <button class="text" onclick="toggleToken('${p.id}')">${token ? t('hide') : t('show')}</button>
       ${token ? `<button class="text" onclick="copyToken('${p.id}')">${t('copy')}</button>` : ''}</div>
+    ${r ? `<div class="row"><div class="label">${t('addToHa')}<div class="sub">${t('addToHaHelp')}</div></div>
+      <button onclick="addToHa('${p.id}')" ${state.job.running ? 'disabled' : ''}>${t('addToHaBtn')}</button></div>` : ''}
     <div class="actions"><button class="plain" onclick="renameProxy('${p.id}')">${t('rename')}</button><span class="grow"></span>
       <button class="warn" onclick="forgetProxy('${p.id}')">${t('forget')}</button></div>`);
+}
+
+// Into Home Assistant's Matter fabric, next to Apple Home or another controller
+async function addToHa(id) {
+  if (!confirm(t('confirmAddToHa'))) return;
+  await api(`api/proxy/${id}/add_to_ha`, {});
+  logOpen = true;
+  refresh();
 }
 
 // Switch an output now, to find out what is on which pin

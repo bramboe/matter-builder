@@ -23,7 +23,10 @@ device's page or in the add-on.
   For a generic device you edit its name and connections; changes are saved
   as a draft on the device, *Apply* restarts it with the draft on trial, and
   *Keep* within 2 minutes makes it permanent (without that, it goes back by
-  itself). Other firmware shows what it reports, read-only.
+  itself). Firmware with settings of its own (such as the number of beds of
+  the bed bridge) shows them as a form or as a `settings:` block in YAML;
+  saving checks them and restarts the device. Other firmware shows what it
+  reports, read-only.
 - **Configs**: your configurations (YAML) kept in the add-on: install one on a
   new ESP32, apply it to a linked device, or save a device's configuration as
   one. The New device wizard asks for a configuration too and applies it once

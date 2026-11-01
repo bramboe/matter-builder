@@ -331,6 +331,9 @@ const TEXT = {
   tabDevices: 'Devices', tabCatalog: 'Catalog', tabConfigs: 'Configs', configuration: 'Configuration', searchDevices: 'Search devices', searchCatalog: 'Search the catalog',
   myConfigs: 'My configs', saveConfig: 'Save to My configs', configSaved: n => `Saved as “${n}” in My configs.`,
   readOnlyYaml: 'This firmware has no configurable connections; its own settings are on its page. This is what it reports:',
+  settingsHelp: 'The settings of this firmware. Saving restarts the device.', settingsYamlHelp: 'Only the settings: block can change; Wi-Fi, Thread and passwords are never in here.',
+  settingsSaved: 'Saved: the device restarts with the new settings.', settingsUnknown: k => `Unknown setting: ${k}`,
+  settingsRange: (k, a, b) => `${k}: a whole number from ${a} to ${b}`, settingsChoice: (k, c) => `${k}: one of ${c.join(', ')}`,
   wConfigure: 'Configure the device', configureHelp: 'Its name and what is connected. Wi-Fi, Thread and passwords are set on the device itself.',
   startEmpty: 'Empty', fromConfigs: 'My configs', fromRecipes: 'Recipes', skip: 'Skip', saveToConfigs: 'Also save to My configs',
   configOk: (n, c) => `${n}: ${c} connection${c === 1 ? '' : 's'}.`, applyTo: 'Apply to a device', noGeneric: 'No linked generic device yet.',
@@ -1227,6 +1230,92 @@ let openId = null, dtab = 'connections', managed = null;
 const devEditor = new ConfigEditor('dev');
 devEditor.onChange = () => $('#mSave').classList.add('pri');
 
+// The settings a firmware without connections declares ('settings json':
+// values and a schema), edited as a form or as the settings: block in YAML
+class SettingsEditor {
+  constructor() { this.mode = editorPref; this.values = {}; this.saved = {}; this.schema = {}; this.yaml = ''; this.error = ''; this.notice = ''; }
+  load(j) { this.schema = j.schema; this.saved = {...j.settings}; this.values = {...j.settings}; this.error = this.notice = ''; this.dirty = false; }
+  toYaml() {
+    const d = this.device || {};
+    return ['device:', `  name: ${d.name || ''}`, `  app: ${d.app || ''}`, `  version: ${d.version || ''}`, 'settings:',
+      ...Object.keys(this.schema).map(k => `  ${k}: ${this.values[k] ?? this.schema[k].default}`)].join('\n');
+  }
+  // Only the settings: block is read; the rest is what the device reports
+  fromYaml(text) {
+    const out = {};
+    let inside = false;
+    for (const line of text.split('\n')) {
+      if (/^\S/.test(line)) { inside = /^settings:\s*(#.*)?$/.test(line); continue; }
+      const m = inside && line.match(/^\s+([a-z_][a-z0-9_]*):\s*(.*?)\s*(#.*)?$/);
+      if (m) out[m[1]] = m[2].replace(/^["']|["']$/g, '');
+    }
+    return out;
+  }
+  check(values) {
+    const clean = {};
+    for (const [k, v] of Object.entries(values)) {
+      const f = this.schema[k];
+      if (!f) throw new Error(t('settingsUnknown', k));
+      if (f.type === 'int') {
+        const n = Number(v);
+        if (!Number.isInteger(n) || (f.min !== undefined && n < f.min) || (f.max !== undefined && n > f.max)) throw new Error(t('settingsRange', k, f.min, f.max));
+        clean[k] = n;
+      } else if (f.type === 'bool') {
+        if (![true, false, 'true', 'false', 'on', 'off'].includes(v)) throw new Error(t('settingsChoice', k, ['true', 'false']));
+        clean[k] = v === true || v === 'true' || v === 'on';
+      } else if (f.options) {
+        if (!f.options.includes(String(v))) throw new Error(t('settingsChoice', k, f.options));
+        clean[k] = String(v);
+      } else clean[k] = String(v);
+    }
+    return clean;
+  }
+  setMode(m) {
+    if (m === this.mode) return;
+    if (m === 'visual') { try { Object.assign(this.values, this.check(this.fromYaml(this.yaml))); this.error = ''; } catch (e) { this.error = e.message; } }
+    else this.yaml = this.toYaml();
+    this.mode = editorPref = m;
+    try { localStorage.setItem('mbEditor', m); } catch (e) {}
+    this.render();
+  }
+  set(k, v) { this.values[k] = v; this.error = ''; }
+  async save() {
+    this.error = this.notice = '';
+    try {
+      const values = this.mode === 'yaml' ? this.check(this.fromYaml(this.yaml)) : this.check(this.values);
+      const changed = Object.keys(values).filter(k => String(values[k]) !== String(this.saved[k]));
+      for (const k of changed) await proxyCommand(this.proxy, `settings set ${k} ${values[k]}`);
+      Object.assign(this.saved, values); Object.assign(this.values, values);
+      this.notice = changed.length ? t('settingsSaved') : '';
+      this.dirty = false;
+    } catch (e) { this.error = e.message; }
+    this.render();
+  }
+  field(k, f) {
+    const v = this.values[k] ?? f.default;
+    const on = `onchange="setEditor.set('${k}', this.type === 'checkbox' ? this.checked : this.value)"`;
+    let input;
+    if (f.type === 'bool') input = `<input type="checkbox" ${v ? 'checked' : ''} ${on}>`;
+    else if (f.options || (f.type === 'int' && f.max - f.min <= 8)) {
+      const opts = f.options || Array.from({length: f.max - f.min + 1}, (_, i) => String(f.min + i));
+      input = `<select ${on}>${opts.map(o => `<option ${String(v) === o ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
+    } else input = `<input ${f.type === 'int' ? `type="number" min="${f.min ?? ''}" max="${f.max ?? ''}"` : ''} value="${esc(String(v))}" ${on}>`;
+    return `<div class="row"><label class="field" style="flex:1"><span>${esc(f.title || k)}</span>${input}</label></div>`;
+  }
+  render() {
+    if (!this.host) return;
+    const head = `<div class="ed-head"><span class="sub">${t('settingsHelp')}</span><span class="grow"></span><div class="seg" style="margin:0">
+        <button class="${this.mode === 'visual' ? 'on' : ''}" onclick="setEditor.setMode('visual')">${t('visualEditor')}</button>
+        <button class="${this.mode === 'yaml' ? 'on' : ''}" onclick="setEditor.setMode('yaml')">YAML</button></div></div>`;
+    const body = this.mode === 'yaml'
+      ? `<textarea class="yaml" spellcheck="false" style="min-height:160px" oninput="setEditor.yaml = this.value; setEditor.dirty = true">${esc(this.yaml)}</textarea><div class="sub">${t('settingsYamlHelp')}</div>`
+      : Object.entries(this.schema).map(([k, f]) => this.field(k, f)).join('');
+    this.host.innerHTML = `${head}${body}${this.error ? `<div class="error">${esc(this.error)}</div>` : ''}${this.notice ? `<div class="notice">${esc(this.notice)}</div>` : ''}
+      <div class="actions"><button class="pri" onclick="setEditor.save()">${t('save')}</button></div>`;
+  }
+}
+const setEditor = new SettingsEditor();
+
 async function proxyCommand(id, line) {
   const r = await api(`api/proxy/${id}/command`, {line});
   if (r.error) throw new Error(r.error);
@@ -1244,6 +1333,12 @@ async function openDevice(id, which, recipe) {
   try {
     managed = {id, io: JSON.parse(await proxyCommand(id, 'io json')).io};
   } catch (e) { managed = {id, io: null}; }
+  if (!managed.io) {
+    try {
+      const j = JSON.parse(await proxyCommand(id, 'settings json'));
+      if (j.schema && Object.keys(j.schema).length) { managed.settings = j; setEditor.load(j); }
+    } catch (e) {}
+  }
   if (managed.io) {
     devEditor.mount($('#devEditor'));
     devEditor.drivers = managed.io.drivers || [];
@@ -1290,7 +1385,13 @@ function renderDevicePanel() {
       devEditor.setLive(live, (slot, on) => testOutput(p.id, slot, on));
     }
   }
-  if (managed && !managed.io) {
+  if (managed && !managed.io && managed.settings) {
+    if (!setEditor.host || !$('#noIo').contains(setEditor.host)) { $('#noIo').innerHTML = '<div></div>'; setEditor.host = $('#noIo').firstChild; }
+    setEditor.device = {name: p.name, app: r ? r.app : p.app || '', version: r ? r.version : ''};
+    setEditor.proxy = p.id;
+    if (!setEditor.dirty) setEditor.yaml = setEditor.toYaml();
+    if (!setEditor.host.contains(document.activeElement)) setEditor.render();
+  } else if (managed && !managed.io) {
     const yaml = ['device:', `  name: ${p.name}`, `  app: ${r ? r.app : p.app || ''}`, `  version: ${r ? r.version : ''}`];
     const lines = connectedText(s);
     if (lines) yaml.push('# connected: ' + lines);

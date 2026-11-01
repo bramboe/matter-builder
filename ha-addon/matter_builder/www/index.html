@@ -199,6 +199,11 @@ textarea.yaml{width:100%;min-height:260px;font:12px/1.5 ui-monospace,Menlo,monos
 // All URLs are relative: Home Assistant serves the page under its ingress path
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+// Only when it changed: the page refreshes every few seconds, and a USB
+// install's progress and checkboxes must survive that
+function setHtml(el, html) {
+  if (el.dataset.html !== html) { el.innerHTML = html; el.dataset.html = html; }
+}
 
 const TEXT = {
   en: {
@@ -379,6 +384,24 @@ function prefillLink(host) {
   $('#linkPassword').focus();
 }
 
+// A ready-made firmware from the signed release: what it is (its package
+// description), and when the release has a factory image, installing it on a
+// new ESP32 over USB
+function releaseRow(r) {
+  const pkg = (state.packages || []).find(p => p.app === r.app);
+  const title = pkg ? (pkg.title[lang] || pkg.title.en) : (TEXT[lang].apps[r.app] || r.app);
+  const about = pkg ? (pkg.description[lang] || pkg.description.en) : '';
+  const factory = (state.release_factory || []).find(f => f.app === r.app && f.version === r.version);
+  const slug = 'release-' + r.app;
+  return `<div class="row"><div class="label">${esc(title)} ${esc(r.version)}${about ? `<div class="sub">${esc(about)}</div>` : ''}
+      <div class="sub mono">${esc(r.file)}</div></div></div>
+    ${factory ? `<details><summary class="sub">${t('factoryFile')}</summary>
+      <label class="row" style="min-height:36px;border:0"><input type="checkbox" id="backup-${slug}" checked><span class="sub">${t('backupFirst')}</span></label>
+      <div class="actions"><button class="pri" onclick="flashUsb('${esc(factory.file)}', '${slug}')">${t('installUsb')}</button>
+        <a class="button text" href="api/download/${encodeURIComponent(factory.file)}">↓</a></div>
+      <div class="sub" id="usb-${slug}">${t('flashHelp')}</div></details>` : ''}`;
+}
+
 function render() {
   const dev = state.settings.dev_mode;
   $('#foundSection').hidden = !state.found.length;
@@ -386,13 +409,12 @@ function render() {
   $('#devMode').checked = dev;
   $('#intro').hidden = state.proxies.length > 0 || state.found.length > 0;
   $('#proxies').innerHTML = state.proxies.map(proxyCard).join('');
-  $('#releases').innerHTML = state.releases.length
-    ? `<div class="sub">${t('signedRelease', state.release)}</div>` + state.releases.map(r => `<div class="row"><div class="label">${esc((TEXT[lang].apps[r.app] || r.app))}
-        <div class="sub mono">${esc(r.file)}</div></div></div>`).join('')
-    : `<div class="sub">${t('noReleases')}</div>` + (state.release_error ? `<div class="sub" style="margin-top:6px">${esc(state.release_error)}</div>` : '');
+  setHtml($('#releases'), state.releases.length
+    ? `<div class="sub">${t('signedRelease', state.release)}</div>` + state.releases.map(releaseRow).join('')
+    : `<div class="sub">${t('noReleases')}</div>` + (state.release_error ? `<div class="sub" style="margin-top:6px">${esc(state.release_error)}</div>` : ''));
   $('#devCard').hidden = !dev;
   $('#specSection').hidden = !dev;
-  if (dev && specs) $('#specList').innerHTML = specs.map(specCard).join('');
+  if (dev && specs) setHtml($('#specList'), specs.map(specCard).join(''));
   if (dev && !specs) loadSpecs();
   const sys = state.system;
   $('#system').textContent = `${sys.cores} ${t('cores')} · ${gb(sys.memory)} ${t('memory')} · ${gb(sys.disk_free)} ${t('disk')}`;

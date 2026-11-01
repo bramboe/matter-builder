@@ -33,6 +33,13 @@ signed by the project; the add-on checks the signature against the key it
 ships with and the hash of every image before installing anything. A release
 that does not match is ignored.
 
+Each firmware in a release also has a **factory image** for a new ESP32:
+open it under *Firmware*, connect the ESP32 with USB to the computer you use
+Home Assistant on, and choose *Install via USB*. That needs Chrome or Edge and
+Home Assistant opened over HTTPS; a backup of the whole flash is saved first
+unless you untick it. The ESP32 then opens its setup network, where you choose
+its password and network; link it here afterwards.
+
 ## Own devices (developer mode)
 
 Describe a device in YAML: its name, the application (generic or the Octo

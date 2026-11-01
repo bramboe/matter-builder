@@ -3,7 +3,7 @@
 #   build.sh bridge          the Octo bed bridge  (octo_bridge-<version>.bin)
 #   build.sh generic         the generic device   (mb_generic-<version>.bin)
 #   build.sh spec <file>     a device spec (tools/mb_generate.py): <name>-<version>.bin
-#                            and <name>-<version>-factory.bin for a new ESP32 (USB)
+# Each also gives factory/<project>-<version>-factory.bin for a new ESP32 (USB).
 # Nothing user-specific is built in: Wi-Fi, Thread, the password and what is
 # connected are set on the device's own page. Images land in $MB_DATA/firmware.
 set -eo pipefail
@@ -50,9 +50,7 @@ rm -f "$BUILD/sdkconfig"
 idf.py -C "$PROJECT_DIR" -B "$BUILD" -D SDKCONFIG="$BUILD/sdkconfig" -D IDF_TARGET=esp32c6 build
 
 cp "$BUILD/$PROJECT.bin" "$DATA/firmware/$PROJECT-$VERSION.bin"
-if [ "$APP" = spec ]; then
-    # Bootloader, partition table and app in one image, for a new ESP32 over USB
-    (cd "$BUILD" && python -m esptool --chip esp32c6 merge_bin -o "$DATA/firmware/factory/$PROJECT-$VERSION-factory.bin" @flash_args)
-    echo "== Factory image: $PROJECT-$VERSION-factory.bin"
-fi
+# Bootloader, partition table and app in one image, for a new ESP32 over USB
+(cd "$BUILD" && python -m esptool --chip esp32c6 merge_bin -o "$DATA/firmware/factory/$PROJECT-$VERSION-factory.bin" @flash_args)
+echo "== Factory image: $PROJECT-$VERSION-factory.bin"
 echo "== Ready: $PROJECT-$VERSION.bin ($(stat -c %s "$DATA/firmware/$PROJECT-$VERSION.bin") bytes)"

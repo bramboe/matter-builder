@@ -59,7 +59,7 @@ lock = threading.Lock()
 job = {"kind": None, "running": False, "ok": None, "started": 0, "title": ""}
 links = {}  # link id -> request on its way (the password only lives here)
 found = {}  # device id -> a Matter Builder device seen on the network
-release_state = {"release": None, "images": [], "error": None, "checked": 0}
+release_state = {"release": None, "images": [], "factory": [], "packages": [], "error": None, "checked": 0}
 
 
 # ---------------------------------------------------------------- storage
@@ -400,14 +400,17 @@ def check_releases():
         manifest = download(assets["manifest.json"])
         signature = download(assets["manifest.json.sig"])
     except (OSError, ValueError, KeyError) as err:
-        release_state.update(images=[], error=f"{repo}: {err}", checked=int(time.time()))
+        release_state.update(images=[], factory=[], packages=[], error=f"{repo}: {err}", checked=int(time.time()))
         return
     if not signature_ok(manifest, signature):
-        release_state.update(images=[], error="signature does not match: release ignored", checked=int(time.time()))
+        release_state.update(images=[], factory=[], packages=[], error="signature does not match: release ignored",
+                             checked=int(time.time()))
         return
     data = json.loads(manifest)
-    images = [dict(img, url=assets.get(img["file"])) for img in data.get("images", []) if assets.get(img["file"])]
-    release_state.update(release=data.get("release"), images=images, error=None, checked=int(time.time()))
+    def present(kind):
+        return [dict(img, url=assets[img["file"]]) for img in data.get(kind, []) if img["file"] in assets]
+    release_state.update(release=data.get("release"), images=present("images"), factory=present("factory"),
+                         packages=data.get("packages", []), error=None, checked=int(time.time()))
 
 
 def releases_loop():
@@ -416,9 +419,10 @@ def releases_loop():
         time.sleep(6 * 3600)
 
 
-def release_image(name):
-    """A release image on disk, downloaded when needed and checked against the signed hash."""
-    image = next((img for img in release_state["images"] if img["file"] == name), None)
+def release_image(name, kind="images"):
+    """A release image on disk, downloaded when needed and checked against the
+    signed hash: an update image, or with kind "factory" one for a new ESP32."""
+    image = next((img for img in release_state[kind] if img["file"] == name), None)
     if image is None:
         return None
     RELEASES.mkdir(parents=True, exist_ok=True)
@@ -723,6 +727,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self.reply({"proxies": proxies, "found": found_unlinked(), "toolchain": toolchain_ready(),
                                "builds": builds(), "job": current,
                                "releases": [{k: i[k] for k in ("file", "app", "version")} for i in release_state["images"]],
+                               "release_factory": [{k: i[k] for k in ("file", "app", "version")}
+                                                   for i in release_state["factory"]],
+                               "packages": release_state["packages"],
                                "release": release_state["release"], "release_error": release_state["error"],
                                "settings": load_settings(), "system": system_info()})
         if path == "/api/specs":
@@ -735,6 +742,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path.startswith("/api/download/"):
             name = Path(path).name
             file = FACTORY / name if name.endswith("-factory.bin") else FIRMWARE / name
+            if not file.is_file() and name.endswith("-factory.bin"):
+                try:
+                    file = release_image(name, "factory") or file
+                except (OSError, ValueError) as err:
+                    return self.reply({"error": str(err)}, 502)
             if not file.is_file():
                 return self.reply({"error": "unknown file"}, 404)
             body = file.read_bytes()

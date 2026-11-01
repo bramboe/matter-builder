@@ -1,0 +1,12 @@
+# What the release says about this firmware (tools/release_manifest.py);
+# the add-on shows it. Format 1 of the package description.
+name: octo-bed
+app: octo_bridge
+kind: package
+format: 1
+title:
+  en: Octo bed bridge
+  nl: Octo-bedbridge
+description:
+  en: Two Octo beds over Bluetooth as Matter covers and lights.
+  nl: Twee Octo-bedden via Bluetooth als Matter-covers en -lampen.

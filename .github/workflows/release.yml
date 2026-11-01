@@ -44,10 +44,12 @@ jobs:
 
       - name: Toolchain and build (Espressif image)
         run: |
+          # Not the image's entrypoint: it activates ESP-IDF before toolchain.sh has
+          # created the Python environment; the scripts activate it themselves
           docker run --rm -v "$GITHUB_WORKSPACE:/src" -v /mnt/mb:/mb \
             -e MB_DATA=/mb -e MB_SRC=/src -e ESP_MATTER_COMMIT \
             -e IDF_PYTHON_ENV_PATH=/mb/toolchain/python_env -e HOME=/mb/home \
-            "$IDF_IMAGE" bash -c '
+            --entrypoint bash "$IDF_IMAGE" -c '
               set -e
               apt-get update -qq
               apt-get install -y -qq --no-install-recommends build-essential pkg-config libffi-dev libssl-dev \

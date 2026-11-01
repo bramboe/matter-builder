@@ -130,7 +130,8 @@ textarea.yaml{width:100%;min-height:280px;font:12px/1.5 ui-monospace,Menlo,monos
 
 /* Task bar */
 /* Configuration editor (after Home Assistant's automation editor) */
-.ed-head{display:flex;justify-content:flex-end;margin:12px 0 10px}
+.needs{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
+.ed-head{display:flex;align-items:center;gap:8px;justify-content:flex-end;margin:12px 0 10px}
 .ed-item{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);margin-bottom:8px}
 .ed-item-head{display:flex;align-items:center;gap:10px;padding:8px 8px 8px 12px;cursor:pointer;min-height:58px}
 .ed-item-head .info{flex:1;min-width:0}
@@ -366,6 +367,7 @@ const TEXT = {
     ir_send: 'IR code to send', ir_receive: 'IR code to receive', ble_sensor: 'Bluetooth thermometer', ble_presence: 'Bluetooth presence'},
   irCode: 'IR code', irCodeHint: 'nec:00FF:A25D', useLastCode: c => `Use ${c}`, noLastCode: 'Point a remote at an IR receiver of this device to learn a code.',
   mac: 'Bluetooth address', macHint: 'AA:BB:CC:DD:EE:FF',
+  needsLabel: 'Needs', needsBluetooth: 'This firmware uses Bluetooth for what it does (not only for pairing): the ESP32 needs Bluetooth, and shares its radio between Bluetooth and the network.', firmwareTooOld: v => `IR and Bluetooth connections need generic firmware ${v} or newer: update the device first (Firmware tab).`,
   needCode: n => `${n}: an IR code like nec:00FF:A25D`, needMac: n => `${n}: a Bluetooth address like AA:BB:CC:DD:EE:FF`, liveSend: 'Send', liveHere: 'here', liveAway: 'away', liveSeen: s => `seen ${s} s ago`,
   saved: 'Saved as draft.', unchanged: 'Nothing changed.', applying: 'Restarting with the new connections…',
   trialLeft: s => `On trial: keep within ${s} s.`, kept: 'Kept.', yamlError: e => `YAML: ${e}`,
@@ -513,6 +515,20 @@ function updateFor(p) {
   return best && newer(fileVersion(best), r.version) ? best : null;
 }
 
+// What a device, config or package needs: its network and, when used, Bluetooth
+const NET_NAMES = {thread: 'Thread', wifi: 'Wi-Fi'};
+const needs = (requires, network) => [...(network ? [].concat(network) : []).map(n => NET_NAMES[n] || n),
+  ...((requires || []).includes('bluetooth') ? ['Bluetooth'] : [])];
+const needChips = list => list.length ? `<div class="needs">${list.map(n => `<span class="chip${n === 'Bluetooth' ? ' accent' : ''}">${esc(n)}</span>`).join('')}</div>` : '';
+const rowsNeed = rows => rows.some(r => isBle(r.type)) ? ['bluetooth'] : [];
+const pkgOf = app => (state.packages || []).find(p => p.app === app);
+
+// IR and Bluetooth connections need generic firmware 0.1.3 or newer
+const MIN_NEW_TYPES = '0.1.3';
+function tooOld(r, rows) {
+  return r && r.app === 'mb_generic' && rows.some(x => isIr(x.type) || isBle(x.type)) && newer(MIN_NEW_TYPES, r.version);
+}
+
 function deviceCard(p) {
   const s = statuses[p.id], r = running(s), up = updateFor(p);
   const what = connectedText(s);
@@ -522,6 +538,8 @@ function deviceCard(p) {
       ${r ? `<div class="sub">${esc(appTitle(r.app))} ${esc(r.version)}${r.net ? ' · ' + esc(r.net.replace(/:.*$/, '').replace(/^\w/, c => c.toUpperCase())) : ''}</div>` : ''}
       ${s && !s.ok && !s.auth ? `<div class="sub">${t('notReachable')}</div>` : ''}
       ${what ? `<div class="sub">${esc(what)}</div>` : ''}
+      ${r ? needChips(needs(s.io ? (s.io.bluetooth === 'on' || s.io.slots.some(c => isBle(c.type)) ? ['bluetooth'] : [])
+        : (pkgOf(r.app) || {}).requires, /^thread/.test(r.net) ? 'thread' : /^wifi|^configuration/.test(r.net) ? 'wifi' : null)) : ''}
     </div>
     <div class="acts">
       ${up ? `<button class="text" onclick="updateProxy('${p.id}', '${esc(up)}')" ${state.job.running ? 'disabled' : ''}>${t('updateTo', fileVersion(up))}</button>` : ''}
@@ -770,7 +788,8 @@ class ConfigEditor {
   render() {
     if (!this.host) return;
     const ref = this.ref;
-    const head = `<div class="ed-head"><div class="seg" style="margin:0">
+    const need = needs(rowsNeed(this.rows), null);
+    const head = `<div class="ed-head">${need.length ? `<span class="sub">${t('needsLabel')}</span>${needChips(need).replace('class="needs"', 'class="needs" style="margin:0"')}` : ''}<span class="grow"></span><div class="seg" style="margin:0">
         <button class="${this.mode === 'visual' ? 'on' : ''}" onclick="${ref}.setMode('visual')">${t('visualEditor')}</button>
         <button class="${this.mode === 'yaml' ? 'on' : ''}" onclick="${ref}.setMode('yaml')">YAML</button></div></div>`;
     const error = this.error ? `<div class="error">${esc(this.error)}</div>` : '';
@@ -838,7 +857,8 @@ function catalogCard(it, i) {
   return `<div class="card" style="cursor:pointer" onclick="openItem(${i})">
     <div class="head"><span class="ico">${icon(it.kind === 'firmware' ? 'chip' : 'recipe')}</span>
       <div class="info"><h3>${esc(it.title)}</h3><div class="sub">${it.kind === 'firmware' ? esc(it.version || '') : t('recipe')} · ${esc(it.maker || (it.source || '').split('/')[0])}</div></div></div>
-    <div class="meta"><div class="sub">${what}</div></div>
+    <div class="meta"><div class="sub">${what}</div>
+      ${needChips(needs(it.kind === 'firmware' ? it.requires : (it.requires || rowsNeed(rowsOf(it.connections))), it.kind === 'firmware' ? (it.network || ['thread']) : null))}</div>
     <div class="acts" style="margin-top:auto">${badge(it)}<span class="grow"></span>${it.stars ? `<span class="sub">★ ${it.stars}</span>` : ''}</div></div>`;
 }
 
@@ -892,6 +912,8 @@ function renderItem() {
   setHtml($('#itemBody'), `<div class="head" style="display:flex;gap:10px;align-items:center"><span class="ico">${icon(it.kind === 'firmware' ? 'chip' : 'recipe')}</span>
       <div style="flex:1"><h2>${esc(it.title)}</h2><div class="sub">${esc(it.maker || '')}</div></div>${badge(it)}</div>
     ${it.description ? `<p>${esc(it.description)}</p>` : ''}
+    ${needChips(needs(it.kind === 'firmware' ? it.requires : (it.requires || rowsNeed(rows)), it.kind === 'firmware' ? (it.network || ['thread']) : null))}
+    ${(it.requires || []).includes('bluetooth') && it.kind === 'firmware' ? `<p class="sub">${t('needsBluetooth')}</p>` : ''}
     ${rows.length ? `<div style="margin:10px 0">${rows.map(r => `<div class="row"><div class="label">${esc(r.name)}</div><div class="sub">${esc(TEXT.types[r.type] || r.type)} · GPIO ${r.pin}${r.type === 'sht4x' ? ' / ' + r.pin2 : ''}</div></div>`).join('')}</div>` : ''}
     ${facts.map(([k, v]) => `<div class="row"><div class="label sub">${k}</div><div>${v}</div></div>`).join('')}
     ${it.official ? '' : `<div class="banner" style="margin-top:12px;background:var(--warnchip)"><span class="grow sub" style="color:var(--fg)">${t('communityNotice')}</span></div>`}
@@ -972,7 +994,7 @@ function specCard(sp) {
   const dev = state.settings.dev_mode, fw = latest(sp.firmware), factory = latest(sp.factory);
   return `<div class="card">
     <div class="head"><span class="ico">${icon('recipe')}</span><div class="info"><h3>${esc(sp.name)}</h3><div class="sub">${esc(appTitle('mb_generic'))}</div></div></div>
-    <div class="meta">${sp.error ? `<div class="error" style="margin:0">${esc(sp.error)}</div>` : ''}
+    <div class="meta">${sp.error ? `<div class="error" style="margin:0">${esc(sp.error)}</div>` : needChips(needs(sp.requires, sp.network))}
       ${dev && fw ? `<div class="sub">${t('updateFile')}: <a href="api/download/${encodeURIComponent(fw)}" class="mono">${esc(fw)}</a></div>` : ''}
       ${dev && factory ? `<div class="sub">${t('factoryFile')}: <a href="api/download/${encodeURIComponent(factory)}" class="mono">${esc(factory)}</a></div>` : ''}</div>
     <div class="acts">${sp.error ? '' : `<button class="text" onclick="useConfig('${sp.slug}', 'new')">${t('install')}</button>
@@ -1352,6 +1374,9 @@ async function saveManage() {
   let spec;
   try { spec = await devEditor.get(); }
   catch (e) { $('#mError').textContent = t('yamlError', e.message); $('#mError').hidden = false; return; }
+  if (tooOld(running(statuses[managed.id]), spec.rows)) {
+    $('#mError').textContent = t('firmwareTooOld', MIN_NEW_TYPES); $('#mError').hidden = false; return;
+  }
   const lines = diffLines(managed.io, spec.rows, spec.name);
   try { await sendLines(managed.id, lines); }
   catch (e) { $('#mError').textContent = e.message; $('#mError').hidden = false; return; }
@@ -1570,6 +1595,8 @@ async function applyConfig() {
   renderWizard();
   try {
     const io = JSON.parse(await proxyCommand(id, 'io json')).io;
+    const st = await api(`api/proxy/${id}/status`);
+    if (tooOld(running(st), spec.rows)) throw new Error(t('firmwareTooOld', MIN_NEW_TYPES));
     await sendLines(id, diffLines(io, spec.rows, spec.name));
     try { await proxyCommand(id, 'io apply'); } catch (e) {}
     for (let i = 0; i < 40; i++) {

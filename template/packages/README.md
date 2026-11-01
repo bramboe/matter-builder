@@ -19,4 +19,6 @@ kind: package
 format: 1                   # the package description format
 title: My package
 description: One sentence on what it does.
+requires: [bluetooth]       # what it needs from the board; [] when nothing
+network: [thread]           # thread and/or wifi
 ```

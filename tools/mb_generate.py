@@ -30,6 +30,21 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 APPS = {"generic": "firmware/generic"}
 BOARDS = {"esp32-c6"}
+# What a board offers; a config or package may only ask for what its board has.
+# Only the C6 is built for now; the others are here for the add-on's checks.
+BOARD_CAPS = {
+    "esp32-c6": {"network": ["thread", "wifi"], "bluetooth": True},
+    "esp32-h2": {"network": ["thread"], "bluetooth": True},
+    "esp32-s3": {"network": ["wifi"], "bluetooth": True},
+    "esp32": {"network": ["wifi"], "bluetooth": True},
+    "esp32-s2": {"network": ["wifi"], "bluetooth": False},
+}
+
+
+def requirements(connections):
+    """What a generic device's connections need from its board: Bluetooth for
+    the Bluetooth connections, nothing else beyond the network."""
+    return ["bluetooth"] if any(c["type"] in BLE_TYPES for c in connections) else []
 TYPES = {"relay", "led", "button", "contact", "motion", "sht4x", "ir_send", "ir_receive", "ble_sensor", "ble_presence"}
 IR_TYPES = {"ir_send", "ir_receive"}
 BLE_TYPES = {"ble_sensor", "ble_presence"}
@@ -225,8 +240,12 @@ def check(spec):
                       **({"code": code} if code else {}), **({"mac": mac} if mac else {})})
     if '"' in name or "\\" in name:
         raise SpecError("device.name: no quotes")
+    requires = requirements(clean)
+    if "bluetooth" in requires and not BOARD_CAPS[board]["bluetooth"]:
+        raise SpecError(f"the Bluetooth connections need a board with Bluetooth, and {board} has none")
     return {"name": name, "slug": slug_of(name), "app": app, "board": board, "version": version,
-            "version_number": number, "connections": sorted(clean, key=lambda x: x["slot"])}
+            "version_number": number, "connections": sorted(clean, key=lambda x: x["slot"]),
+            "requires": requires, "network": BOARD_CAPS[board]["network"][0]}
 
 
 # ---------------------------------------------------------------- generation

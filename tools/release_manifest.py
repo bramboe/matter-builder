@@ -28,6 +28,17 @@ sys.path.insert(0, str(ROOT / "tools"))
 from mb_generate import parse_yaml  # noqa: E402
 
 PACKAGE_FIELDS = ("name", "app", "kind", "format", "title", "description")
+# What the firmware needs from its board (e.g. bluetooth) and which networks it
+# runs on; optional in package.yaml
+PACKAGE_DEFAULTS = {"requires": [], "network": ["thread"]}
+
+
+def as_list(value):
+    """A list from YAML: a block list, or the flow form "[a, b]" the small parser keeps as text."""
+    if isinstance(value, list):
+        return [str(v) for v in value]
+    text = str(value).strip().strip("[]")
+    return [v.strip() for v in text.split(",") if v.strip()]
 
 
 def image(path, stem):
@@ -45,7 +56,8 @@ def packages(apps, root):
         if missing:
             sys.exit(f"{path}: missing {', '.join(missing)}")
         if package["app"] in apps:
-            out.append({k: package[k] for k in PACKAGE_FIELDS})
+            out.append({**{k: package[k] for k in PACKAGE_FIELDS},
+                        **{k: as_list(package.get(k, v)) for k, v in PACKAGE_DEFAULTS.items()}})
     return out
 
 

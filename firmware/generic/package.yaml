@@ -5,4 +5,7 @@ app: mb_generic
 kind: standard
 format: 1
 title: Generic device
-description: Relays, LEDs, buttons, contacts, motion and SHT4x sensors on free pins, set up on the device or in the add-on.
+description: Relays, LEDs, buttons, contacts, motion and SHT4x sensors, infrared codes and Bluetooth thermometers or presence tags, set up on the device or in the add-on.
+# Bluetooth is optional: it starts only for a Bluetooth connection
+requires: []
+network: [thread]

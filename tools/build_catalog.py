@@ -101,7 +101,7 @@ def recipes(repo, branch, folder):
         if spec["app"] != "generic":
             continue
         out.append({"id": f"{repo}/{entry['name'][:-5]}", "title": spec["name"], "text": text,
-                    "connections": spec["connections"]})
+                    "connections": spec["connections"], "requires": spec.get("requires", [])})
     return out
 
 
@@ -142,6 +142,7 @@ def source(repo, official, verified):
                             if f["app"] == pkg["app"] and f["version"] == newest["version"]), None)
             items.append(dict(base, kind="firmware", id=f"{repo}/{pkg['name']}", title=pkg["title"],
                               description=pkg["description"], app=pkg["app"], version=newest["version"],
+                              requires=pkg.get("requires", []), network=pkg.get("network", ["thread"]),
                               release=data.get("release"), updated=release.get("published_at"),
                               downloads=sum(a.get("download_count", 0) for a in assets.values()),
                               factory=factory))

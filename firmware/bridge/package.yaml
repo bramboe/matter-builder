@@ -6,3 +6,6 @@ kind: package
 format: 1
 title: Octo bed bridge
 description: Two Octo beds over Bluetooth as Matter covers and lights.
+# The beds take their commands over Bluetooth
+requires: [bluetooth]
+network: [thread]

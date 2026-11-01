@@ -1,6 +1,6 @@
 # Matter Builder — een ESPHome-alternatief op basis van Matter
 
-Status: ontwerp, nog geen code. Datum: 2026-10-29, bijgewerkt 2026-10-31 (lagen, beheer, adoptie en toegang).
+Status: ontwerp, nog geen code. Datum: 2026-10-29, bijgewerkt 2026-10-31 (lagen, beheer, adoptie en toegang) en 2026-11-01 (pakketten, catalogus, pagina's en flashen, §16).
 Werktitel: **Matter Builder**. De naam ligt nog niet vast.
 Referentietoepassing: deze repo (Octo-bridge F1, `firmware/bridge`, esp-matter release/v1.6, ESP-IDF v5.5.5).
 
@@ -204,6 +204,8 @@ Beslissingen:
 - Caches: ccache en per board-profiel een voorgebouwd basisproject, zodat een build na een kleine wijziging minuten duurt in plaats van een half uur.
 
 ### 7.2 Ingress-UI
+De indeling in pagina's is herzien in §16.4; de functies hieronder blijven, op hun nieuwe plek.
+
 1. **Beheer** (overzicht van alle proxies): naam, chip, netwerk en signaal, firmwareversie, online of "afwijkend", en wat er is aangesloten. Een knop **"Wijziging naar alle proxies"** voor:
    - firmware-updates, eerst op één proxy als proef en daarna de rest één voor één, pas als de eerste gezond terugkomt;
    - Wi-Fi: de proxy test het nieuwe netwerk en houdt het oude als dat mislukt;
@@ -397,6 +399,12 @@ Genomen (2026-10-31):
 - **Koppelen** met paginawachtwoord en een fysieke handeling; Matter-beheerder zijn is geen bewijs (§7.4).
 - **Gewone gebruiker installeert kant-en-klare, ondertekende firmware; bouwen in HA is de ontwikkelaarsmodus**; geen externe webflasher (§1).
 
+Genomen (2026-11-01):
+- **Drie lagen**: standaardfirmware, pakketten, ontwikkelaarsmodus (§16.1). De Octo-bridge is een pakket, niet de kern.
+- **Pakketbronnen met een eigen sleutel**: specifieke projecten onderhoudt de maker zelf, niet het project (§16.2).
+- **Catalogus** zonder server, via een GitHub-onderwerp en GitHub Pages (§16.3).
+- **Drie pagina's**: Home, Maken, Catalogus, plus Instellingen; de catalogus komt uit op Maken (§16.4).
+
 ## 15. Risico's
 
 | Risico | Impact | Mitigatie |
@@ -408,3 +416,68 @@ Genomen (2026-10-31):
 | Image past niet in een slot (Octo nu 96%) | Geen OTA meer mogelijk | Besparingen uit §8.5, groottecheck in de builder, C6/S3 |
 | Device-types dekken een toepassing niet | Functie niet zichtbaar in HA | Bij het ontwerp van de spec aangeven; geen vendor-clusters als oplossing (HA toont ze niet) |
 | RAM op klassieke ESP32 | Instabiel bij commissioning | Board-profiel met limieten, aanbeveling C6/S3 |
+
+## 16. Pakketten, catalogus en flashen (2026-11-01)
+
+### 16.1 Drie lagen
+1. **Standaardfirmware (`generic`)**: het eigenlijke product. Eén ondertekende firmware per chip, met algemene bouwstenen (relais, LED, knop, contact, beweging, SHT4x; later bijvoorbeeld PWM/dimmer, analoge ingang, algemene I2C-sensoren, UART). Ingesteld via YAML in de add-on of op de lokale pagina, zonder compileren. Dit dekt de meeste gebruikers.
+2. **Pakketten**: firmware met eigen code voor wat `generic` niet kan, zoals een BLE-protocol (de Octo-bedden), IR of een eigen seriële koppeling. Elk pakket wordt in CI gebouwd en ondertekend en als kant-en-klare firmware aangeboden. Ook hier stelt de gebruiker alles in zonder te bouwen.
+3. **Ontwikkelaarsmodus**: lokaal bouwen in HA, voor eigen code die nog geen pakket is.
+
+Grens tussen 1 en 2: `generic` groeit alleen met breed bruikbare bouwstenen (en heeft ruimte nodig; nu ±64 % van het app-slot). Protocollen voor één soort apparaat worden een pakket.
+
+### 16.2 Pakketbronnen
+- **Officieel**: deze repo, ondertekend met de sleutel van het project. Inhoud: `generic` en een paar voorbeeldpakketten (Octo).
+- **Community**: wie iets specifieks wil, maakt een eigen repo uit een **sjabloonrepo** (bouw-workflow, pakketstructuur, `release_manifest.py`), maakt een eigen sleutel en tagt een release. GitHub bouwt en ondertekent; het project reviewt, bouwt en ondertekent niets.
+- In de add-on voeg je een bron toe zoals een custom repository in HACS. De add-on onthoudt bij het toevoegen de publieke sleutel van die bron en accepteert daarna alleen releases met die sleutel. De UI toont steeds **officieel** of **community** en wie de maker is.
+- Vorm van een pakket: `packages/<naam>/package.yaml` met naam, beschrijving, maker, chip(s), de versie van het pakketformaat waarop het bouwt, en een **schema** van de instellingen. De add-on maakt uit dat schema het formulier en de YAML-controle; er is geen UI per pakket. Code in `components/<naam>`, bovenop `mb_core`.
+- **Onderhoud voor het project**: `mb_core` en het pakketformaat. Dat formaat krijgt een versienummer en blijft stabiel, zodat community-pakketten blijven werken.
+
+Apparaat-YAML (voorbeeld):
+```yaml
+device:
+  name: Tuinhuis
+package: generic          # of: octo-bed, of <bron>/<pakket>
+connections:              # voor generic
+  - type: relay
+    pin: 4
+    name: Lamp
+settings: {}              # volgens het schema van het pakket
+```
+
+### 16.3 Catalogus (marketplace)
+- Delen gebeurt op twee manieren:
+  - **Recepten**: alleen een YAML voor `generic`. Daar zit geen code in, dus geen risico en geen bouwwerk. Dit wordt naar verwachting het meeste.
+  - **Pakketten**: firmware uit een bron (§16.2).
+- Een bron of recept doet mee met het GitHub-onderwerp `matter-builder-package`.
+- Een nachtelijke GitHub Action in deze repo zoekt die repo's, controleert hun ondertekende manifest en schrijft één `catalog.json` naar GitHub Pages. De add-on haalt alleen dat bestand op, dus de API-grens van GitHub speelt niet.
+- Per item: naam, beschrijving, maker, GitHub-sterren, downloads (uit GitHub), officieel/community, en een badge **geverifieerd** voor wat het project zelf heeft bekeken (optioneel).
+- Moderatie: een **blokkeerlijst** in deze repo; bij de volgende run verdwijnt het item. Ondersteuning en meldingen lopen via de issues van de maker.
+- Kosten: geen. Grenzen van GitHub (publieke repo, gratis account): onbeperkte Actions-minuten, 6 uur per job, 20 jobs tegelijk, 10 GB cache, 2 GB per bestand en 1000 bestanden per release, geen grens op downloads.
+- Bescherming blijft: handtekening per bron, adoptie met wachtwoord en BOOT-knop (§7.4), proefperiode en terugdraaien bij `generic`.
+
+### 16.4 Pagina's van de add-on
+1. **Home**: eigen proxies (status, versie, update, "gevonden, nog niet gekoppeld") en een kaart **Nieuw apparaat** met *Zelf maken* en *Uit catalogus*. Een proxy openen geeft zijn **detailpagina** (aansluitingen in UI/YAML, update, token).
+2. **Maken**: beginnen met leeg, een voorbeeld of een catalogus-item; instellen in UI of YAML; **Controleren**; **Installeren** (USB op een nieuwe ESP32, of toepassen op een bestaande proxy). In ontwikkelaarsmodus ook **Bouwen**.
+3. **Catalogus**: zoeken en filteren (recepten, pakketten, officieel, community), detail per item. **Gebruiken** opent Maken met het item ingevuld: er is één installatieweg.
+4. **Instellingen** (tandwiel): tokens achter een oogje, Wi-Fi en taal voor alle proxies, pakketbronnen, ontwikkelaarsmodus en toolchain.
+
+### 16.5 Installeren zonder bouwen
+- Bouwen kan alleen in de ontwikkelaarsmodus, maar **flashen kan iedereen**.
+- De release bevat per pakket een updatebestand en een **fabrieksbestand** (bootloader, partitietabel en app in één), zodat een lege ESP32 rechtstreeks uit de release kan.
+- Bij `generic` betekent "installeren": de standaardfirmware flashen, of laten staan als hij er al op staat. Daarna zet de add-on naam en aansluitingen uit de YAML erop, met de bestaande proefperiode.
+- Flashen via USB kan op drie manieren, in deze volgorde van voorkeur:
+  1. **In de browser** vanuit de add-on (esptool-js, meegeleverd). Dit vraagt HTTPS en Chrome of Edge.
+  2. **Op de HA-host**: de ESP32 in de HA-machine prikken, en de add-on flasht zelf met esptool. Dit werkt ook als HA via gewoon http wordt geopend. De add-on moet daarvoor bij de seriële poorten kunnen.
+  3. **Zonder HA**: een flashpagina van het project op GitHub Pages. Daarop staat dezelfde esptool-js, en de pagina controleert in de browser de handtekening en de hash (WebCrypto, P-256). Dat past bij "autonoom zonder HA" en is geen externe webflasher: de pagina komt uit deze repo. De firmware moet dan ook op Pages staan, want releasebestanden zijn waarschijnlijk niet vanuit een webpagina op te halen (CORS); dat is nog te controleren.
+- Er komt geen afhankelijkheid van web.esphome.io of de flasher van Espressif. Iemand kan het fabrieksbestand wel altijd zelf flashen met esptool.
+
+### 16.6 Volgorde van uitvoeren
+1. Fabrieksbestanden en pakketinformatie in de release en het manifest.
+2. Installeren zonder bouwen voor `generic` (§16.5), met de pagina's van §16.4.
+3. Flashen op de HA-host (§16.5, manier 2).
+4. Octo omzetten naar `packages/octo-bed` en het pakketformaat met schema.
+5. Pakketbronnen in de add-on, plus de sjabloonrepo.
+6. Catalogus: de Action, `catalog.json` op Pages, de blokkeerlijst en de pagina Catalogus.
+7. Flashpagina op GitHub Pages (§16.5, manier 3).
+8. Documentatie: "een pakket maken" en "een recept delen".

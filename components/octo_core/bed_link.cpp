@@ -243,13 +243,16 @@ __attribute__((format(printf, 1, 2))) void log_event(const char* fmt, ...) {
 
 // ------------------------------------------------------------------ storage
 
+// Beds in use, from bed_count() when the links start
+int active_beds = 1;
+
 void store_save(int index) {
     nvs_handle_t nvs;
     if (nvs_open("octo", NVS_READWRITE, &nvs) != ESP_OK) {
         ESP_LOGE(TAG, "Cannot open NVS");
         return;
     }
-    char key[8];
+    char key[16];
     const Bed& bed = beds[index];
     std::snprintf(key, sizeof(key), "b%dmac", index);
     if (bed.configured) {
@@ -280,9 +283,9 @@ void store_load() {
     if (nvs_open("octo", NVS_READONLY, &nvs) != ESP_OK) {
         return;  // nothing stored yet
     }
-    for (int i = 0; i < MAX_BEDS; ++i) {
+    for (int i = 0; i < active_beds; ++i) {
         Bed& bed = beds[i];
-        char key[8];
+        char key[16];
         size_t len = sizeof(bed.mac);
         std::snprintf(key, sizeof(key), "b%dmac", i);
         if (nvs_get_blob(nvs, key, bed.mac, &len) != ESP_OK || len != sizeof(bed.mac)) {
@@ -864,7 +867,32 @@ void run_request(ble_npl_event* event) {
 // False in configuration mode, where BLE stays off
 bool host_started = false;
 
+int bed_count() {
+    nvs_handle_t nvs;
+    if (nvs_open("octo", NVS_READONLY, &nvs) != ESP_OK) {
+        return 1;
+    }
+    uint8_t count = 0;
+    if (nvs_get_u8(nvs, "beds", &count) != ESP_OK) {
+        size_t len = 0;
+        count = nvs_get_blob(nvs, "b1mac", nullptr, &len) == ESP_OK ? 2 : 1;
+    }
+    nvs_close(nvs);
+    return count < 1 ? 1 : count > MAX_BEDS ? MAX_BEDS : count;
+}
+
+bool set_bed_count(int count) {
+    nvs_handle_t nvs;
+    if (count < 1 || count > MAX_BEDS || nvs_open("octo", NVS_READWRITE, &nvs) != ESP_OK) {
+        return false;
+    }
+    const bool ok = nvs_set_u8(nvs, "beds", static_cast<uint8_t>(count)) == ESP_OK && nvs_commit(nvs) == ESP_OK;
+    nvs_close(nvs);
+    return ok;
+}
+
 void start() {
+    active_beds = bed_count();
     store_load();
 #if SOC_BT_CLASSIC_SUPPORTED
     // BLE only: give the classic Bluetooth controller memory back to the heap
@@ -938,7 +966,7 @@ Info info(int index) {
 }
 
 bool configure(int index, const uint8_t mac[6], const std::string& pin, const std::string& name) {
-    if (index < 0 || index >= MAX_BEDS || !octo::encode_pin(pin)) {
+    if (index < 0 || index >= active_beds || !octo::encode_pin(pin)) {
         return false;
     }
     Bed& bed = beds[index];
@@ -1096,9 +1124,9 @@ static std::string json_string(const char* text) {
 std::string state_json() {
     const int64_t now = now_us();
     std::string out;
-    appendf(out, "{\"uptime\":%" PRId64 ",\"heap\":%u,\"beds\":[", now / 1000000,
-            static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_8BIT)));
-    for (int i = 0; i < MAX_BEDS; ++i) {
+    appendf(out, "{\"uptime\":%" PRId64 ",\"heap\":%u,\"bed_count\":%d,\"beds\":[", now / 1000000,
+            static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_8BIT)), active_beds);
+    for (int i = 0; i < active_beds; ++i) {
         const Bed& bed = beds[i];
         appendf(out,
                 "%s{\"index\":%d,\"configured\":%s,\"name\":%s,\"mac\":\"%s\",\"state\":\"%s\",\"rssi\":%d,"
@@ -1128,7 +1156,7 @@ std::string status_text() {
             static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_8BIT)),
             static_cast<unsigned>(heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT)),
             static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)));
-    for (int i = 0; i < MAX_BEDS; ++i) {
+    for (int i = 0; i < active_beds; ++i) {
         const Bed& bed = beds[i];
         if (!bed.configured) {
             appendf(out, "  bed %d: not configured\n", i);

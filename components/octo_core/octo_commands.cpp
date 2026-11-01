@@ -6,6 +6,9 @@
 
 #include "bed_link.h"
 #include "commands.h"
+#include "esp_system.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 namespace octo_commands {
 
@@ -54,6 +57,9 @@ std::string cmd_bed(const Args& args) {
         std::string name = rest(args, 5);  // names may contain spaces
         if (name.empty()) {
             name = "Bed " + std::to_string(index + 1);
+        }
+        if (index >= bed_link::bed_count()) {
+            return "this bridge is set to 1 bed: settings set beds 2 first\n";
         }
         bool ok = false;
         bed_link::run_in_host([&] { ok = bed_link::configure(index, mac, args[4], name); });
@@ -185,6 +191,31 @@ std::string cmd_scan(const Args&) {
 
 std::string cmd_json(const Args&) { return state_json(); }
 
+void restart_soon(void*) {
+    vTaskDelay(pdMS_TO_TICKS(500));  // let the reply go out first
+    esp_restart();
+}
+
+// The bridge's settings, with their schema for the add-on's YAML editor (the
+// same as "settings" in firmware/bridge/package.yaml)
+std::string cmd_settings(const Args& args) {
+    if (args.size() == 2 && args[1] == "json") {
+        return "{\"settings\":{\"beds\":" + std::to_string(bed_link::bed_count()) +
+               "},\"schema\":{\"beds\":{\"type\":\"int\",\"min\":1,\"max\":" +
+               std::to_string(bed_link::MAX_BEDS) + ",\"default\":1,\"title\":\"Number of beds\"}}}\n";
+    }
+    if (args.size() == 4 && args[1] == "set" && args[2] == "beds") {
+        char* end = nullptr;
+        const long count = std::strtol(args[3].c_str(), &end, 10);
+        if (args[3].empty() || *end != '\0' || !bed_link::set_bed_count(static_cast<int>(count))) {
+            return "error: beds must be 1 or 2\n";
+        }
+        xTaskCreate(restart_soon, "restart", 2048, nullptr, 5, nullptr);
+        return "beds " + std::to_string(count) + ", restarting\n";
+    }
+    return "error: usage: settings json | settings set beds <1|2>\n";
+}
+
 }  // namespace
 
 std::string state_json() {
@@ -215,6 +246,10 @@ void register_all() {
                 "calibrate <0|1> <head|legs>             raise from flat; then 'calibrate <0|1> stop' at the top\n",
                 cmd_calibrate);
     add_command("json", "json                                    state for the settings page\n", cmd_json);
+    add_command("settings",
+                "settings json                           settings and their schema\n"
+                "settings set beds <1|2>                 number of beds (restarts)\n",
+                cmd_settings);
 }
 
 }  // namespace octo_commands

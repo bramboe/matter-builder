@@ -15,6 +15,13 @@ namespace bed_link {
 
 constexpr int MAX_BEDS = 2;
 
+// How many beds this bridge serves, 1 or MAX_BEDS: a setting in NVS that takes
+// effect at the next start (the Matter endpoints are made at start). A fresh
+// bridge has one bed; one from before the setting with a second bed keeps
+// two. Beds above the count stay stored but are not connected. Any task.
+int bed_count();
+bool set_bed_count(int count);
+
 enum class Part { Head, Feet, Both };
 
 void start();

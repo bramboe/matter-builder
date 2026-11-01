@@ -189,7 +189,7 @@ private:
     int32_t goal = -1;     // where a run started here ends; -1 for runs started elsewhere
 
     const char* key() const {
-        static char text[8];
+        static char text[24];
         std::snprintf(text, sizeof(text), "p%d%c", bed, part == bed_link::Part::Head ? 'h' : 'f');
         return text;
     }
@@ -251,11 +251,15 @@ struct BedEndpoints {
 };
 
 BedEndpoints beds[bed_link::MAX_BEDS];
+// Beds with endpoints: bed_link::bed_count() at start. Endpoints of a bed not
+// made are 0, the root endpoint, so loops stop at this count.
+int bed_total = 1;
 
 // The name of the bed part on an endpoint, or nullptr for other endpoints
 const char* part_label(chip::EndpointId endpoint_id) {
     const Language& text = LANGUAGES[language];
-    for (const BedEndpoints& bed : beds) {
+    for (int i = 0; i < bed_total; ++i) {
+        const BedEndpoints& bed = beds[i];
         if (endpoint_id == bed.head.endpoint_id) {
             return text.head;
         }
@@ -316,7 +320,7 @@ private:
 PartLabels part_labels;
 
 int bed_of_device(chip::EndpointId endpoint_id) {
-    for (int i = 0; i < bed_link::MAX_BEDS; ++i) {
+    for (int i = 0; i < bed_total; ++i) {
         if (beds[i].device_endpoint == endpoint_id) {
             return i;
         }
@@ -448,7 +452,7 @@ void StopButton::HandleStopStateCallback(OS::GenericOperationalError& err) {
 
 // Presets: head and feet position, stored as (head << 16) | feet.
 const char* preset_key(int index, int slot) {
-    static char text[8];
+    static char text[24];
     std::snprintf(text, sizeof(text), "s%d%d", index, slot);
     return text;
 }
@@ -489,6 +493,9 @@ bool apply_mode(int index, uint8_t mode) {
         return move_bed(index, head, feet);
     }
     if (mode == MODE_MATCH) {
+        if (bed_total < 2) {
+            return false;
+        }
         const BedEndpoints& other = beds[1 - index];
         return move_bed(index, other.head.current, other.feet.current);
     }
@@ -523,7 +530,9 @@ void build_modes(int index) {
         std::snprintf(number, sizeof(number), "%d", slot);
         add_mode(bed, MODE_PRESET + slot - 1, text.preset, number);
     }
-    add_mode(bed, MODE_MATCH, text.match, beds[1 - index].label);
+    if (bed_total == 2) {
+        add_mode(bed, MODE_MATCH, text.match, beds[1 - index].label);
+    }
     for (int slot = 1; slot <= PRESET_SLOTS; ++slot) {
         char number[4];
         std::snprintf(number, sizeof(number), "%d", slot);
@@ -541,11 +550,11 @@ void load_language() {
 void update_from_links() {
     bed_link::Info info[bed_link::MAX_BEDS];
     bed_link::run_in_host([&] {
-        for (int i = 0; i < bed_link::MAX_BEDS; ++i) {
+        for (int i = 0; i < bed_total; ++i) {
             info[i] = bed_link::info(i);
         }
     });
-    for (int i = 0; i < bed_link::MAX_BEDS; ++i) {
+    for (int i = 0; i < bed_total; ++i) {
         BedEndpoints& bed = beds[i];
         bed.head.follow(info[i].head, info[i].head_travel_s);
         bed.feet.follow(info[i].feet, info[i].feet_travel_s);
@@ -557,9 +566,11 @@ void update_from_links() {
             esp_matter_attr_val_t label = esp_matter_char_str(bed.label, std::strlen(bed.label));
             attribute::update(bed.device_endpoint, BridgedDeviceBasicInformation::Id,
                               BridgedDeviceBasicInformation::Attributes::NodeLabel::Id, &label);
-            build_modes(1 - i);  // the other bed's "Match <name>"
-            MatterReportingAttributeChangeCallback(beds[1 - i].device_endpoint, ModeSelect::Id,
-                                                   ModeSelect::Attributes::SupportedModes::Id);
+            if (bed_total == 2) {
+                build_modes(1 - i);  // the other bed's "Match <name>"
+                MatterReportingAttributeChangeCallback(beds[1 - i].device_endpoint, ModeSelect::Id,
+                                                       ModeSelect::Attributes::SupportedModes::Id);
+            }
         }
         if (info[i].ready == bed.reachable) {
             continue;
@@ -579,7 +590,7 @@ void tick(chip::System::Layer* layer, void*) {
 }
 
 int light_owner(uint16_t endpoint_id) {
-    for (int i = 0; i < bed_link::MAX_BEDS; ++i) {
+    for (int i = 0; i < bed_total; ++i) {
         if (beds[i].light_endpoint == endpoint_id) {
             return i;
         }
@@ -704,8 +715,9 @@ void start() {
     endpoint::aggregator::config_t aggregator_config;
     endpoint_t* aggregator = endpoint::aggregator::create(node, &aggregator_config, ENDPOINT_FLAG_NONE, nullptr);
     load_language();
+    bed_total = bed_link::bed_count();
 
-    for (int i = 0; i < bed_link::MAX_BEDS; ++i) {
+    for (int i = 0; i < bed_total; ++i) {
         BedEndpoints& bed = beds[i];
         bed_link::Info info;
         bed_link::run_in_host([&] { info = bed_link::info(i); });
@@ -713,7 +725,7 @@ void start() {
         std::snprintf(bed.label, sizeof(bed.label), "%s", name.c_str());
     }
 
-    for (int i = 0; i < bed_link::MAX_BEDS; ++i) {
+    for (int i = 0; i < bed_total; ++i) {
         BedEndpoints& bed = beds[i];
         bed.head.bed = bed.feet.bed = bed.stop.bed = i;
         bed.head.part = bed_link::Part::Head;
@@ -750,7 +762,7 @@ void start() {
             esp_matter_attr_val_t name = esp_matter_char_str(const_cast<char*>(mb_core::app().product_name), std::strlen(mb_core::app().product_name));
             attribute::update(0, BasicInformation::Id, BasicInformation::Attributes::NodeLabel::Id, &name);
         }
-        for (int i = 0; i < bed_link::MAX_BEDS; ++i) {
+        for (int i = 0; i < bed_total; ++i) {
             BedEndpoints& bed = beds[i];
             esp_matter_attr_val_t label = esp_matter_char_str(bed.label, std::strlen(bed.label));
             attribute::update(bed.device_endpoint, BridgedDeviceBasicInformation::Id,
@@ -773,7 +785,7 @@ std::string language_command(const std::vector<std::string>& args) {
             nvs_put("lang", static_cast<uint32_t>(i));
             chip::DeviceLayer::PlatformMgr().LockChipStack();
             language = i;
-            for (int b = 0; b < bed_link::MAX_BEDS; ++b) {
+            for (int b = 0; b < bed_total; ++b) {
                 build_modes(b);
                 esp_matter_attr_val_t description = esp_matter_char_str(
                     const_cast<char*>(LANGUAGES[i].description), std::strlen(LANGUAGES[i].description));
@@ -793,7 +805,7 @@ std::string preset_command(const std::vector<std::string>& args) {
     if (args.size() == 2 && args[1] == "list") {
         std::string out = "{\"beds\":[";
         chip::DeviceLayer::PlatformMgr().LockChipStack();
-        for (int i = 0; i < bed_link::MAX_BEDS; ++i) {
+        for (int i = 0; i < bed_total; ++i) {
             const BedEndpoints& bed = beds[i];
             char text[64];
             std::snprintf(text, sizeof(text), "%s{\"head\":%u,\"legs\":%u,\"presets\":[", i ? "," : "",
@@ -819,8 +831,8 @@ std::string preset_command(const std::vector<std::string>& args) {
         return "usage: preset list | preset <0|1> <flat|1|2|3|match> | preset <0|1> save <1|2|3>\n";
     }
     const int index = std::atoi(args[1].c_str());
-    if (index < 0 || index >= bed_link::MAX_BEDS || (args[1] != "0" && args[1] != "1")) {
-        return "bed must be 0 or 1\n";
+    if (index < 0 || index >= bed_total || (args[1] != "0" && args[1] != "1")) {
+        return bed_total == 2 ? "bed must be 0 or 1\n" : "bed must be 0\n";
     }
     uint8_t mode = MODE_NONE;
     const int slot = args.size() > 3 ? std::atoi(args[3].c_str()) : std::atoi(args[2].c_str());
@@ -861,7 +873,7 @@ std::string describe() {
     const unsigned fabrics = server.GetFabricTable().FabricCount();
     const bool window_open = server.GetCommissioningWindowManager().IsCommissioningWindowOpen();
     std::string beds_text;
-    for (int i = 0; i < bed_link::MAX_BEDS; ++i) {
+    for (int i = 0; i < bed_total; ++i) {
         const BedEndpoints& bed = beds[i];
         char line[240];
         std::snprintf(line, sizeof(line),

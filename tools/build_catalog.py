@@ -143,6 +143,7 @@ def source(repo, official, verified):
             items.append(dict(base, kind="firmware", id=f"{repo}/{pkg['name']}", title=pkg["title"],
                               description=pkg["description"], app=pkg["app"], version=newest["version"],
                               requires=pkg.get("requires", []), network=pkg.get("network", ["thread"]),
+                              settings=pkg.get("settings", {}),
                               release=data.get("release"), updated=release.get("published_at"),
                               downloads=sum(a.get("download_count", 0) for a in assets.values()),
                               factory=factory))

@@ -29,7 +29,8 @@ from mb_generate import parse_yaml  # noqa: E402
 
 PACKAGE_FIELDS = ("name", "app", "kind", "format", "title", "description")
 # What the firmware needs from its board (e.g. bluetooth) and which networks it
-# runs on; optional in package.yaml
+# runs on; optional in package.yaml, like "settings" (the schema of what can be
+# set on the device)
 PACKAGE_DEFAULTS = {"requires": [], "network": ["thread"]}
 
 
@@ -57,7 +58,8 @@ def packages(apps, root):
             sys.exit(f"{path}: missing {', '.join(missing)}")
         if package["app"] in apps:
             out.append({**{k: package[k] for k in PACKAGE_FIELDS},
-                        **{k: as_list(package.get(k, v)) for k, v in PACKAGE_DEFAULTS.items()}})
+                        **{k: as_list(package.get(k, v)) for k, v in PACKAGE_DEFAULTS.items()},
+                        **({"settings": package["settings"]} if isinstance(package.get("settings"), dict) else {})})
     return out
 
 

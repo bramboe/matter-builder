@@ -6,6 +6,7 @@ never stored. Builds and updates run one at a time as a "job" with a log.
 Only the standard library: the image is Espressif's ESP-IDF image.
 """
 
+import hashlib
 import http.server
 import ipaddress
 import json
@@ -16,6 +17,7 @@ import secrets
 import socket
 import struct
 import subprocess
+import tempfile
 import threading
 import time
 import urllib.error
@@ -41,6 +43,11 @@ PROGRAM_NAME = "Home Assistant"
 PROXIES = DATA / "proxies.json"
 SETTINGS = DATA / "settings.json"
 NOTIFIED = DATA / "notified.json"
+RELEASES = DATA / "releases"
+RELEASE_KEY = HERE / "release-key.pem"
+# Where ready-made firmware comes from: GitHub releases, signed (see
+# .github/workflows/release.yml); the add-on option "releases_repo" overrides it
+DEFAULT_RELEASES_REPO = "bramboe/matter-builder"
 SUPERVISOR_TOKEN = os.environ.get("SUPERVISOR_TOKEN", "")
 FIRMWARE = DATA / "firmware"
 JOB_LOG = DATA / "job.log"
@@ -49,6 +56,7 @@ lock = threading.Lock()
 job = {"kind": None, "running": False, "ok": None, "started": 0, "title": ""}
 links = {}  # link id -> request on its way (the password only lives here)
 found = {}  # device id -> a Matter Builder device seen on the network
+release_state = {"release": None, "images": [], "error": None, "checked": 0}
 
 
 # ---------------------------------------------------------------- storage
@@ -159,7 +167,10 @@ def proxy_status(proxy):
     except ValueError:
         state = {}
     _, beds = command(proxy, "status") if "beds" in state else (0, "")
-    if not proxy.get("device_id") or not proxy.get("app"):
+    # "running: app1 @0x320000: octo_bridge 1.0.10 (...)": the firmware may
+    # have changed kind since the last time (e.g. generic, then Octo again)
+    running_app = system.split("\n")[0].split(": ")[-1].split(" ")[0]
+    if not proxy.get("device_id") or proxy.get("app") != running_app:
         remember_device_id(proxy)
     return {"ok": True, "system": system, "beds": beds, "io": state.get("io")}
 
@@ -351,6 +362,71 @@ def update_proxy(proxy, image):
     return False
 
 
+# ---------------------------------------------------------------- releases
+
+def releases_repo():
+    try:
+        return json.loads((DATA / "options.json").read_text()).get("releases_repo") or DEFAULT_RELEASES_REPO
+    except (OSError, ValueError):
+        return DEFAULT_RELEASES_REPO
+
+
+def download(url, timeout=60):
+    req = urllib.request.Request(url, headers={"Accept": "application/octet-stream", "User-Agent": "matter-builder"})
+    with urllib.request.urlopen(req, timeout=timeout) as reply:
+        return reply.read()
+
+
+def signature_ok(manifest, signature):
+    """ECDSA P-256 over SHA-256, checked with openssl against the add-on's key."""
+    with tempfile.TemporaryDirectory() as tmp:
+        (Path(tmp) / "m").write_bytes(manifest)
+        (Path(tmp) / "s").write_bytes(signature)
+        result = subprocess.run(["openssl", "dgst", "-sha256", "-verify", str(RELEASE_KEY), "-signature",
+                                 str(Path(tmp) / "s"), str(Path(tmp) / "m")], capture_output=True)
+    return result.returncode == 0
+
+
+def check_releases():
+    """The latest release: only kept when its manifest's signature is valid."""
+    repo = releases_repo()
+    try:
+        info = json.loads(download(f"https://api.github.com/repos/{repo}/releases/latest", 20))
+        assets = {a["name"]: a["browser_download_url"] for a in info.get("assets", [])}
+        manifest = download(assets["manifest.json"])
+        signature = download(assets["manifest.json.sig"])
+    except (OSError, ValueError, KeyError) as err:
+        release_state.update(images=[], error=f"{repo}: {err}", checked=int(time.time()))
+        return
+    if not signature_ok(manifest, signature):
+        release_state.update(images=[], error="signature does not match: release ignored", checked=int(time.time()))
+        return
+    data = json.loads(manifest)
+    images = [dict(img, url=assets.get(img["file"])) for img in data.get("images", []) if assets.get(img["file"])]
+    release_state.update(release=data.get("release"), images=images, error=None, checked=int(time.time()))
+
+
+def releases_loop():
+    while True:
+        check_releases()
+        time.sleep(6 * 3600)
+
+
+def release_image(name):
+    """A release image on disk, downloaded when needed and checked against the signed hash."""
+    image = next((img for img in release_state["images"] if img["file"] == name), None)
+    if image is None:
+        return None
+    RELEASES.mkdir(parents=True, exist_ok=True)
+    path = RELEASES / image["file"]
+    if not path.exists() or hashlib.sha256(path.read_bytes()).hexdigest() != image["sha256"]:
+        data = download(image["url"], 300)
+        if hashlib.sha256(data).hexdigest() != image["sha256"]:
+            raise ValueError("downloaded firmware does not match the signed hash")
+        path.write_bytes(data)
+    return path
+
+
 # ---------------------------------------------------------------- discovery
 
 def device_info(address):
@@ -464,6 +540,52 @@ def found_unlinked():
     return [d for d in devices if not linked(d["id"], d["host"], d["address"])]
 
 
+# ---------------------------------------------------------------- management
+
+# What the management pages may send to a proxy: its connections, name,
+# language and Wi-Fi; nothing that changes access or the firmware
+ALLOWED_COMMANDS = ("io ", "name ", "language ", "wifi ssid ", "wifi password ")
+
+
+def allowed(line):
+    return line in ("io json", "json", "language") or line.startswith(ALLOWED_COMMANDS)
+
+
+def version_key(name):
+    """octo_bridge-1.0.10.bin -> (1, 0, 10)"""
+    version = name.rsplit("-", 1)[-1].removesuffix(".bin")
+    return tuple(int(part) if part.isdigit() else 0 for part in version.split("."))
+
+
+def newest_firmware(app):
+    """The newest image for an application: own builds and signed releases."""
+    names = [p.name for p in FIRMWARE.glob(f"{app}-*.bin")] + \
+            [i["file"] for i in release_state["images"] if i["app"] == app]
+    return max(names, key=version_key, default=None)
+
+
+def update_all():
+    """Every proxy to the newest firmware of its own application, one after the
+    other; stops at the first that does not come back."""
+    for proxy in load_proxies():
+        app = proxy.get("app")
+        name = newest_firmware(app) if app else None
+        if not name:
+            log(f"== {proxy['name']}: no firmware for '{app}', skipped")
+            continue
+        status, system = command(proxy, "system")
+        running = (system.split("\n")[0].split(": ")[-1].split(" (")[0] if status == 200 else "")
+        if running.endswith(" " + name.rsplit("-", 1)[-1].removesuffix(".bin")):
+            log(f"== {proxy['name']}: already on {running}")
+            continue
+        image = FIRMWARE / name if (FIRMWARE / name).is_file() else release_image(name)
+        if not update_proxy(proxy, image):
+            log("!! Stopped: the other proxies keep their firmware")
+            return False
+    log("== All proxies up to date")
+    return True
+
+
 # ---------------------------------------------------------------- links
 
 def link_start(host, password):
@@ -558,7 +680,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             proxies = [{k: p.get(k) for k in ("id", "name", "host", "added", "app")} for p in load_proxies()]
             return self.reply({"proxies": proxies, "found": found_unlinked(), "toolchain": toolchain_ready(),
                                "builds": builds(), "job": current,
-                               "releases": [], "settings": load_settings(), "system": system_info()})
+                               "releases": [{k: i[k] for k in ("file", "app", "version")} for i in release_state["images"]],
+                               "release": release_state["release"], "release_error": release_state["error"],
+                               "settings": load_settings(), "system": system_info()})
         if path == "/api/job":
             with lock:
                 current = dict(job)
@@ -587,6 +711,23 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if not host or not password:
                 return self.reply({"error": "address and password are needed"}, 400)
             return self.reply(link_start(host, password))
+        if path == "/api/bulk":
+            lines = [str(line) for line in data.get("lines", []) if allowed(str(line))]
+            if not lines:
+                return self.reply({"error": "nothing allowed to send"}, 400)
+            results = []
+            for proxy in load_proxies():
+                answers = [command(proxy, line) for line in lines]
+                ok = all(status == 200 for status, _ in answers)
+                results.append({"id": proxy["id"], "name": proxy["name"], "ok": ok,
+                                "text": " ".join(text.strip() for _, text in answers)})
+            return self.reply({"results": results})
+        if path == "/api/bulk/update":
+            started = start_job("update", "all", update_all)
+            return self.reply({"started": started})
+        if path == "/api/releases/check":
+            check_releases()
+            return self.reply({"ok": release_state["error"] is None, "error": release_state["error"]})
         if path == "/api/settings":
             settings = load_settings()
             if "dev_mode" in data:
@@ -608,13 +749,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if not proxy:
                 return self.reply({"error": "unknown proxy"}, 404)
             if parts[3] == "update":
-                image = FIRMWARE / Path(str(data.get("file", ""))).name
+                name = Path(str(data.get("file", ""))).name
+                image = FIRMWARE / name
                 if not image.is_file():
+                    image = release_image(name)
+                if image is None or not image.is_file():
                     return self.reply({"error": "unknown firmware"}, 400)
                 if proxy.get("app") and not image.name.startswith(proxy["app"] + "-"):
                     return self.reply({"error": "firmware for another application"}, 400)
                 started = start_job("update", f"{proxy['name']} bijwerken", lambda: update_proxy(proxy, image))
                 return self.reply({"started": started})
+            if parts[3] == "command":
+                line = str(data.get("line", "")).strip()
+                if not allowed(line):
+                    return self.reply({"error": "not allowed from here"}, 400)
+                status, text = command(proxy, line)
+                return self.reply({"status": status, "text": text})
             if parts[3] == "rename":
                 name = str(data.get("name", "")).strip()[:40]
                 proxies = load_proxies()
@@ -641,5 +791,6 @@ class Server(http.server.ThreadingHTTPServer):
 if __name__ == "__main__":
     DATA.mkdir(parents=True, exist_ok=True)
     discovery.start()
+    threading.Thread(target=releases_loop, daemon=True).start()
     print(f"Matter Builder on port {PORT}", flush=True)
     Server(("::", PORT), Handler).serve_forever()

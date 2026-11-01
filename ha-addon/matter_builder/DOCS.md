@@ -15,8 +15,23 @@ The first application is the **Octo bed bridge** (ESP32-C6, Thread).
   its BOOT button briefly (or switch its power off and on three times). The
   add-on gets a key of its own; it never stores the password. The device's
   page lists the add-on under *Programs with access*, where you can revoke it.
+- **Connections** (generic devices): what is connected to a device, edited
+  as a form or as YAML. Changes are saved as a draft on the device; *Apply*
+  restarts it with the draft on trial, and *Keep* within 2 minutes makes it
+  permanent. Without that, the device goes back by itself.
+- **All proxies**: send the Wi-Fi network for configuration mode or the page
+  language to every linked device at once, or update every device to the
+  newest firmware of its own kind, one after the other.
 - **Firmware**: ready-made firmware to install, and in **developer mode** your
   own builds.
+
+## Ready-made firmware
+
+Released firmware comes from the project's GitHub releases (option
+`releases_repo`). Every release has a manifest with the SHA-256 of each image,
+signed by the project; the add-on checks the signature against the key it
+ships with and the hash of every image before installing anything. A release
+that does not match is ignored.
 
 ## Developer mode
 

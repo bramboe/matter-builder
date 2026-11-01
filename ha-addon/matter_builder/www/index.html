@@ -59,6 +59,11 @@ summary::after{content:"";margin-left:auto;margin-right:6px;width:8px;height:8px
 .switch input:checked{background:var(--primary)}
 .switch input:checked::after{left:18px}
 .lang{border:0;background:none;color:var(--mute);font:inherit}
+.tabs{display:flex;gap:4px;margin:6px 0}
+.tabs button{min-height:32px}
+.tabs button.on{background:var(--chip);color:var(--primary)}
+.conn{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;align-items:end;padding:8px 0;border-top:1px solid var(--line)}
+textarea.yaml{width:100%;min-height:260px;font:12px/1.5 ui-monospace,Menlo,monospace;background:var(--fill);color:var(--fg);border:0;border-radius:8px;padding:8px}
 </style>
 </head>
 <body>
@@ -103,12 +108,55 @@ summary::after{content:"";margin-left:auto;margin-right:6px;width:8px;height:8px
   </div>
 </div>
 
+<div class="section" id="manageSection" hidden>
+  <div class="card">
+    <div class="tile"><div class="info"><h3 id="manageTitle"></h3><div class="sub" data-t="manageHelp"></div></div>
+      <button class="text" id="manageClose" data-t="close"></button></div>
+    <div class="tabs"><button id="tabUi" class="on">UI</button><button id="tabYaml">YAML</button></div>
+    <div id="manageUi">
+      <label class="field"><span data-t="deviceName"></span><input id="mName" maxlength="32" autocomplete="off"></label>
+      <div id="mConns"></div>
+      <div class="actions"><button class="text" id="mAdd" data-t="addConnection"></button></div>
+    </div>
+    <div id="manageYaml" hidden><textarea class="yaml" id="mYaml" spellcheck="false"></textarea></div>
+    <div class="error" id="mError" hidden></div>
+    <div class="notice" id="mNotice" hidden></div>
+    <div class="actions"><button class="pri" id="mSave" data-t="saveDraft"></button>
+      <button id="mApply" data-t="applyRestart" hidden></button>
+      <button class="pri" id="mConfirm" data-t="keep" hidden></button></div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-head"><h2 data-t="allProxies"></h2></div>
+  <div class="grid">
+    <div class="card">
+      <h3>Wi-Fi</h3><div class="sub" data-t="bulkWifiHelp"></div>
+      <form id="bulkWifi" class="form">
+        <label class="field"><span data-t="wifiName"></span><input id="bSsid" maxlength="32" autocomplete="off"></label>
+        <label class="field"><span data-t="wifiPassword"></span><input id="bPass" type="password" maxlength="64" autocomplete="off"></label>
+        <div class="actions" style="margin-top:0"><button class="pri" type="submit" data-t="sendAll"></button></div>
+      </form>
+    </div>
+    <div class="card">
+      <h3 data-t="pageLanguage"></h3>
+      <div class="row"><label class="field" style="flex:1"><span data-t="pageLanguage"></span><select id="bLang">
+        <option value="nl">Nederlands</option><option value="en">English</option><option value="de">Deutsch</option><option value="es">Español</option></select></label>
+        <button class="pri" id="bLangSend" data-t="sendAll"></button></div>
+      <h3 style="margin-top:12px" data-t="updateAll"></h3><div class="sub" data-t="updateAllHelp"></div>
+      <div class="actions"><button class="pri" id="bUpdate" data-t="updateAll"></button></div>
+    </div>
+    <div class="card" id="bulkResult" hidden><h3 data-t="result"></h3><div id="bulkRows"></div></div>
+  </div>
+</div>
+
 <div class="section">
   <div class="section-head"><h2>Firmware</h2></div>
   <div class="grid">
     <div class="card">
       <h3 data-t="readyMade"></h3>
       <div id="releases"></div>
+      <div class="actions"><button class="text" id="checkReleases" data-t="checkReleases"></button></div>
     </div>
     <div class="card" id="devCard" hidden>
       <h3 data-t="devTitle"></h3>
@@ -153,7 +201,17 @@ const TEXT = {
     key: 'Key of the add-on', show: 'Show', hide: 'Hide', copy: 'Copy', update: 'Update', openPage: 'Open settings', rename: 'Rename', forget: 'Forget',
     confirmUpdate: f => `Install ${f}? The proxy moves to Wi-Fi for a few minutes; what is connected to it is unavailable meanwhile.`,
     confirmForget: 'Forget this proxy? Also revoke its key on the proxy’s page (Programs with access).', name: 'Name',
-    readyMade: 'Ready-made firmware',
+    manageHelp: 'Connections are saved as a draft on the device; apply restarts it, then keep them within 2 minutes.', close: 'Close',
+    deviceName: 'Device name', addConnection: 'Add connection', saveDraft: 'Save', applyRestart: 'Apply (restart)', keep: 'Keep',
+    manage: 'Connections', slot: 'Connection', type: 'Type', pin: 'Pin', scl: 'SCL', inverted: 'Inverted', remove: 'Remove',
+    types: {relay: 'Relay', led: 'LED', button: 'Push button', contact: 'Contact', motion: 'Motion sensor', sht4x: 'SHT4x'},
+    saved: 'Saved as draft.', unchanged: 'Nothing changed.', applying: 'Restarting with the new connections…',
+    trialLeft: s => `On trial: keep within ${s} s.`, kept: 'Kept.', yamlError: e => `YAML: ${e}`, full: 'All 8 connections are in use.',
+    allProxies: 'All proxies', bulkWifiHelp: 'The network for configuration mode (updates, first setup) of every linked proxy.',
+    wifiName: 'Network', wifiPassword: 'Password', sendAll: 'Send to all', pageLanguage: 'Language of the pages',
+    updateAll: 'Update all', updateAllHelp: 'Every proxy to the newest firmware of its own kind, one after the other; stops at the first problem.',
+    result: 'Result',
+    readyMade: 'Ready-made firmware', checkReleases: 'Check now', signedRelease: r => `Release ${r}, signature checked.`,
     noReleases: 'No releases yet. Signed, ready-made firmware appears here once the project publishes it. In developer mode you can build it yourself.',
     devTitle: 'Developer mode', devHelp: 'Builds firmware in Home Assistant with fixed versions of ESP-IDF (v5.5.5) and esp-matter (release/v1.6). Nothing personal is built in.',
     host: 'This host', cores: 'cores', memory: 'GB memory', disk: 'GB free',
@@ -162,7 +220,7 @@ const TEXT = {
     install: 'Install', build: 'Build Octo bridge (ESP32-C6)', buildGeneric: 'Build generic device (ESP32-C6)', ownBuilds: 'Own builds',
     apps: {octo_bridge: 'Octo bed bridge', mb_generic: 'Generic device'}, nothingConnected: 'Nothing connected yet',
     log: 'Log', running: t => `Running since ${t}`, done: 'Done.', failed: 'Failed: see the log.', step: (d, t) => `Step ${d} of ${t}`,
-    jobs: {toolchain: 'Installing the toolchain', build: a => a === 'generic' ? 'Building the generic device' : 'Building the Octo bridge', update: n => `Updating ${n}`},
+    jobs: {toolchain: 'Installing the toolchain', all: 'Updating all proxies', build: a => a === 'generic' ? 'Building the generic device' : 'Building the Octo bridge', update: n => `Updating ${n}`},
   },
   nl: {
     devMode: 'Ontwikkelaarsmodus', introTitle: 'Welkom',
@@ -180,7 +238,17 @@ const TEXT = {
     key: 'Sleutel van de add-on', show: 'Tonen', hide: 'Verbergen', copy: 'Kopiëren', update: 'Bijwerken', openPage: 'Instellingen openen', rename: 'Naam wijzigen', forget: 'Vergeten',
     confirmUpdate: f => `${f} installeren? De proxy gaat een paar minuten naar Wi-Fi; wat erop aangesloten is, is dan niet bereikbaar.`,
     confirmForget: 'Deze proxy vergeten? Trek de sleutel ook in op de pagina van de proxy (Programma’s met toegang).', name: 'Naam',
-    readyMade: 'Kant-en-klare firmware',
+    manageHelp: 'Aansluitingen worden als concept op het apparaat opgeslagen; toepassen herstart het, houd ze daarna binnen 2 minuten.', close: 'Sluiten',
+    deviceName: 'Naam van het apparaat', addConnection: 'Aansluiting toevoegen', saveDraft: 'Opslaan', applyRestart: 'Toepassen (herstart)', keep: 'Houden',
+    manage: 'Aansluitingen', slot: 'Aansluiting', type: 'Soort', pin: 'Pin', scl: 'SCL', inverted: 'Omgekeerd', remove: 'Verwijderen',
+    types: {relay: 'Relais', led: 'LED', button: 'Drukknop', contact: 'Contact', motion: 'Bewegingsmelder', sht4x: 'SHT4x'},
+    saved: 'Opgeslagen als concept.', unchanged: 'Niets gewijzigd.', applying: 'Herstart met de nieuwe aansluitingen…',
+    trialLeft: s => `Op proef: houd ze binnen ${s} s.`, kept: 'Gehouden.', yamlError: e => `YAML: ${e}`, full: 'Alle 8 aansluitingen zijn in gebruik.',
+    allProxies: 'Alle proxies', bulkWifiHelp: 'Het netwerk voor de configuratiemodus (updates, eerste instelling) van elke gekoppelde proxy.',
+    wifiName: 'Netwerk', wifiPassword: 'Wachtwoord', sendAll: 'Naar alle sturen', pageLanguage: 'Taal van de pagina’s',
+    updateAll: 'Alles bijwerken', updateAllHelp: 'Elke proxy naar de nieuwste firmware van zijn eigen soort, een voor een; stopt bij het eerste probleem.',
+    result: 'Resultaat',
+    readyMade: 'Kant-en-klare firmware', checkReleases: 'Nu controleren', signedRelease: r => `Release ${r}, handtekening gecontroleerd.`,
     noReleases: 'Nog geen releases. Ondertekende, kant-en-klare firmware verschijnt hier zodra het project die publiceert. In de ontwikkelaarsmodus kun je zelf bouwen.',
     devTitle: 'Ontwikkelaarsmodus', devHelp: 'Bouwt firmware in Home Assistant met vaste versies van ESP-IDF (v5.5.5) en esp-matter (release/v1.6). Er gaat niets persoonlijks in.',
     host: 'Deze host', cores: 'kernen', memory: 'GB geheugen', disk: 'GB vrij',
@@ -189,7 +257,7 @@ const TEXT = {
     install: 'Installeren', build: 'Octo-bridge bouwen (ESP32-C6)', buildGeneric: 'Generiek apparaat bouwen (ESP32-C6)', ownBuilds: 'Eigen builds',
     apps: {octo_bridge: 'Octo-bedbridge', mb_generic: 'Generiek apparaat'}, nothingConnected: 'Nog niets aangesloten',
     log: 'Log', running: t => `Bezig sinds ${t}`, done: 'Klaar.', failed: 'Mislukt: zie het log.', step: (d, t) => `Stap ${d} van ${t}`,
-    jobs: {toolchain: 'Toolchain installeren', build: a => a === 'generic' ? 'Generiek apparaat bouwen' : 'Octo-bridge bouwen', update: n => `${n} bijwerken`},
+    jobs: {toolchain: 'Toolchain installeren', all: 'Alle proxies bijwerken', build: a => a === 'generic' ? 'Generiek apparaat bouwen' : 'Octo-bridge bouwen', update: n => `${n} bijwerken`},
   },
 };
 let lang = 'en';
@@ -256,7 +324,8 @@ function proxyCard(p) {
       <select id="fw-${p.id}" onchange="chosen['${p.id}'] = this.value">${files.map(f => `<option ${chosen[p.id] === f ? 'selected' : ''}>${esc(f)}</option>`).join('')}</select></label>
       <button class="pri" onclick="updateProxy('${p.id}')" ${state.job.running ? 'disabled' : ''}>${t('update')}</button></div>` : ''}
     ${s && s.auth ? `<div class="actions"><button class="pri" onclick="prefillLink('${esc(p.host)}')">${t('linkAgain')}</button></div>` : ''}
-    <div class="actions"><a class="button text" href="${esc(pageUrl(p.host))}" target="_blank" rel="noopener">${t('openPage')} ↗</a>
+    <div class="actions">${p.app === 'mb_generic' ? `<button class="pri" onclick="openManage('${p.id}')">${t('manage')}</button>` : ''}
+      <a class="button text" href="${esc(pageUrl(p.host))}" target="_blank" rel="noopener">${t('openPage')} ↗</a>
       <button class="text" onclick="renameProxy('${p.id}')">${t('rename')}</button>
       <button class="warn" onclick="forgetProxy('${p.id}')">${t('forget')}</button></div>
   </div>`;
@@ -286,8 +355,9 @@ function render() {
   $('#intro').hidden = state.proxies.length > 0 || state.found.length > 0;
   $('#proxies').innerHTML = state.proxies.map(proxyCard).join('');
   $('#releases').innerHTML = state.releases.length
-    ? state.releases.map(r => `<div class="row"><div class="label mono">${esc(r.file)}</div></div>`).join('')
-    : `<div class="sub">${t('noReleases')}</div>`;
+    ? `<div class="sub">${t('signedRelease', state.release)}</div>` + state.releases.map(r => `<div class="row"><div class="label">${esc((TEXT[lang].apps[r.app] || r.app))}
+        <div class="sub mono">${esc(r.file)}</div></div></div>`).join('')
+    : `<div class="sub">${t('noReleases')}</div>` + (state.release_error ? `<div class="sub" style="margin-top:6px">${esc(state.release_error)}</div>` : '');
   $('#devCard').hidden = !dev;
   const sys = state.system;
   $('#system').textContent = `${sys.cores} ${t('cores')} · ${gb(sys.memory)} ${t('memory')} · ${gb(sys.disk_free)} ${t('disk')}`;
@@ -320,7 +390,7 @@ async function loadJob() {
   const j = await api('api/job');
   $('#jobCard').hidden = false;
   const jobs = TEXT[lang].jobs;
-  $('#jobTitle').textContent = j.kind === 'update' ? jobs.update(j.title) : j.kind === 'build' ? jobs.build(j.title) : jobs[j.kind] || j.title;
+  $('#jobTitle').textContent = j.kind === 'update' && j.title === 'all' ? jobs.all : j.kind === 'update' ? jobs.update(j.title) : j.kind === 'build' ? jobs.build(j.title) : jobs[j.kind] || j.title;
   $('#jobState').textContent = j.running ? t('running', date(j.started)) : j.ok ? t('done') : t('failed');
   const p = j.progress || {};
   $('#jobBar').hidden = !(j.running && p.total);
@@ -399,6 +469,209 @@ $('#linkForm').onsubmit = async e => {
 $('#toolchainBtn').onclick = async () => { await api('api/toolchain', {}); refresh(); };
 $('#buildBtn').onclick = async () => { await api('api/build', {app: 'bridge'}); refresh(); };
 $('#buildGenericBtn').onclick = async () => { await api('api/build', {app: 'generic'}); refresh(); };
+
+// ---------------------------------------------------------------- manage
+// A generic proxy's connections, as a form (UI) or as YAML. Saving sends the
+// differences to the device's draft ("io set" / "io clear"); applying
+// restarts it with the draft as a trial, which is then kept.
+const TYPES = ['relay', 'led', 'button', 'contact', 'motion', 'sht4x'];
+let managed = null;  // {id, io}
+let editRows = [];   // [{slot, type, pin, pin2, inverted, name}]
+
+async function proxyCommand(id, line) {
+  const r = await api(`api/proxy/${id}/command`, {line});
+  if (r.error) throw new Error(r.error);
+  return r.text;
+}
+
+function rowsFromIo(io) {
+  return io.draft.filter(d => d.type !== 'none')
+    .map(d => ({slot: d.index, type: d.type, pin: d.pin, pin2: d.pin2, inverted: d.inverted, name: d.name}));
+}
+
+function toYaml(name, rows) {
+  const lines = [`name: ${name}`, 'connections:'];
+  for (const r of rows) {
+    lines.push(`  - slot: ${r.slot}`, `    type: ${r.type}`, `    pin: ${r.pin}`);
+    if (r.type === 'sht4x') lines.push(`    scl: ${r.pin2}`);
+    if (r.inverted) lines.push('    inverted: true');
+    lines.push(`    name: ${r.name}`);
+  }
+  return lines.join('\n') + '\n';
+}
+
+function fromYaml(text) {
+  let name = null;
+  const rows = [];
+  let current = null;
+  for (const raw of text.split('\n')) {
+    const line = raw.replace(/#.*$/, '').trimEnd();
+    if (!line.trim()) continue;
+    const item = line.match(/^\s*-\s+(.*)$/);
+    const body = item ? item[1] : line.trim();
+    const kv = body.match(/^([a-z0-9_]+)\s*:\s*(.*)$/i);
+    if (!kv) throw new Error(`cannot read “${line.trim()}”`);
+    const key = kv[1], value = kv[2].replace(/^["']|["']$/g, '');
+    if (item) { current = {slot: null, type: '', pin: null, pin2: 0, inverted: false, name: ''}; rows.push(current); }
+    if (!line.startsWith(' ') && !item) {
+      if (key === 'name') name = value;
+      else if (key !== 'connections') throw new Error(`unknown “${key}”`);
+      continue;
+    }
+    if (!current) throw new Error(`“${key}” outside a connection`);
+    if (key === 'slot') current.slot = +value;
+    else if (key === 'type') current.type = value;
+    else if (key === 'pin') current.pin = +value;
+    else if (key === 'scl') current.pin2 = +value;
+    else if (key === 'inverted') current.inverted = value === 'true';
+    else if (key === 'name') current.name = value;
+    else throw new Error(`unknown “${key}”`);
+  }
+  for (const r of rows) {
+    if (!(r.slot >= 0 && r.slot <= 7)) throw new Error('slot must be 0-7');
+    if (!TYPES.includes(r.type)) throw new Error(`type “${r.type}”`);
+    if (!managed.io.pins.includes(r.pin) || (r.type === 'sht4x' && !managed.io.pins.includes(r.pin2))) throw new Error(`pin of slot ${r.slot}`);
+  }
+  if (new Set(rows.map(r => r.slot)).size !== rows.length) throw new Error('a slot appears twice');
+  return {name, rows};
+}
+
+function renderRows() {
+  const pins = managed.io.pins.map(p => `<option value="${p}">GPIO ${p}</option>`).join('');
+  $('#mConns').innerHTML = editRows.map((r, i) => `<div class="conn">
+      <label class="field"><span>${t('slot')}</span><input value="${r.slot}" disabled></label>
+      <label class="field"><span>${t('type')}</span><select onchange="editRows[${i}].type=this.value;renderRows()">
+        ${TYPES.map(x => `<option value="${x}" ${x === r.type ? 'selected' : ''}>${esc(TEXT[lang].types[x])}</option>`).join('')}</select></label>
+      <label class="field"><span>${r.type === 'sht4x' ? 'SDA' : t('pin')}</span><select onchange="editRows[${i}].pin=+this.value">${pins.replace(`value="${r.pin}"`, `value="${r.pin}" selected`)}</select></label>
+      ${r.type === 'sht4x' ? `<label class="field"><span>${t('scl')}</span><select onchange="editRows[${i}].pin2=+this.value">${pins.replace(`value="${r.pin2}"`, `value="${r.pin2}" selected`)}</select></label>` : ''}
+      <label class="field"><span>${t('name')}</span><input maxlength="23" value="${esc(r.name)}" oninput="editRows[${i}].name=this.value"></label>
+      <label class="row" style="min-height:40px;border:0"><input type="checkbox" ${r.inverted ? 'checked' : ''} onchange="editRows[${i}].inverted=this.checked"><span class="sub">${t('inverted')}</span></label>
+      <button class="warn" onclick="editRows.splice(${i},1);renderRows()">${t('remove')}</button></div>`).join('');
+  $('#mAdd').disabled = editRows.length >= 8;
+}
+
+function showManageState() {
+  const io = managed.io;
+  $('#mApply').hidden = !io.changed || io.trial > 0;
+  $('#mConfirm').hidden = !(io.trial > 0);
+  $('#mNotice').hidden = !(io.trial > 0);
+  if (io.trial > 0) $('#mNotice').textContent = t('trialLeft', io.trial);
+}
+
+async function openManage(id) {
+  const p = state.proxies.find(x => x.id === id);
+  managed = {id, io: JSON.parse(await proxyCommand(id, 'io json')).io};
+  editRows = rowsFromIo(managed.io);
+  $('#manageTitle').textContent = `${t('manage')}: ${p.name}`;
+  $('#mName').value = managed.io.name;
+  $('#mYaml').value = toYaml(managed.io.name, editRows);
+  $('#mError').hidden = true;
+  renderRows();
+  showManageState();
+  $('#manageSection').hidden = false;
+  $('#manageSection').scrollIntoView({behavior: 'smooth'});
+}
+
+function setTab(yaml) {
+  if (yaml) $('#mYaml').value = toYaml($('#mName').value, editRows);
+  else {
+    try { const parsed = fromYaml($('#mYaml').value); editRows = parsed.rows; if (parsed.name) $('#mName').value = parsed.name; renderRows(); }
+    catch (e) { $('#mError').textContent = t('yamlError', e.message); $('#mError').hidden = false; return; }
+  }
+  $('#mError').hidden = true;
+  $('#manageUi').hidden = yaml;
+  $('#manageYaml').hidden = !yaml;
+  $('#tabUi').classList.toggle('on', !yaml);
+  $('#tabYaml').classList.toggle('on', yaml);
+}
+
+async function saveManage() {
+  $('#mError').hidden = true;
+  let name = $('#mName').value.trim(), rows = editRows;
+  if (!$('#manageYaml').hidden) {
+    try { const parsed = fromYaml($('#mYaml').value); rows = parsed.rows; if (parsed.name) name = parsed.name; }
+    catch (e) { $('#mError').textContent = t('yamlError', e.message); $('#mError').hidden = false; return; }
+  }
+  const before = new Map(rowsFromIo(managed.io).map(r => [r.slot, r]));
+  const lines = [];
+  for (const r of rows) {
+    const old = before.get(r.slot);
+    before.delete(r.slot);
+    if (old && JSON.stringify(old) === JSON.stringify(r)) continue;
+    const pins = r.type === 'sht4x' ? `${r.pin} ${r.pin2}` : `${r.pin}`;
+    lines.push(`io set ${r.slot} ${r.type} ${pins}${r.inverted ? ' inverted' : ''} ${(r.name || TEXT[lang].types[r.type]).trim().replace(/\s+/g, ' ')}`);
+  }
+  for (const slot of before.keys()) lines.push(`io clear ${slot}`);
+  if (name && name !== managed.io.name) lines.push(`name ${name}`);
+  try {
+    for (const line of lines) {
+      const reply = await proxyCommand(managed.id, line);
+      if (!reply.startsWith('ok')) throw new Error(reply.trim());
+    }
+  } catch (e) { $('#mError').textContent = e.message; $('#mError').hidden = false; return; }
+  managed.io = JSON.parse(await proxyCommand(managed.id, 'io json')).io;
+  editRows = rowsFromIo(managed.io);
+  renderRows();
+  $('#mYaml').value = toYaml(managed.io.name, editRows);
+  showManageState();
+  toastNotice(lines.length ? t('saved') : t('unchanged'));
+}
+
+function toastNotice(text) { $('#mNotice').textContent = text; $('#mNotice').hidden = false; }
+
+// After "apply" the proxy restarts: wait until it answers, then show the trial
+async function applyManage() {
+  try { await proxyCommand(managed.id, 'io apply'); } catch (e) {}
+  toastNotice(t('applying'));
+  $('#mApply').hidden = true;
+  for (let i = 0; i < 40; i++) {
+    await new Promise(r => setTimeout(r, 3000));
+    try { managed.io = JSON.parse(await proxyCommand(managed.id, 'io json')).io; if (managed.io.trial > 0) break; } catch (e) {}
+  }
+  showManageState();
+}
+
+$('#tabUi').onclick = () => setTab(false);
+$('#tabYaml').onclick = () => setTab(true);
+$('#manageClose').onclick = () => { $('#manageSection').hidden = true; managed = null; };
+$('#mAdd').onclick = () => {
+  const used = new Set(editRows.map(r => r.slot));
+  const slot = [0, 1, 2, 3, 4, 5, 6, 7].find(s => !used.has(s));
+  if (slot === undefined) return;
+  editRows.push({slot, type: 'relay', pin: managed.io.pins[0], pin2: managed.io.pins[1], inverted: false, name: ''});
+  renderRows();
+};
+$('#mSave').onclick = saveManage;
+$('#mApply').onclick = applyManage;
+$('#mConfirm').onclick = async () => {
+  await proxyCommand(managed.id, 'io confirm');
+  managed.io = JSON.parse(await proxyCommand(managed.id, 'io json')).io;
+  showManageState();
+  toastNotice(t('kept'));
+};
+
+// ---------------------------------------------------------------- all proxies
+function showBulk(results) {
+  $('#bulkResult').hidden = false;
+  $('#bulkRows').innerHTML = results.map(r => `<div class="row"><div class="label">${esc(r.name)}<div class="sub">${esc(r.text)}</div></div>
+    <span class="dot ${r.ok ? 'ok' : ''}"></span></div>`).join('');
+}
+$('#bulkWifi').onsubmit = async e => {
+  e.preventDefault();
+  const ssid = $('#bSsid').value.trim(), pass = $('#bPass').value;
+  if (!ssid) return;
+  const r = await api('api/bulk', {lines: [`wifi ssid ${ssid}`, `wifi password ${pass}`]});
+  $('#bPass').value = '';
+  showBulk(r.results || []);
+};
+$('#bLangSend').onclick = async () => showBulk((await api('api/bulk', {lines: [`language ${$('#bLang').value}`]})).results || []);
+$('#bUpdate').onclick = async () => {
+  if (!confirm(t('updateAllHelp'))) return;
+  await api('api/bulk/update', {});
+  refresh();
+};
+
+$('#checkReleases').onclick = async () => { await api('api/releases/check', {}); refresh(); };
 $('#devMode').onchange = async () => { await api('api/settings', {dev_mode: $('#devMode').checked}); refresh(); };
 $('#lang').onchange = () => {
   lang = $('#lang').value;

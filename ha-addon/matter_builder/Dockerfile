@@ -7,7 +7,7 @@ FROM espressif/idf:v5.5.5
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential pkg-config libffi-dev libssl-dev libdbus-1-dev libglib2.0-dev \
         libavahi-client-dev libgirepository1.0-dev libcairo2-dev libreadline-dev \
-        python3-dev python3-venv python3-pip unzip \
+        python3-dev python3-venv python3-pip unzip openssl \
     && rm -rf /var/lib/apt/lists/*
 
 # Finding devices on the network (mDNS) for the add-on's own server
@@ -21,7 +21,7 @@ ENV IDF_PYTHON_ENV_PATH=/data/toolchain/python_env
 
 # The firmware sources this version builds (copied in by tools/addon_sync.sh)
 COPY src /opt/octo-matter
-COPY server.py toolchain.sh build.sh /opt/matter-builder/
+COPY server.py toolchain.sh build.sh release-key.pem /opt/matter-builder/
 COPY www /opt/matter-builder/www
 
 WORKDIR /opt/matter-builder

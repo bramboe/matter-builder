@@ -149,6 +149,12 @@ bool select_other_slot(std::string& info) {
         info = "the other slot holds no valid firmware";
         return false;
     }
+    // Another project's firmware does not know this one's settings and may
+    // wipe them: staying is better than that
+    if (std::strcmp(desc.project_name, esp_app_get_description()->project_name) != 0) {
+        info = std::string("the other slot holds other firmware (") + desc.project_name + ")";
+        return false;
+    }
     esp_err_t err = esp_ota_set_boot_partition(other);
     if (err != ESP_OK) {
         info = std::string("selecting it failed: ") + esp_err_to_name(err);

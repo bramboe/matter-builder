@@ -4,7 +4,9 @@
 #include <cstring>
 #include <string>
 
+#include <app/clusters/occupancy-sensor-server/OccupancySensingCluster.h>
 #include <app/server/Server.h>
+#include <data_model_provider/esp_matter_data_model_provider.h>
 #include <esp_matter.h>
 #include <esp_matter_providers.h>
 #include <platform/CHIPDeviceLayer.h>
@@ -97,6 +99,14 @@ void on_event(const ChipDeviceEvent* event, intptr_t) {
 // ---------------------------------------------------------------- io → Matter
 // Called in the io polling task: hand the values to the Matter thread
 
+// Occupancy is kept by the cluster itself (esp-matter 1.6): an attribute
+// write is refused, the cluster's own call reports it
+void set_occupancy(uint16_t ep, bool occupied) {
+    auto* cluster = esp_matter::data_model::provider::get_instance().registry().Get(
+        chip::app::ConcreteClusterPath(ep, OccupancySensing::Id));
+    if (cluster != nullptr) static_cast<chip::app::Clusters::OccupancySensingCluster*>(cluster)->SetOccupancy(occupied);
+}
+
 void on_input(int index, bool active) {
     (void) chip::DeviceLayer::PlatformMgr().ScheduleWork([](intptr_t arg) {
         const int i = static_cast<int>(arg >> 1);
@@ -107,8 +117,7 @@ void on_input(int index, bool active) {
             esp_matter_attr_val_t value = esp_matter_bool(on);
             attribute::update(ep, BooleanState::Id, BooleanState::Attributes::StateValue::Id, &value);
         } else {
-            esp_matter_attr_val_t value = esp_matter_bitmap8(on ? 1 : 0);
-            attribute::update(ep, OccupancySensing::Id, OccupancySensing::Attributes::Occupancy::Id, &value);
+            set_occupancy(ep, on);
         }
     }, (static_cast<intptr_t>(index) << 1) | (active ? 1 : 0));
 }
@@ -289,8 +298,7 @@ void after_start() {
                 esp_matter_attr_val_t value = esp_matter_bool(io::input_active(i));
                 attribute::update(endpoint_of[i], BooleanState::Id, BooleanState::Attributes::StateValue::Id, &value);
             } else if (kind == 4) {
-                esp_matter_attr_val_t value = esp_matter_bitmap8(io::input_active(i) ? 1 : 0);
-                attribute::update(endpoint_of[i], OccupancySensing::Id, OccupancySensing::Attributes::Occupancy::Id, &value);
+                set_occupancy(endpoint_of[i], io::input_active(i));
             }
         }
     });

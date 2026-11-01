@@ -148,6 +148,20 @@ void console_start() {
         cmd.func = console_dispatch;
         ESP_ERROR_CHECK(esp_console_cmd_register(&cmd));
     }
+    // Configuration mode answers these itself, before the app registers them
+    if (override_handler != nullptr) {
+        for (const char* name : {"wifi", "thread", "access"}) {
+            bool registered = false;
+            for (int i = 0; i < extra_count; ++i) {
+                if (std::strcmp(extra_commands[i].name, name) == 0) registered = true;
+            }
+            if (registered) continue;
+            esp_console_cmd_t cmd = {};
+            cmd.command = name;
+            cmd.func = console_dispatch;
+            ESP_ERROR_CHECK(esp_console_cmd_register(&cmd));
+        }
+    }
     for (int i = 0; i < extra_count; ++i) {
         esp_console_cmd_t cmd = {};
         cmd.command = extra_commands[i].name;

@@ -350,7 +350,7 @@ std::string command_in_config_mode(const std::vector<std::string>& args) {
         return "not available in configuration mode: Matter is off (wifi exit to go back)\n";
     }
     if (cmd == "help") {
-        return "Configuration mode on Wi-Fi: the bed commands work, Matter and Thread are off.\n"
+        return "Configuration mode on Wi-Fi: the connections work, Matter and Thread are off.\n"
                "system | wifi exit (back to normal) | thread dataset <hex> | POST /ota for a firmware update\n";
     }
     return "";

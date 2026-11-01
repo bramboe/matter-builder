@@ -355,10 +355,18 @@ const TEXT = {
     button: 'An input to ground. Short, double and long presses become events.',
     contact: 'An input to ground: closed is “contact”. Appears as a contact sensor.',
     motion: 'An input from a PIR sensor that drives the pin high. Appears as an occupancy sensor.',
-    sht4x: 'An I²C sensor (address 0x44) on two pins: SDA and SCL. Appears as temperature and humidity.'}, deviceName: 'Device name', addConnection: 'Add connection', saveDraft: 'Save', applyRestart: 'Apply (restart)', keep: 'Keep',
+    sht4x: 'An I²C sensor (address 0x44) on two pins: SDA and SCL. Appears as temperature and humidity.',
+    ir_send: 'An IR LED (through a transistor) sends this code. Appears as a switch that sends it and turns itself off. Codes of the same LED share its pin.',
+    ir_receive: 'An IR receiver sees this code. Appears as a button: a press each time. Codes of the same receiver share its pin.',
+    ble_sensor: 'A thermometer that broadcasts its readings (BTHome, or Xiaomi with pvvx/ATC firmware). No wires.',
+    ble_presence: 'A Bluetooth tag with a fixed address: present while it was seen in the last minute. Phones change their address, so they do not work.'}, deviceName: 'Device name', addConnection: 'Add connection', saveDraft: 'Save', applyRestart: 'Apply (restart)', keep: 'Keep',
   manageHelp: 'Saving keeps the changes as a draft on the device. Applying restarts it with them on trial: keep them within 2 minutes, or it goes back by itself.',
   slot: 'Connection', type: 'Type', pin: 'Pin', scl: 'SCL', inverted: 'Inverted', remove: 'Remove', name: 'Name',
-  types: {relay: 'Relay', led: 'LED', button: 'Push button', contact: 'Contact', motion: 'Motion sensor', sht4x: 'SHT4x'},
+  types: {relay: 'Relay', led: 'LED', button: 'Push button', contact: 'Contact', motion: 'Motion sensor', sht4x: 'SHT4x',
+    ir_send: 'IR code to send', ir_receive: 'IR code to receive', ble_sensor: 'Bluetooth thermometer', ble_presence: 'Bluetooth presence'},
+  irCode: 'IR code', irCodeHint: 'nec:00FF:A25D', useLastCode: c => `Use ${c}`, noLastCode: 'Point a remote at an IR receiver of this device to learn a code.',
+  mac: 'Bluetooth address', macHint: 'AA:BB:CC:DD:EE:FF',
+  needCode: n => `${n}: an IR code like nec:00FF:A25D`, needMac: n => `${n}: a Bluetooth address like AA:BB:CC:DD:EE:FF`, liveSend: 'Send', liveHere: 'here', liveAway: 'away', liveSeen: s => `seen ${s} s ago`,
   saved: 'Saved as draft.', unchanged: 'Nothing changed.', applying: 'Restarting with the new connections…',
   trialLeft: s => `On trial: keep within ${s} s.`, kept: 'Kept.', yamlError: e => `YAML: ${e}`,
   fromRecipe: n => `Filled in from “${n}”. Nothing changes on the device until you save and apply.`, saveApply: 'Save and apply',
@@ -558,6 +566,10 @@ const TYPE_ICON = {
   contact: 'M6 2h12v20h-2V4H8v18H6V2m7 9h2v2h-2v-2Z',
   motion: 'M12 10a2 2 0 1 1 0 4 2 2 0 0 1 0-4M7.76 7.76l1.42 1.42a4 4 0 0 0 0 5.64l-1.42 1.42a6 6 0 0 1 0-8.48m8.48 0a6 6 0 0 1 0 8.48l-1.42-1.42a4 4 0 0 0 0-5.64l1.42-1.42M4.93 4.93l1.41 1.41a8 8 0 0 0 0 11.32l-1.41 1.41a10 10 0 0 1 0-14.14m14.14 0a10 10 0 0 1 0 14.14l-1.41-1.41a8 8 0 0 0 0-11.32l1.41-1.41Z',
   sht4x: 'M15 13V5a3 3 0 0 0-6 0v8a5 5 0 1 0 6 0m-3-9a1 1 0 0 1 1 1v3h-2V5a1 1 0 0 1 1-1Z',
+  ir_send: 'M8 2h8a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2m0 2v16h8V4H8m4 1.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3M9.5 11h2v2h-2v-2m3 0h2v2h-2v-2m-3 3h2v2h-2v-2m3 0h2v2h-2v-2Z',
+  ir_receive: 'M12 14a2 2 0 1 1 0 4 2 2 0 0 1 0-4M7.05 9.05l1.41 1.41a5 5 0 0 1 7.08 0l1.41-1.41a7 7 0 0 0-9.9 0M4.22 6.22l1.42 1.42a9 9 0 0 1 12.72 0l1.42-1.42a11 11 0 0 0-15.56 0Z',
+  ble_sensor: 'M11 2h1l5 5-3.5 3.5L17 14l-5 5h-1v-6.5L7.5 16 6 14.5 10.5 10 6 5.5 7.5 4l3.5 3.5V2m2 3.8v3.4L14.7 7.5 13 5.8m0 7v3.4l1.7-1.7L13 12.8Z',
+  ble_presence: 'M11 2h1l5 5-3.5 3.5L17 14l-5 5h-1v-6.5L7.5 16 6 14.5 10.5 10 6 5.5 7.5 4l3.5 3.5V2m2 3.8v3.4L14.7 7.5 13 5.8m0 7v3.4l1.7-1.7L13 12.8Z',
 };
 const typeIcon = type => `<svg viewBox="0 0 24 24"><path d="${TYPE_ICON[type] || ICON.chip}"/></svg>`;
 const isOutputType = type => type === 'relay' || type === 'led';
@@ -610,12 +622,22 @@ class ConfigEditor {
       this.name = s.name; this.rows = s.rows; this.error = '';
       return s;
     }
-    return {name: this.name.trim(), rows: this.rows.map(r => ({...r, name: (r.name || '').trim() || TEXT.types[r.type]}))};
+    const rows = this.rows.map(r => ({...r, name: (r.name || '').trim() || TEXT.types[r.type],
+      code: isIr(r.type) ? normalCode(r.code) : '', mac: isBle(r.type) ? (r.mac || '').trim().toUpperCase() : '',
+      pin: isBle(r.type) ? 0 : r.pin}));
+    for (const r of rows) {
+      if (isIr(r.type) && !/^nec:[0-9A-F]{4}:[0-9A-F]{4}$/.test(r.code)) throw new Error(t('needCode', r.name));
+      if (isBle(r.type) && !/^[0-9A-F]{2}(:[0-9A-F]{2}){5}$/.test(r.mac)) throw new Error(t('needMac', r.name));
+    }
+    return {name: this.name.trim(), rows};
   }
   text() { return this.mode === 'yaml' ? this.yaml : specYaml(this.name.trim(), this.rows); }
 
+  // Who else uses a pin; IR codes of the same kind share their LED or receiver
   usedBy(pin, slot) {
-    const r = this.rows.find(x => x.slot !== slot && (x.pin === pin || (x.type === 'sht4x' && x.pin2 === pin)));
+    const me = this.row(slot), type = me ? me.type : null;
+    const r = this.rows.find(x => x.slot !== slot && !isBle(x.type) && !(isIr(type) && x.type === type) &&
+      (x.pin === pin || (x.type === 'sht4x' && x.pin2 === pin)));
     return r ? (r.name || TEXT.types[r.type]) : null;
   }
   freePin(slot, not) { return this.pins.find(p => p !== not && !this.usedBy(p, slot)); }
@@ -625,8 +647,10 @@ class ConfigEditor {
     const r = this.row(slot);
     r[key] = value;
     if (key === 'type') {
+      if (isBle(value)) r.pin = 0;
+      else if (this.usedBy(r.pin, slot) || !this.pins.includes(r.pin) || r.pin === 0 && this.usedBy(0, slot)) r.pin = this.freePin(slot);
       if (value === 'sht4x' && (r.pin2 === r.pin || this.usedBy(r.pin2, slot) || !this.pins.includes(r.pin2))) r.pin2 = this.freePin(slot, r.pin);
-      if (value === 'sht4x') r.inverted = false;
+      if (value === 'sht4x' || isIr(value) || isBle(value)) r.inverted = false;
     }
     this.changed();
   }
@@ -639,8 +663,12 @@ class ConfigEditor {
     const slot = [0, 1, 2, 3, 4, 5, 6, 7].find(s => !this.row(s));
     if (slot === undefined) return;
     const pin = this.freePin(slot);
-    const r = {slot, type, pin, pin2: 0, inverted: false, name: ''};
+    const r = {slot, type, pin, pin2: 0, inverted: false, name: '', code: '', mac: ''};
     this.rows.push(r);
+    // A second IR code of the same kind starts on the first one's LED or receiver
+    const same = isIr(type) && this.rows.find(x => x.slot !== slot && x.type === type);
+    if (same) r.pin = same.pin;
+    if (isBle(type)) r.pin = 0;
     if (type === 'sht4x') r.pin2 = this.freePin(slot, pin);
     this.rows.sort((a, b) => a.slot - b.slot);
     this.picking = false; this.open.add(slot);
@@ -682,11 +710,13 @@ class ConfigEditor {
 
   liveText(r) {
     const l = this.live && this.live[r.slot];
-    if (!l || l.type !== r.type || l.pin !== r.pin) return '';
+    if (!l || l.type !== r.type || (!isBle(r.type) && l.pin !== r.pin)) return '';
     if (r.type === 'contact') return l.active ? t('liveClosed') : t('liveOpen');
     if (r.type === 'motion') return l.active ? t('liveMotion') : t('liveNoMotion');
     if (r.type === 'button') return l.active ? t('livePressed') : t('liveReleased');
-    if (r.type === 'sht4x') return l.temperature === undefined ? t('liveWaiting') : `${l.temperature.toFixed(1)} °C · ${l.humidity.toFixed(0)} %`;
+    if (r.type === 'sht4x' || r.type === 'ble_sensor') return l.temperature === undefined ? t('liveWaiting') : `${l.temperature.toFixed(1)} °C · ${l.humidity.toFixed(0)} %`;
+    if (r.type === 'ble_presence') return l.active ? t('liveHere') : t('liveAway');
+    if (r.type === 'ir_receive' || r.type === 'ir_send') return '';
     return l.on ? t('liveOn') : t('liveOff');
   }
 
@@ -699,9 +729,10 @@ class ConfigEditor {
 
   card(r) {
     const open = this.open.has(r.slot), live = this.liveText(r), ref = this.ref;
-    const pins = r.type === 'sht4x' ? `SDA ${r.pin} · SCL ${r.pin2}` : `GPIO ${r.pin}`;
+    const pins = isBle(r.type) ? (r.mac || '–') : r.type === 'sht4x' ? `SDA ${r.pin} · SCL ${r.pin2}`
+      : isIr(r.type) ? `GPIO ${r.pin} · ${r.code || '–'}` : `GPIO ${r.pin}`;
     const l = this.live && this.live[r.slot];
-    const canTest = this.tester && isOutputType(r.type) && l && l.type === r.type && l.pin === r.pin;
+    const canTest = this.tester && (isOutputType(r.type) || r.type === 'ir_send') && l && l.type === r.type && l.pin === r.pin;
     const body = this.cardYaml[r.slot] !== undefined
       ? `<textarea class="yaml" style="min-height:130px" spellcheck="false" oninput="${ref}.cardYaml[${r.slot}] = this.value">${esc(this.cardYaml[r.slot])}</textarea>
          <div class="actions end"><button class="plain" onclick="delete ${ref}.cardYaml[${r.slot}]; ${ref}.render()">${t('cancel')}</button>
@@ -709,18 +740,23 @@ class ConfigEditor {
       : `<div class="ed-fields">
           <label class="field"><span>${t('type')}</span><select onchange="${ref}.set(${r.slot}, 'type', this.value)">
             ${TYPES.map(x => `<option value="${x}" ${x === r.type ? 'selected' : ''}>${esc(TEXT.types[x])}</option>`).join('')}</select></label>
-          <label class="field"><span>${r.type === 'sht4x' ? 'SDA' : t('pin')}</span>${this.pinSelect(r.slot, 'pin', r.pin)}</label>
+          ${isBle(r.type) ? `<label class="field"><span>${t('mac')}</span><input value="${esc(r.mac)}" placeholder="${t('macHint')}" maxlength="17" spellcheck="false" oninput="${ref}.setQuiet(${r.slot}, 'mac', this.value)"></label>`
+            : `<label class="field"><span>${r.type === 'sht4x' ? 'SDA' : t('pin')}</span>${this.pinSelect(r.slot, 'pin', r.pin)}</label>`}
           ${r.type === 'sht4x' ? `<label class="field"><span>SCL</span>${this.pinSelect(r.slot, 'pin2', r.pin2)}</label>` : ''}
+          ${isIr(r.type) ? `<label class="field"><span>${t('irCode')}</span><input value="${esc(r.code)}" placeholder="${t('irCodeHint')}" maxlength="13" spellcheck="false" oninput="${ref}.setQuiet(${r.slot}, 'code', this.value)"></label>` : ''}
           <label class="field"><span>${t('name')}</span><input maxlength="23" value="${esc(r.name)}" placeholder="${esc(TEXT.types[r.type])}" oninput="${ref}.setQuiet(${r.slot}, 'name', this.value)"></label>
         </div>
         <div class="sub" style="margin-top:8px">${esc(TEXT.typeHelp[r.type])}</div>
-        ${r.type !== 'sht4x' ? `<label class="switch" style="margin-top:10px"><input type="checkbox" ${r.inverted ? 'checked' : ''} onchange="${ref}.set(${r.slot}, 'inverted', this.checked)"><span class="sub">${t('invertedHelp')}</span></label>` : ''}`;
+        ${isIr(r.type) && this.irLast !== undefined ? (this.irLast ? `<div class="actions" style="margin-top:6px"><button class="text" onclick="${ref}.set(${r.slot}, 'code', '${esc(this.irLast)}')">${esc(t('useLastCode', this.irLast))}</button></div>`
+          : `<div class="sub" style="margin-top:6px">${t('noLastCode')}</div>`) : ''}
+        ${r.type !== 'sht4x' && !isIr(r.type) && !isBle(r.type) ? `<label class="switch" style="margin-top:10px"><input type="checkbox" ${r.inverted ? 'checked' : ''} onchange="${ref}.set(${r.slot}, 'inverted', this.checked)"><span class="sub">${t('invertedHelp')}</span></label>` : ''}`;
     return `<div class="ed-item ${open ? 'open' : ''}">
       <div class="ed-item-head" onclick="if (!event.target.closest('details,button')) ${ref}.toggle(${r.slot})">
         <span class="ico">${typeIcon(r.type)}</span>
         <div class="info"><b>${esc(r.name || TEXT.types[r.type])}</b><div class="sub">${esc(TEXT.types[r.type])} · ${pins}${r.inverted ? ' · ' + t('invertedShort') : ''}</div></div>
         ${live ? `<span class="chip">${esc(live)}</span>` : ''}
-        ${canTest ? `<button class="plain" onclick="${ref}.tester(${r.slot}, ${!l.on})">${l.on ? t('liveTurnOff') : t('liveTurnOn')}</button>` : ''}
+        ${canTest ? (r.type === 'ir_send' ? `<button class="plain" onclick="${ref}.tester(${r.slot}, true)">${t('liveSend')}</button>`
+          : `<button class="plain" onclick="${ref}.tester(${r.slot}, ${!l.on})">${l.on ? t('liveTurnOff') : t('liveTurnOn')}</button>`) : ''}
         <details class="more"><summary aria-label="${t('more')}">${icon('dots')}</summary><div class="pop" style="bottom:auto;top:40px">
           <button onclick="${ref}.duplicate(${r.slot})" ${this.rows.length >= 8 ? 'disabled' : ''}>${t('duplicate')}</button>
           <button onclick="${ref}.editCardYaml(${r.slot})">${t('editInYaml')}</button>
@@ -763,7 +799,8 @@ class ConfigEditor {
 // and the example recipes. Firmware installs only from a source the user
 // added, with its key pinned; a recipe is only connections, no code.
 let catalogData = null, catalogError = null, catalogLoading = false, sourceFilter = 'any';
-const rowsOf = conns => (conns || []).map(x => ({slot: x.slot, type: x.type, pin: x.pin, pin2: x.scl, inverted: x.inverted, name: x.name}));
+const rowsOf = conns => (conns || []).map(x => ({slot: x.slot, type: x.type, pin: x.pin, pin2: x.scl, inverted: x.inverted, name: x.name,
+  code: x.code || '', mac: x.mac || ''}));
 
 function localCatalog() {
   const items = [];
@@ -1130,7 +1167,12 @@ $('#updateAllBtn').onclick = async () => {
 // Connections (form or YAML), firmware and info of one device. Connections
 // are saved to the device's draft ("io set" / "io clear"); applying restarts
 // it with the draft as a trial, which is then kept.
-const TYPES = ['relay', 'led', 'button', 'contact', 'motion', 'sht4x'];
+const TYPES = ['relay', 'led', 'button', 'contact', 'motion', 'sht4x', 'ir_send', 'ir_receive', 'ble_sensor', 'ble_presence'];
+const isIr = type => type === 'ir_send' || type === 'ir_receive';
+const isBle = type => type === 'ble_sensor' || type === 'ble_presence';
+// "nec:ff:a25d" as the device writes it: "nec:00FF:A25D"
+const normalCode = code => { const m = /^nec:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i.exec((code || '').trim());
+  return m ? `nec:${m[1].toUpperCase().padStart(4, '0')}:${m[2].toUpperCase().padStart(4, '0')}` : (code || '').trim(); };
 let openId = null, dtab = 'connections', managed = null;
 const devEditor = new ConfigEditor('dev');
 devEditor.onChange = () => $('#mSave').classList.add('pri');
@@ -1189,8 +1231,10 @@ function renderDevicePanel() {
   $('#noIo').hidden = !(managed && !managed.io);
   if (managed && managed.io) {
     const live = s && s.io ? s.io.slots : null;
-    if (JSON.stringify(live) !== devEditor.liveKey) {
-      devEditor.liveKey = JSON.stringify(live);
+    const irLast = s && s.io ? s.io.ir_last : undefined;
+    if (JSON.stringify([live, irLast]) !== devEditor.liveKey) {
+      devEditor.liveKey = JSON.stringify([live, irLast]);
+      devEditor.irLast = irLast;
       devEditor.setLive(live, (slot, on) => testOutput(p.id, slot, on));
     }
   }
@@ -1248,7 +1292,8 @@ async function copyToken(id) {
 
 function rowsFromIo(io) {
   return io.draft.filter(d => d.type !== 'none')
-    .map(d => ({slot: d.index, type: d.type, pin: d.pin, pin2: d.pin2, inverted: d.inverted, name: d.name}));
+    .map(d => ({slot: d.index, type: d.type, pin: isBle(d.type) ? 0 : d.pin, pin2: d.pin2, inverted: d.inverted, name: d.name,
+      code: d.code || '', mac: d.mac || ''}));
 }
 
 // One YAML format everywhere (device, config, recipe, wizard): the spec of
@@ -1256,8 +1301,10 @@ function rowsFromIo(io) {
 function specYaml(name, rows) {
   const lines = ['device:', `  name: ${name}`, '  app: generic', '', 'connections:'];
   for (const r of rows) {
-    lines.push(`  - slot: ${r.slot}`, `    type: ${r.type}`, `    pin: ${r.pin}`);
+    lines.push(`  - slot: ${r.slot}`, `    type: ${r.type}`);
+    if (isBle(r.type)) lines.push(`    mac: ${r.mac}`); else lines.push(`    pin: ${r.pin}`);
     if (r.type === 'sht4x') lines.push(`    scl: ${r.pin2}`);
+    if (isIr(r.type)) lines.push(`    code: ${r.code}`);
     if (r.inverted) lines.push('    inverted: true');
     lines.push(`    name: ${r.name || TEXT.types[r.type]}`);
   }
@@ -1278,8 +1325,8 @@ function diffLines(io, rows, name) {
     const old = before.get(r.slot);
     before.delete(r.slot);
     if (old && JSON.stringify(old) === JSON.stringify(r)) continue;
-    const pins = r.type === 'sht4x' ? `${r.pin} ${r.pin2}` : `${r.pin}`;
-    lines.push(`io set ${r.slot} ${r.type} ${pins}${r.inverted ? ' inverted' : ''} ${(r.name || TEXT.types[r.type]).trim().replace(/\s+/g, ' ')}`);
+    const where = isBle(r.type) ? r.mac : r.type === 'sht4x' ? `${r.pin} ${r.pin2}` : isIr(r.type) ? `${r.pin} ${r.code}` : `${r.pin}`;
+    lines.push(`io set ${r.slot} ${r.type} ${where}${r.inverted && !isIr(r.type) && !isBle(r.type) ? ' inverted' : ''} ${(r.name || TEXT.types[r.type]).trim().replace(/\s+/g, ' ')}`);
   }
   for (const slot of before.keys()) lines.push(`io clear ${slot}`);
   if (name && name !== io.name) lines.push(`name ${name}`);

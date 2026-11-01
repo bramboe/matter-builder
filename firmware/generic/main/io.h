@@ -1,6 +1,7 @@
 // What is connected to the device, set on the settings page instead of in
 // the firmware: up to 8 connections, each a relay, LED, button, contact,
-// motion sensor or SHT4x (temperature and humidity).
+// motion sensor, SHT4x (temperature and humidity), an infrared code to send
+// or to receive (NEC), or a Bluetooth thermometer or presence tag.
 //
 // Changes go into a draft. "io apply" restarts with the draft as a trial;
 // "io confirm" within 2 minutes keeps it. Without a confirmation, or after
@@ -18,15 +19,17 @@ namespace io {
 
 constexpr int SLOTS = 8;
 
-enum class Type : uint8_t { none, relay, led, button, contact, motion, sht4x };
+enum class Type : uint8_t { none, relay, led, button, contact, motion, sht4x, ir_send, ir_receive, ble_sensor, ble_presence };
 
 struct Slot {
     Type type;
-    uint8_t pin;    // the only pin, or SDA for the SHT4x
+    uint8_t pin;    // the only pin, or SDA for the SHT4x; none for Bluetooth
     uint8_t pin2;   // SCL for the SHT4x
     uint8_t flags;  // INVERTED
     char name[24];
+    uint8_t data[8];  // IR: protocol (1 = NEC), address, command (little endian); Bluetooth: MAC
 };
+constexpr uint8_t IR_NEC = 1;
 constexpr uint8_t INVERTED = 1;  // relay active low, or input active high/low swapped
 
 enum class Press : uint8_t { initial, short_release, long_press, long_release, multi_complete };
@@ -39,6 +42,12 @@ struct Listener {
 };
 
 void set_listener(const Listener& listener);
+
+// "nec:00FF:A25D" and "AA:BB:CC:DD:EE:FF" into a slot's data, and back
+bool parse_code(const char* text, uint8_t* data);
+bool parse_mac(const char* text, uint8_t* data);
+std::string code_text(const uint8_t* data);
+std::string mac_text(const uint8_t* data);
 
 // The factory setting from the device spec (tools/mb_generate.py): used while
 // nothing has been set on the page yet. Call before start().
@@ -54,8 +63,9 @@ const Slot& slot(int index);
 bool input_active(int index);
 bool climate(int index, int16_t& centi_celsius, uint16_t& centi_percent);
 
-// Outputs: on/off, and the level (1-254) of an LED
+// Outputs: on/off, and the level (1-254) of an LED; "on" of an IR code sends it
 void set_output(int index, bool on, uint8_t level);
+bool is_momentary(int index);  // an IR code to send: "on" only for a moment
 
 // Every output off, before a restart
 void stop_outputs();
@@ -64,6 +74,7 @@ void stop_outputs();
 std::string name();
 
 // The "io" command: json | set <n> <type> <pin> [<pin2>] [inverted] <name> |
+// set <n> ir_send|ir_receive <pin> <code> <name> | set <n> ble_sensor|ble_presence <mac> <name> |
 // clear <n> | test <n> on|off | apply | confirm | revert | cancel
 std::string command(const std::vector<std::string>& args);
 

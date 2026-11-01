@@ -94,7 +94,21 @@ connections:
     pin: 6             # SDA
     scl: 7
     name: Climate
+  - { slot: 3, type: ir_send, pin: 18, code: "nec:00FF:A25D", name: TV power }
+  - { slot: 4, type: ir_receive, pin: 19, code: "nec:00FF:629D", name: Remote up }
+  - { slot: 5, type: ble_sensor, mac: "A4:C1:38:12:34:56", name: Kitchen }
+  - { slot: 6, type: ble_presence, mac: "C8:4F:0E:00:11:22", name: Keys }
 ```
+
+- **IR** (NEC codes, written like ESPHome: `nec:<address>:<command>`): an IR
+  LED through a transistor sends a code (a switch that turns itself off), an
+  IR receiver turns a code into a button press. Several codes may share one
+  LED or receiver; at most two pins of each. To learn a code, point a remote
+  at a receiver: the editor offers the last code it saw.
+- **Bluetooth** listens only: thermometers that broadcast their readings
+  (BTHome, or Xiaomi thermometers with the pvvx/ATC firmware) and tags with a
+  fixed address for presence (seen in the last minute). It starts only when a
+  connection needs it.
 
 Wi-Fi, Thread and passwords never go in: they are set on the device itself.
 

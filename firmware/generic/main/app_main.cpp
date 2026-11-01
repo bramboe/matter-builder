@@ -61,14 +61,17 @@ std::string cmd_json(const std::vector<std::string>&) { return io::state_json();
 #ifdef HAS_SPEC
 void load_spec_factory() {
     io::Slot slots[io::SLOTS] = {};
-    const char* names[] = {"none", "relay", "led", "button", "contact", "motion", "sht4x"};
+    const char* names[] = {"none", "relay", "led", "button", "contact", "motion", "sht4x",
+                           "ir_send", "ir_receive", "ble_sensor", "ble_presence"};
     for (int i = 0; i < SPEC_CONNECTION_COUNT; ++i) {
         const SpecConnection& c = SPEC_CONNECTIONS[i];
         if (c.slot < 0 || c.slot >= io::SLOTS) continue;
         io::Slot& s = slots[c.slot];
-        for (int t = 0; t < 7; ++t) {
+        for (int t = 0; t < 11; ++t) {
             if (std::strcmp(c.type, names[t]) == 0) s.type = static_cast<io::Type>(t);
         }
+        if (c.code[0]) io::parse_code(c.code, s.data);
+        if (c.mac[0]) io::parse_mac(c.mac, s.data);
         s.pin = static_cast<uint8_t>(c.pin);
         s.pin2 = static_cast<uint8_t>(c.scl);
         s.flags = c.inverted ? io::INVERTED : 0;

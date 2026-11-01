@@ -55,6 +55,14 @@ private:
 
 DeviceInfo device_info;
 
+// An IR code was sent: its switch goes back off, so the next "on" sends again
+void momentary_off(chip::System::Layer*, void* arg) {
+    const int i = static_cast<int>(reinterpret_cast<intptr_t>(arg));
+    if (endpoint_of[i] == 0) return;
+    esp_matter_attr_val_t off = esp_matter_bool(false);
+    attribute::update(endpoint_of[i], OnOff::Id, OnOff::Attributes::OnOff::Id, &off);
+}
+
 // Matter writes an output: switch the pin before the value is stored
 esp_err_t on_attribute(attribute::callback_type_t type, uint16_t endpoint_id, uint32_t cluster_id,
                        uint32_t attribute_id, esp_matter_attr_val_t* val, void*) {
@@ -64,6 +72,10 @@ esp_err_t on_attribute(attribute::callback_type_t type, uint16_t endpoint_id, ui
     }
     if (cluster_id == OnOff::Id && attribute_id == OnOff::Attributes::OnOff::Id) {
         io::set_output(index, val->val.b, 0);
+        if (io::is_momentary(index) && val->val.b) {
+            chip::DeviceLayer::SystemLayer().StartTimer(chip::System::Clock::Milliseconds32(1000), momentary_off,
+                                                        reinterpret_cast<void*>(static_cast<intptr_t>(index)));
+        }
     } else if (cluster_id == LevelControl::Id && attribute_id == LevelControl::Attributes::CurrentLevel::Id &&
                val->val.u8 > 0) {
         esp_matter_attr_val_t on = esp_matter_invalid(nullptr);
@@ -141,10 +153,42 @@ void on_climate(int index, int16_t, uint16_t) {
 
 // ---------------------------------------------------------------- endpoints
 
+// A momentary switch with short, long and double presses
+void add_generic_switch(endpoint_t* ep) {
+    // The Switch cluster needs exactly one kind (momentary here) when
+    // it is created; multi-press needs release first, so it comes after
+    namespace feature = cluster::switch_cluster::feature;
+    endpoint::generic_switch::config_t config;
+    config.switch_cluster.feature_flags = feature::momentary_switch::get_id() |
+                                          feature::momentary_switch_release::get_id() |
+                                          feature::momentary_switch_long_press::get_id();
+    endpoint::generic_switch::add(ep, &config);
+    feature::momentary_switch_multi_press::config_t multi;
+    multi.multi_press_max = 2;
+    feature::momentary_switch_multi_press::add(cluster::get(ep, Switch::Id), &multi);
+}
+
+void add_occupancy_sensor(endpoint_t* ep, int i) {
+    endpoint::occupancy_sensor::config_t config;
+    config.occupancy_sensing.occupancy = io::input_active(i) ? 1 : 0;
+    config.occupancy_sensing.occupancy_sensor_type = 0;         // PIR
+    config.occupancy_sensing.occupancy_sensor_type_bitmap = 1;  // PIR
+    config.occupancy_sensing.feature_flags = cluster::occupancy_sensing::feature::passive_infrared::get_id();
+    endpoint::occupancy_sensor::add(ep, &config);
+}
+
+void add_climate_sensor(endpoint_t* ep) {
+    endpoint::temperature_sensor::config_t temperature;
+    endpoint::temperature_sensor::add(ep, &temperature);
+    endpoint::humidity_sensor::config_t humidity;
+    endpoint::humidity_sensor::add(ep, &humidity);
+}
+
 // The device type of a connection on its endpoint
 void add_device_type(endpoint_t* ep, int i) {
     switch (io::slot(i).type) {
-        case io::Type::relay: {
+        case io::Type::relay:
+        case io::Type::ir_send: {
             endpoint::on_off_plug_in_unit::config_t config;
             endpoint::on_off_plug_in_unit::add(ep, &config);
             break;
@@ -154,42 +198,24 @@ void add_device_type(endpoint_t* ep, int i) {
             endpoint::dimmable_light::add(ep, &config);
             break;
         }
-        case io::Type::button: {
-            // The Switch cluster needs exactly one kind (momentary here) when
-            // it is created; multi-press needs release first, so it comes after
-            namespace feature = cluster::switch_cluster::feature;
-            endpoint::generic_switch::config_t config;
-            config.switch_cluster.feature_flags = feature::momentary_switch::get_id() |
-                                                  feature::momentary_switch_release::get_id() |
-                                                  feature::momentary_switch_long_press::get_id();
-            endpoint::generic_switch::add(ep, &config);
-            feature::momentary_switch_multi_press::config_t multi;
-            multi.multi_press_max = 2;
-            feature::momentary_switch_multi_press::add(cluster::get(ep, Switch::Id), &multi);
+        case io::Type::button:
+        case io::Type::ir_receive:
+            add_generic_switch(ep);
             break;
-        }
         case io::Type::contact: {
             endpoint::contact_sensor::config_t config;
             config.boolean_state.state_value = io::input_active(i);
             endpoint::contact_sensor::add(ep, &config);
             break;
         }
-        case io::Type::motion: {
-            endpoint::occupancy_sensor::config_t config;
-            config.occupancy_sensing.occupancy = io::input_active(i) ? 1 : 0;
-            config.occupancy_sensing.occupancy_sensor_type = 0;         // PIR
-            config.occupancy_sensing.occupancy_sensor_type_bitmap = 1;  // PIR
-            config.occupancy_sensing.feature_flags = cluster::occupancy_sensing::feature::passive_infrared::get_id();
-            endpoint::occupancy_sensor::add(ep, &config);
+        case io::Type::motion:
+        case io::Type::ble_presence:
+            add_occupancy_sensor(ep, i);
             break;
-        }
-        case io::Type::sht4x: {
-            endpoint::temperature_sensor::config_t temperature;
-            endpoint::temperature_sensor::add(ep, &temperature);
-            endpoint::humidity_sensor::config_t humidity;
-            endpoint::humidity_sensor::add(ep, &humidity);
+        case io::Type::sht4x:
+        case io::Type::ble_sensor:
+            add_climate_sensor(ep);
             break;
-        }
         case io::Type::none:
             break;
     }
@@ -249,7 +275,16 @@ void after_start() {
             esp_matter_attr_val_t device_name = esp_matter_char_str(const_cast<char*>(text), std::strlen(text));
             attribute::update(endpoint_of[i], BridgedDeviceBasicInformation::Id,
                               BridgedDeviceBasicInformation::Attributes::NodeLabel::Id, &device_name);
-            if (io::slot(i).type == io::Type::sht4x) update_climate(i);
+            const io::Type type = io::slot(i).type;
+            if (type == io::Type::sht4x || type == io::Type::ble_sensor) update_climate(i);
+            // Inputs may have changed before Matter listened (Bluetooth starts first)
+            if (type == io::Type::contact) {
+                esp_matter_attr_val_t value = esp_matter_bool(io::input_active(i));
+                attribute::update(endpoint_of[i], BooleanState::Id, BooleanState::Attributes::StateValue::Id, &value);
+            } else if (type == io::Type::motion || type == io::Type::ble_presence) {
+                esp_matter_attr_val_t value = esp_matter_bitmap8(io::input_active(i) ? 1 : 0);
+                attribute::update(endpoint_of[i], OccupancySensing::Id, OccupancySensing::Attributes::Occupancy::Id, &value);
+            }
         }
     });
 }

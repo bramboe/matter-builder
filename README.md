@@ -7,7 +7,16 @@ working when Home Assistant is off.
 
 - **Ready-made, signed firmware.** Ordinary users do not build. The standard
   firmware, the *generic device*, covers relays, LEDs, buttons, contacts,
-  motion and SHT4x sensors on free pins of an ESP32-C6.
+  motion and SHT4x sensors on free pins of an ESP32-C6, plus infrared
+  (NEC send and receive) and Bluetooth LE listening (BTHome v2, pvvx and
+  ATC1441 thermometers, presence of a tag).
+- **Shows what a device needs.** Every firmware and package states whether
+  it needs Thread, Wi-Fi or Bluetooth; the add-on checks it against the board
+  before installing.
+- **Matter pairing over Bluetooth, optional.** Off by default (it costs about
+  30 KB of RAM); devices pair with a code over the network instead.
+- **Components.** A connection type of your own, linked from a GitHub
+  repository or a local folder, built in developer mode.
 - **Set up on the device.** Every device has a settings page of its own:
   password, Wi-Fi, Thread network and what is connected. Nothing personal is
   built into the firmware.
@@ -66,6 +75,19 @@ A tag `v<version>` builds the firmware in GitHub Actions, writes
 (secret `MB_SIGNING_KEY`). The add-on checks the signature against
 `ha-addon/matter_builder/release-key.pem` and every image against its hash
 before it installs anything.
+
+## Status
+
+| Part | State |
+|---|---|
+| Generic device 0.1.3 (released) | Tested on an ESP32-C6: setup access point, linking, connections with trial and rollback, IR send, Bluetooth presence next to Thread |
+| Generic device 0.1.4 (not released) | Pairing over Bluetooth and components; works with pairing off. With pairing on, the C6 crashed after boot and the boot guard switched slots: being investigated |
+| Add-on 0.15.0 | Devices, Catalog and Configs tabs; visual and YAML editor; flashing on the Home Assistant host; adding a device to Home Assistant |
+| Catalog | Built nightly on GitHub Pages from repositories with the topic `matter-builder-package` |
+
+Known issue: in configuration mode the serial console only knows `help`,
+`system`, `revert`, `reboot` and `password`; `thread` and `wifi` work only
+on the settings page.
 
 ## License
 

@@ -32,7 +32,7 @@ working when Home Assistant is off.
 | Layer | What | Needs building |
 |---|---|---|
 | Standard firmware (`generic`) | General building blocks, configured on the device | No |
-| Packages | Firmware with code of its own (e.g. a Bluetooth protocol), built and signed by its source | No, for the user |
+| Packages | Firmware with code of its own (e.g. a Bluetooth protocol), built and signed by its source; the official source has the Octo bed bridge | No, for the user |
 | Developer mode | Your own code, built in Home Assistant | Yes |
 
 See [docs/matter-builder-design.md](docs/matter-builder-design.md) for the
@@ -44,6 +44,7 @@ design, including package sources and the catalog.
 |---|---|
 | `components/mb_core` | Shared core: Matter and Thread setup, settings page API, adoption, OTA, configuration mode, boot guard |
 | `firmware/generic` | The generic device (ESP32-C6, esp-matter release/v1.6) |
+| `firmware/bridge`, `components/octo_*` | The Octo bed bridge package: two Octo beds over Bluetooth ([README](firmware/bridge/README.md)) |
 | `ha-addon/matter_builder` | The Home Assistant add-on |
 | `tools/mb_generate.py` | Turns a device spec (YAML) into a project |
 | `tools/release_manifest.py` | Writes and signs a release manifest |
@@ -70,7 +71,7 @@ The add-on's developer mode does the same with the same versions
 
 ## Releases
 
-A tag `v<version>` builds the firmware in GitHub Actions, writes
+A tag `v<version>` builds the generic device and the Octo bed bridge in GitHub Actions, writes
 `manifest.json` with the SHA-256 of every image and signs it with ECDSA P-256
 (secret `MB_SIGNING_KEY`). The add-on checks the signature against
 `ha-addon/matter_builder/release-key.pem` and every image against its hash

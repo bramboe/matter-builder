@@ -8,7 +8,8 @@ passwords, bed MAC/PIN: those are set on the device's own page):
 
     device:
       name: Shed                # name in controllers, and <slug>.local
-      app: generic              # the application built (now only generic)
+      app: generic              # the application built: generic, or octo_bridge
+                                # where firmware/bridge is present (not in the add-on)
       board: esp32-c6           # board profile (only esp32-c6 for now)
       version: 0.1.0
     connections:                # generic only: factory setting, editable on the page
@@ -39,7 +40,13 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-APPS = {"generic": "firmware/generic"}
+# The bed bridge is only for a checkout or add-on that has its sources
+# (tools/addon_sync.sh --with-octo); the official add-on ships generic only
+APPS = {app: folder for app, folder in {"generic": "firmware/generic", "octo_bridge": "firmware/bridge"}.items()
+        if (ROOT / folder).is_dir()}
+# What an application needs beyond its connections: the beds take their
+# commands over Bluetooth
+APP_REQUIRES = {"octo_bridge": ["bluetooth"]}
 BOARDS = {"esp32-c6"}
 # What a board offers; a config or package may only ask for what its board has.
 # Only the C6 is built for now; the others are here for the add-on's checks.
@@ -269,9 +276,11 @@ def check(spec):
                       **({"number": number} if driver is not None and driver.get("number") else {})})
     if '"' in name or "\\" in name:
         raise SpecError("device.name: no quotes")
-    requires = sorted(set(requirements(clean)) | {r for d in components for r in d["requires"]})
+    requires = sorted(set(requirements(clean)) | set(APP_REQUIRES.get(app, [])) |
+                      {r for d in components for r in d["requires"]})
     if "bluetooth" in requires and not BOARD_CAPS[board]["bluetooth"]:
-        raise SpecError(f"the Bluetooth connections need a board with Bluetooth, and {board} has none")
+        what = "the Bluetooth connections need" if app == "generic" else f"{app} needs"
+        raise SpecError(f"{what} a board with Bluetooth, and {board} has none")
     return {"name": name, "slug": slug_of(name), "app": app, "board": board, "version": version,
             "version_number": number, "connections": sorted(clean, key=lambda x: x["slot"]),
             "requires": requires, "network": BOARD_CAPS[board]["network"][0],

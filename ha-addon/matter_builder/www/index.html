@@ -124,6 +124,20 @@ textarea.yaml{width:100%;min-height:280px;font:12px/1.5 ui-monospace,Menlo,monos
 .stepno{font-size:12px;color:var(--mute)}
 
 /* Task bar */
+/* Configuration editor (after Home Assistant's automation editor) */
+.ed-head{display:flex;justify-content:flex-end;margin:12px 0 10px}
+.ed-item{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);margin-bottom:8px}
+.ed-item-head{display:flex;align-items:center;gap:10px;padding:8px 8px 8px 12px;cursor:pointer;min-height:58px}
+.ed-item-head .info{flex:1;min-width:0}
+.ed-item-head b{font-weight:500}
+.ed-item-head details.more summary{width:32px;height:32px}
+.ed-item-body{padding:12px;border-top:1px solid var(--line)}
+.ed-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
+.chev{width:8px;height:8px;border-right:2px solid var(--mute);border-bottom:2px solid var(--mute);transform:rotate(45deg);margin:0 8px 4px 2px;transition:transform .2s;flex:none}
+.ed-item.open .chev{transform:rotate(-135deg);margin-bottom:0}
+.ed-section{display:flex;align-items:baseline;gap:8px;margin:16px 2px 8px}
+.ed-add{width:100%;justify-content:flex-start;background:none;border:1.5px dashed var(--line);border-radius:var(--radius);min-height:48px;color:var(--primary)}
+.ed-add:hover{border-color:var(--primary)}
 .taskbar{position:sticky;bottom:0;z-index:4;background:var(--card);border-top:1px solid var(--line);box-shadow:0 -2px 8px rgba(0,0,0,.06)}
 .taskbar .bar{min-height:52px}
 .taskbar .progress{width:120px;margin:0}
@@ -187,7 +201,7 @@ textarea.yaml{width:100%;min-height:280px;font:12px/1.5 ui-monospace,Menlo,monos
   <div class="card" id="specEditor" hidden style="margin-top:12px">
     <div class="head"><div class="info"><h3 data-t="specEditorTitle"></h3></div>
       <label class="field"><span data-t="startFrom"></span><select id="specExample"></select></label></div>
-    <textarea class="yaml" id="specText" spellcheck="false" style="margin-top:10px"></textarea>
+    <div id="specEditorHost"></div>
     <div class="error" id="specError" hidden></div>
     <div class="notice" id="specNotice" hidden></div>
     <div class="actions end"><button class="plain" onclick="$('#specEditor').hidden = true" data-t="close"></button>
@@ -229,13 +243,7 @@ textarea.yaml{width:100%;min-height:280px;font:12px/1.5 ui-monospace,Menlo,monos
         <div id="noIo" hidden style="margin-top:14px"></div>
         <div id="ioEditor">
           <div class="notice" id="recipeNotice" hidden></div>
-          <div class="seg"><button id="tabUi" class="on" data-t="form"></button><button id="tabYaml">YAML</button></div>
-          <div id="manageUi">
-            <label class="field"><span data-t="deviceName"></span><input id="mName" maxlength="32" autocomplete="off"></label>
-            <div id="mConns" style="margin-top:8px"></div>
-            <div class="actions"><button class="text" id="mAdd" data-t="addConnection"></button></div>
-          </div>
-          <div id="manageYaml" hidden><textarea class="yaml" id="mYaml" spellcheck="false"></textarea></div>
+          <div id="devEditor"></div>
           <div class="sub" data-t="manageHelp" style="margin-top:12px"></div>
           <div class="error" id="mError" hidden></div>
           <div class="notice" id="mNotice" hidden></div>
@@ -317,7 +325,7 @@ const TEXT = {
   tabDevices: 'Devices', tabCatalog: 'Catalog', tabConfigs: 'Configs', configuration: 'Configuration', searchDevices: 'Search devices', searchCatalog: 'Search the catalog',
   myConfigs: 'My configs', saveConfig: 'Save to My configs', configSaved: n => `Saved as “${n}” in My configs.`,
   readOnlyYaml: 'This firmware has no configurable connections; its own settings are on its page. This is what it reports:',
-  wConfigure: 'Configure the device', configureHelp: 'Name and connections, as YAML. Wi-Fi, Thread and passwords are set on the device itself. Pins: 0–7, 10, 11, 18–23.',
+  wConfigure: 'Configure the device', configureHelp: 'Its name and what is connected. Wi-Fi, Thread and passwords are set on the device itself.',
   startEmpty: 'Empty', fromConfigs: 'My configs', fromRecipes: 'Recipes', skip: 'Skip', saveToConfigs: 'Also save to My configs',
   configOk: (n, c) => `${n}: ${c} connection${c === 1 ? '' : 's'}.`, applyTo: 'Apply to a device', noGeneric: 'No linked generic device yet.',
   applyingConfig: 'Applying the configuration…', configOnTrial: s => `The new connections run on trial: keep them within ${s} s, or the device goes back.`,
@@ -330,7 +338,19 @@ const TEXT = {
   updateTo: v => `Update to ${v}`, edit: 'Edit', openPage: 'Open page', more: 'More', rename: 'Rename', forget: 'Forget', showKey: 'Show key',
   updateAll: n => `Update all (${n})`, nothingConnected: 'Nothing connected yet', connections: 'Connections', firmware: 'Firmware', info: 'Info',
   noIo: 'This firmware has no configurable connections. Its own settings are on its page.',
-  form: 'Form', deviceName: 'Device name', addConnection: 'Add connection', saveDraft: 'Save', applyRestart: 'Apply (restart)', keep: 'Keep',
+  form: 'Form', visualEditor: 'Visual editor', duplicate: 'Duplicate', editInYaml: 'Edit in YAML', cancel: 'Cancel',
+  ofEight: n => `${n} of 8`, allUsed: 'All 8 connections are in use', invertedShort: 'inverted',
+  invertedHelp: 'Inverted: a relay that switches on with a low pin, or an input the other way round',
+  yamlHelp: 'The whole configuration. Pins: 0–7, 10, 11, 18–23. Wi-Fi, Thread and passwords are never in here.',
+  oneConnection: 'one connection here', pinTaken: n => `that pin is used by ${n}`, sda: 'SDA',
+  liveOn: 'on', liveOff: 'off', liveTurnOn: 'Turn on', liveTurnOff: 'Turn off', liveClosed: 'closed', liveOpen: 'open',
+  liveMotion: 'motion', liveNoMotion: 'no motion', livePressed: 'pressed', liveReleased: 'released', liveWaiting: 'waiting for a reading',
+  typeHelp: {relay: 'An output: on or off. Appears as a plug in Home Assistant and Apple Home.',
+    led: 'An output with brightness (PWM). Appears as a dimmable light.',
+    button: 'An input to ground. Short, double and long presses become events.',
+    contact: 'An input to ground: closed is “contact”. Appears as a contact sensor.',
+    motion: 'An input from a PIR sensor that drives the pin high. Appears as an occupancy sensor.',
+    sht4x: 'An I²C sensor (address 0x44) on two pins: SDA and SCL. Appears as temperature and humidity.'}, deviceName: 'Device name', addConnection: 'Add connection', saveDraft: 'Save', applyRestart: 'Apply (restart)', keep: 'Keep',
   manageHelp: 'Saving keeps the changes as a draft on the device. Applying restarts it with them on trial: keep them within 2 minutes, or it goes back by itself.',
   slot: 'Connection', type: 'Type', pin: 'Pin', scl: 'SCL', inverted: 'Inverted', remove: 'Remove', name: 'Name',
   types: {relay: 'Relay', led: 'LED', button: 'Push button', contact: 'Contact', motion: 'Motion sensor', sht4x: 'SHT4x'},
@@ -514,6 +534,219 @@ function renderDevices() {
   const updates = state.proxies.filter(updateFor).length;
   $('#updateAllBtn').hidden = !updates;
   $('#updateAllBtn').textContent = t('updateAll', updates);
+}
+
+// ---------------------------------------------------------------- configuration editor
+// One editor for a generic device's configuration, after Home Assistant's
+// automation editor: a visual mode with a card per connection (open it to
+// change it; ⋮ to duplicate, edit that card in YAML or delete it; "Add
+// connection" picks a type), and the whole configuration in YAML. Used in the
+// device panel, the New device wizard and My configs.
+const SAFE_PINS = [0, 1, 2, 3, 4, 5, 6, 7, 10, 11, 18, 19, 20, 21, 22, 23];
+const TYPE_ICON = {
+  relay: 'M17 7H7a5 5 0 0 0 0 10h10a5 5 0 0 0 0-10m0 8a3 3 0 1 1 0-6 3 3 0 0 1 0 6Z',
+  led: 'M12 2a7 7 0 0 0-4 12.74V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.26A7 7 0 0 0 12 2M9 20h6v1a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1v-1Z',
+  button: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20m0 2a8 8 0 1 1 0 16 8 8 0 0 1 0-16m0 3a5 5 0 1 0 0 10 5 5 0 0 0 0-10Z',
+  contact: 'M6 2h12v20h-2V4H8v18H6V2m7 9h2v2h-2v-2Z',
+  motion: 'M12 10a2 2 0 1 1 0 4 2 2 0 0 1 0-4M7.76 7.76l1.42 1.42a4 4 0 0 0 0 5.64l-1.42 1.42a6 6 0 0 1 0-8.48m8.48 0a6 6 0 0 1 0 8.48l-1.42-1.42a4 4 0 0 0 0-5.64l1.42-1.42M4.93 4.93l1.41 1.41a8 8 0 0 0 0 11.32l-1.41 1.41a10 10 0 0 1 0-14.14m14.14 0a10 10 0 0 1 0 14.14l-1.41-1.41a8 8 0 0 0 0-11.32l1.41-1.41Z',
+  sht4x: 'M15 13V5a3 3 0 0 0-6 0v8a5 5 0 1 0 6 0m-3-9a1 1 0 0 1 1 1v3h-2V5a1 1 0 0 1 1-1Z',
+};
+const typeIcon = type => `<svg viewBox="0 0 24 24"><path d="${TYPE_ICON[type] || ICON.chip}"/></svg>`;
+const isOutputType = type => type === 'relay' || type === 'led';
+const EDITORS = {};
+let editorPref = 'visual';
+try { editorPref = localStorage.getItem('mbEditor') === 'yaml' ? 'yaml' : 'visual'; } catch (e) {}
+
+class ConfigEditor {
+  constructor(id) {
+    this.id = id; this.host = null; this.name = ''; this.rows = []; this.pins = SAFE_PINS;
+    this.mode = editorPref; this.yaml = ''; this.error = ''; this.open = new Set(); this.cardYaml = {};
+    this.picking = false; this.live = null; this.tester = null; this.onChange = null;
+    EDITORS[id] = this;
+  }
+  get ref() { return `EDITORS['${this.id}']`; }
+  mount(host) { this.host = host; this.render(); }
+  load(name, rows, pins) {
+    this.name = name; this.rows = rows.map(r => ({...r})); if (pins) this.pins = pins;
+    this.yaml = specYaml(name, this.rows); this.error = ''; this.open.clear(); this.cardYaml = {}; this.picking = false;
+    this.render();
+  }
+  // A YAML text (a config or recipe): shown as it is in the YAML mode
+  async loadText(text) {
+    this.yaml = text; this.cardYaml = {}; this.open.clear();
+    try { const s = await parseSpec(text); this.name = s.name; this.rows = s.rows; this.error = ''; }
+    catch (e) { this.error = t('yamlError', e.message); this.mode = 'yaml'; }
+    this.changed();
+  }
+  setLive(slots, tester) {
+    this.live = slots; this.tester = tester;
+    if (this.mode === 'visual' && !(this.host && this.host.contains(document.activeElement))) this.render();
+  }
+  changed(rerender = true) { if (this.onChange) this.onChange(); if (rerender) this.render(); }
+
+  async setMode(mode) {
+    if (mode === this.mode) return;
+    if (mode === 'yaml') this.yaml = specYaml(this.name, this.rows);
+    else {
+      try { const s = await parseSpec(this.yaml); this.name = s.name; this.rows = s.rows; this.error = ''; }
+      catch (e) { this.error = t('yamlError', e.message); this.render(); return; }
+    }
+    this.mode = mode; this.error = '';
+    try { localStorage.setItem('mbEditor', mode); } catch (e) {}
+    this.render();
+  }
+  // The configuration as it stands; throws when the YAML is not valid
+  async get() {
+    if (this.mode === 'yaml') {
+      const s = await parseSpec(this.yaml);
+      this.name = s.name; this.rows = s.rows; this.error = '';
+      return s;
+    }
+    return {name: this.name.trim(), rows: this.rows.map(r => ({...r, name: (r.name || '').trim() || TEXT.types[r.type]}))};
+  }
+  text() { return this.mode === 'yaml' ? this.yaml : specYaml(this.name.trim(), this.rows); }
+
+  usedBy(pin, slot) {
+    const r = this.rows.find(x => x.slot !== slot && (x.pin === pin || (x.type === 'sht4x' && x.pin2 === pin)));
+    return r ? (r.name || TEXT.types[r.type]) : null;
+  }
+  freePin(slot, not) { return this.pins.find(p => p !== not && !this.usedBy(p, slot)); }
+  row(slot) { return this.rows.find(r => r.slot === slot); }
+
+  set(slot, key, value) {
+    const r = this.row(slot);
+    r[key] = value;
+    if (key === 'type') {
+      if (value === 'sht4x' && (r.pin2 === r.pin || this.usedBy(r.pin2, slot) || !this.pins.includes(r.pin2))) r.pin2 = this.freePin(slot, r.pin);
+      if (value === 'sht4x') r.inverted = false;
+    }
+    this.changed();
+  }
+  setQuiet(slot, key, value) { this.row(slot)[key] = value; this.changed(false); }
+  setName(value) { this.name = value; this.changed(false); }
+  setYaml(value) { this.yaml = value; this.changed(false); }
+  toggle(slot) { this.open.has(slot) ? this.open.delete(slot) : this.open.add(slot); this.render(); }
+
+  add(type) {
+    const slot = [0, 1, 2, 3, 4, 5, 6, 7].find(s => !this.row(s));
+    if (slot === undefined) return;
+    const pin = this.freePin(slot);
+    const r = {slot, type, pin, pin2: 0, inverted: false, name: ''};
+    this.rows.push(r);
+    if (type === 'sht4x') r.pin2 = this.freePin(slot, pin);
+    this.rows.sort((a, b) => a.slot - b.slot);
+    this.picking = false; this.open.add(slot);
+    this.changed();
+  }
+  duplicate(slot) {
+    const from = this.row(slot), to = [0, 1, 2, 3, 4, 5, 6, 7].find(s => !this.row(s));
+    if (to === undefined) return;
+    const r = {...from, slot: to, name: `${from.name || TEXT.types[from.type]} 2`, pin: undefined, pin2: 0};
+    this.rows.push(r);
+    r.pin = this.freePin(to);
+    if (r.type === 'sht4x') r.pin2 = this.freePin(to, r.pin);
+    this.rows.sort((a, b) => a.slot - b.slot);
+    this.open.add(to);
+    this.changed();
+  }
+  remove(slot) { this.rows = this.rows.filter(r => r.slot !== slot); this.open.delete(slot); this.changed(); }
+
+  // One card in YAML, like "Edit in YAML" on a Home Assistant trigger
+  editCardYaml(slot) {
+    const lines = specYaml('x', [this.row(slot)]).split('\n');
+    this.cardYaml[slot] = lines.slice(lines.indexOf('connections:') + 1).map(l => l.slice(2)).join('\n').trim() + '\n';
+    this.open.add(slot);
+    this.render();
+  }
+  async doneCardYaml(slot) {
+    const text = `device:\n  name: x\nconnections:\n${this.cardYaml[slot].split('\n').map(l => '  ' + l).join('\n')}\n`;
+    try {
+      const s = await parseSpec(text);
+      if (s.rows.length !== 1) throw new Error(t('oneConnection'));
+      const r = {...s.rows[0], slot};
+      const clash = [r.pin, r.type === 'sht4x' ? r.pin2 : null].map(p => p !== null && this.usedBy(p, slot)).find(Boolean);
+      if (clash) throw new Error(t('pinTaken', clash));
+      this.rows = this.rows.map(x => x.slot === slot ? r : x);
+      delete this.cardYaml[slot]; this.error = '';
+      this.changed();
+    } catch (e) { this.error = t('yamlError', e.message); this.render(); }
+  }
+
+  liveText(r) {
+    const l = this.live && this.live[r.slot];
+    if (!l || l.type !== r.type || l.pin !== r.pin) return '';
+    if (r.type === 'contact') return l.active ? t('liveClosed') : t('liveOpen');
+    if (r.type === 'motion') return l.active ? t('liveMotion') : t('liveNoMotion');
+    if (r.type === 'button') return l.active ? t('livePressed') : t('liveReleased');
+    if (r.type === 'sht4x') return l.temperature === undefined ? t('liveWaiting') : `${l.temperature.toFixed(1)} °C · ${l.humidity.toFixed(0)} %`;
+    return l.on ? t('liveOn') : t('liveOff');
+  }
+
+  pinSelect(slot, key, value) {
+    return `<select onchange="${this.ref}.set(${slot}, '${key}', +this.value)">${this.pins.map(p => {
+      const by = this.usedBy(p, slot) || (key === 'pin2' && p === this.row(slot).pin ? t('sda') : null) || (key === 'pin' && this.row(slot).type === 'sht4x' && p === this.row(slot).pin2 ? 'SCL' : null);
+      return `<option value="${p}" ${p === value ? 'selected' : ''} ${by && p !== value ? 'disabled' : ''}>GPIO ${p}${by && p !== value ? ` · ${esc(by)}` : ''}</option>`;
+    }).join('')}</select>`;
+  }
+
+  card(r) {
+    const open = this.open.has(r.slot), live = this.liveText(r), ref = this.ref;
+    const pins = r.type === 'sht4x' ? `SDA ${r.pin} · SCL ${r.pin2}` : `GPIO ${r.pin}`;
+    const l = this.live && this.live[r.slot];
+    const canTest = this.tester && isOutputType(r.type) && l && l.type === r.type && l.pin === r.pin;
+    const body = this.cardYaml[r.slot] !== undefined
+      ? `<textarea class="yaml" style="min-height:130px" spellcheck="false" oninput="${ref}.cardYaml[${r.slot}] = this.value">${esc(this.cardYaml[r.slot])}</textarea>
+         <div class="actions end"><button class="plain" onclick="delete ${ref}.cardYaml[${r.slot}]; ${ref}.render()">${t('cancel')}</button>
+           <button class="pri" onclick="${ref}.doneCardYaml(${r.slot})">${t('done')}</button></div>`
+      : `<div class="ed-fields">
+          <label class="field"><span>${t('type')}</span><select onchange="${ref}.set(${r.slot}, 'type', this.value)">
+            ${TYPES.map(x => `<option value="${x}" ${x === r.type ? 'selected' : ''}>${esc(TEXT.types[x])}</option>`).join('')}</select></label>
+          <label class="field"><span>${r.type === 'sht4x' ? 'SDA' : t('pin')}</span>${this.pinSelect(r.slot, 'pin', r.pin)}</label>
+          ${r.type === 'sht4x' ? `<label class="field"><span>SCL</span>${this.pinSelect(r.slot, 'pin2', r.pin2)}</label>` : ''}
+          <label class="field"><span>${t('name')}</span><input maxlength="23" value="${esc(r.name)}" placeholder="${esc(TEXT.types[r.type])}" oninput="${ref}.setQuiet(${r.slot}, 'name', this.value)"></label>
+        </div>
+        <div class="sub" style="margin-top:8px">${esc(TEXT.typeHelp[r.type])}</div>
+        ${r.type !== 'sht4x' ? `<label class="switch" style="margin-top:10px"><input type="checkbox" ${r.inverted ? 'checked' : ''} onchange="${ref}.set(${r.slot}, 'inverted', this.checked)"><span class="sub">${t('invertedHelp')}</span></label>` : ''}`;
+    return `<div class="ed-item ${open ? 'open' : ''}">
+      <div class="ed-item-head" onclick="if (!event.target.closest('details,button')) ${ref}.toggle(${r.slot})">
+        <span class="ico">${typeIcon(r.type)}</span>
+        <div class="info"><b>${esc(r.name || TEXT.types[r.type])}</b><div class="sub">${esc(TEXT.types[r.type])} · ${pins}${r.inverted ? ' · ' + t('invertedShort') : ''}</div></div>
+        ${live ? `<span class="chip">${esc(live)}</span>` : ''}
+        ${canTest ? `<button class="plain" onclick="${ref}.tester(${r.slot}, ${!l.on})">${l.on ? t('liveTurnOff') : t('liveTurnOn')}</button>` : ''}
+        <details class="more"><summary aria-label="${t('more')}">${icon('dots')}</summary><div class="pop" style="bottom:auto;top:40px">
+          <button onclick="${ref}.duplicate(${r.slot})" ${this.rows.length >= 8 ? 'disabled' : ''}>${t('duplicate')}</button>
+          <button onclick="${ref}.editCardYaml(${r.slot})">${t('editInYaml')}</button>
+          <button class="warn" onclick="${ref}.remove(${r.slot})">${t('remove')}</button></div></details>
+        <span class="chev"></span>
+      </div>
+      ${open ? `<div class="ed-item-body">${body}</div>` : ''}
+    </div>`;
+  }
+
+  render() {
+    if (!this.host) return;
+    const ref = this.ref;
+    const head = `<div class="ed-head"><div class="seg" style="margin:0">
+        <button class="${this.mode === 'visual' ? 'on' : ''}" onclick="${ref}.setMode('visual')">${t('visualEditor')}</button>
+        <button class="${this.mode === 'yaml' ? 'on' : ''}" onclick="${ref}.setMode('yaml')">YAML</button></div></div>`;
+    const error = this.error ? `<div class="error">${esc(this.error)}</div>` : '';
+    if (this.mode === 'yaml') {
+      this.host.innerHTML = `${head}<textarea class="yaml" spellcheck="false" oninput="${ref}.setYaml(this.value)">${esc(this.yaml)}</textarea>
+        <div class="sub">${t('yamlHelp')}</div>${error}`;
+      return;
+    }
+    const full = this.rows.length >= 8;
+    this.host.innerHTML = `${head}
+      <div class="ed-item"><div class="ed-item-head" style="cursor:default"><span class="ico">${icon('chip')}</span>
+        <label class="field" style="flex:1"><span>${t('deviceName')}</span><input maxlength="32" value="${esc(this.name)}" oninput="${ref}.setName(this.value)"></label></div></div>
+      <div class="ed-section"><h3>${t('connections')}</h3><span class="sub">${t('ofEight', this.rows.length)}</span></div>
+      ${this.rows.length ? this.rows.map(r => this.card(r)).join('') : `<div class="sub" style="margin:4px 2px 8px">${t('nothingConnected')}</div>`}
+      ${this.picking ? `<div class="ed-item open"><div class="ed-item-head" style="cursor:default"><b style="flex:1;font-weight:500">${t('addConnection')}</b>
+          <button class="icon" onclick="${ref}.picking = false; ${ref}.render()" aria-label="${t('close')}">${icon('close')}</button></div>
+          <div class="ed-item-body"><div class="choices" style="margin:0">${TYPES.map(x => `<button class="choice" onclick="${ref}.add('${x}')"><span class="ico">${typeIcon(x)}</span><span><b>${esc(TEXT.types[x])}</b><span class="sub">${esc(TEXT.typeHelp[x])}</span></span></button>`).join('')}</div></div></div>`
+        : `<button class="ed-add" onclick="${ref}.picking = true; ${ref}.render()" ${full ? 'disabled' : ''}>${icon('plus')} ${full ? t('allUsed') : t('addConnection')}</button>`}
+      ${error}`;
+  }
 }
 
 // ---------------------------------------------------------------- catalog
@@ -739,7 +972,7 @@ async function loadSpecsNow() {
   specs = r.specs;
   if (!$('#specExample').options.length) {
     exampleTexts = r.examples;
-    $('#specExample').innerHTML = Object.keys(exampleTexts).map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+    $('#specExample').innerHTML = '<option value="">–</option>' + Object.keys(exampleTexts).map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
   }
   render();
 }
@@ -748,19 +981,21 @@ function specMessage(error, notice) {
   $('#specNotice').hidden = !notice; $('#specNotice').textContent = notice || '';
 }
 function newSpec() {
-  $('#specText').value = exampleTexts[$('#specExample').value] || Object.values(exampleTexts)[0] || '';
+  specEditor.mount($('#specEditorHost'));
+  specEditor.load('My device', [{slot: 0, type: 'relay', pin: 4, pin2: 0, inverted: false, name: 'Lamp'}], SAFE_PINS);
   specMessage();
   $('#specEditor').hidden = false;
   $('#specEditor').scrollIntoView({behavior: 'smooth', block: 'center'});
 }
 async function postSpec(checkOnly) {
-  const r = await api('api/specs', {text: $('#specText').value, check_only: checkOnly});
+  const r = await api('api/specs', {text: specEditor.text(), check_only: checkOnly});
   if (r.error) { specMessage(r.error); return; }
   specMessage(null, checkOnly ? t('specOk', r.spec) : t('specSaved'));
   if (!checkOnly) { invalidateSpecs(); loadSpecs(); }
 }
 async function editSpec(slug) {
-  $('#specText').value = (await api(`api/specs/${slug}`)).text;
+  specEditor.mount($('#specEditorHost'));
+  await specEditor.loadText((await api(`api/specs/${slug}`)).text);
   specMessage();
   $('#specEditor').hidden = false;
   $('#specEditor').scrollIntoView({behavior: 'smooth', block: 'center'});
@@ -772,7 +1007,8 @@ async function deleteSpec(slug, name) {
   invalidateSpecs();
   loadSpecs();
 }
-$('#specExample').onchange = () => { $('#specText').value = exampleTexts[$('#specExample').value] || ''; specMessage(); };
+const specEditor = new ConfigEditor('spec');
+$('#specExample').onchange = () => { if ($('#specExample').value) { specEditor.mount($('#specEditorHost')); specEditor.loadText(exampleTexts[$('#specExample').value]); } specMessage(); };
 $('#specCheck').onclick = () => postSpec(true);
 $('#specSave').onclick = () => postSpec(false);
 $('#buildGenericBtn').onclick = async () => { await api('api/build', {app: 'generic'}); refresh(); };
@@ -886,7 +1122,9 @@ $('#updateAllBtn').onclick = async () => {
 // are saved to the device's draft ("io set" / "io clear"); applying restarts
 // it with the draft as a trial, which is then kept.
 const TYPES = ['relay', 'led', 'button', 'contact', 'motion', 'sht4x'];
-let openId = null, dtab = 'connections', managed = null, editRows = [];
+let openId = null, dtab = 'connections', managed = null;
+const devEditor = new ConfigEditor('dev');
+devEditor.onChange = () => $('#mSave').classList.add('pri');
 
 async function proxyCommand(id, line) {
   const r = await api(`api/proxy/${id}/command`, {line});
@@ -906,18 +1144,16 @@ async function openDevice(id, which, recipe) {
     managed = {id, io: JSON.parse(await proxyCommand(id, 'io json')).io};
   } catch (e) { managed = {id, io: null}; }
   if (managed.io) {
-    editRows = rowsFromIo(managed.io);
-    $('#mName').value = managed.io.name;
+    devEditor.mount($('#devEditor'));
+    devEditor.load(managed.io.name, rowsFromIo(managed.io), managed.io.pins);
+    $('#mSave').classList.remove('pri');
     if (recipe) {
-      editRows = recipe.rows.map(r => ({...r, pin: managed.io.pins.includes(r.pin) ? r.pin : managed.io.pins[0],
-        pin2: managed.io.pins.includes(r.pin2) ? r.pin2 : managed.io.pins[1]}));
+      devEditor.load(managed.io.name, recipe.rows.map(r => ({...r})), managed.io.pins);
+      devEditor.onChange();
       $('#recipeNotice').innerHTML = `${esc(t('fromRecipe', recipe.title))} <button class="text" onclick="saveAndApply()">${t('saveApply')}</button>`;
       $('#recipeNotice').hidden = false;
     }
-    $('#mYaml').value = specYaml($('#mName').value, editRows);
-    renderRows();
     showManageState();
-    showEditor(editorMode === 'yaml');
   } else if (!which) setDtab('firmware');
   renderDevicePanel();
 }
@@ -942,6 +1178,13 @@ function renderDevicePanel() {
   setHtml($('#dIcon'), icon('chip'));
   setHtml($('#dChip'), statusChip(s));
   $('#noIo').hidden = !(managed && !managed.io);
+  if (managed && managed.io) {
+    const live = s && s.io ? s.io.slots : null;
+    if (JSON.stringify(live) !== devEditor.liveKey) {
+      devEditor.liveKey = JSON.stringify(live);
+      devEditor.setLive(live, (slot, on) => testOutput(p.id, slot, on));
+    }
+  }
   if (managed && !managed.io) {
     const yaml = ['device:', `  name: ${p.name}`, `  app: ${r ? r.app : p.app || ''}`, `  version: ${r ? r.version : ''}`];
     const lines = connectedText(s);
@@ -966,6 +1209,13 @@ function renderDevicePanel() {
       ${token ? `<button class="text" onclick="copyToken('${p.id}')">${t('copy')}</button>` : ''}</div>
     <div class="actions"><button class="plain" onclick="renameProxy('${p.id}')">${t('rename')}</button><span class="grow"></span>
       <button class="warn" onclick="forgetProxy('${p.id}')">${t('forget')}</button></div>`);
+}
+
+// Switch an output now, to find out what is on which pin
+async function testOutput(id, slot, on) {
+  try { await proxyCommand(id, `io test ${slot} ${on ? 'on' : 'off'}`); } catch (e) {}
+  try { statuses[id] = await api(`api/proxy/${id}/status`); } catch (e) {}
+  render();
 }
 
 async function toggleToken(id) {
@@ -994,7 +1244,6 @@ function specYaml(name, rows) {
   }
   return lines.join('\n') + '\n';
 }
-const EMPTY_YAML = specYaml('My device', [{slot: 0, type: 'relay', pin: 4, pin2: 0, inverted: false, name: 'Lamp'}]);
 
 async function parseSpec(text) {
   const r = await api('api/specs', {text, check_only: true});
@@ -1024,19 +1273,6 @@ async function sendLines(id, lines) {
   }
 }
 
-function renderRows() {
-  const pins = managed.io.pins.map(p => `<option value="${p}">GPIO ${p}</option>`).join('');
-  $('#mConns').innerHTML = editRows.map((r, i) => `<div class="conn">
-      <label class="field"><span>${t('type')}</span><select onchange="editRows[${i}].type=this.value;renderRows()">
-        ${TYPES.map(x => `<option value="${x}" ${x === r.type ? 'selected' : ''}>${esc(TEXT.types[x])}</option>`).join('')}</select></label>
-      <label class="field"><span>${r.type === 'sht4x' ? 'SDA' : t('pin')}</span><select onchange="editRows[${i}].pin=+this.value">${pins.replace(`value="${r.pin}"`, `value="${r.pin}" selected`)}</select></label>
-      ${r.type === 'sht4x' ? `<label class="field"><span>${t('scl')}</span><select onchange="editRows[${i}].pin2=+this.value">${pins.replace(`value="${r.pin2}"`, `value="${r.pin2}" selected`)}</select></label>` : ''}
-      <label class="field"><span>${t('name')}</span><input maxlength="23" value="${esc(r.name)}" oninput="editRows[${i}].name=this.value"></label>
-      <label class="check sub"><input type="checkbox" ${r.inverted ? 'checked' : ''} onchange="editRows[${i}].inverted=this.checked">${t('inverted')}</label>
-      <button class="warn" onclick="editRows.splice(${i},1);renderRows()">${t('remove')}</button></div>`).join('');
-  $('#mAdd').disabled = editRows.length >= 8;
-}
-
 function showManageState() {
   const io = managed.io;
   $('#mApply').hidden = !io.changed || io.trial > 0;
@@ -1045,45 +1281,17 @@ function showManageState() {
 }
 function note(text) { $('#mNotice').textContent = text; $('#mNotice').hidden = false; }
 
-let editorMode = 'form';
-try { editorMode = localStorage.getItem('mbEditor') || 'form'; } catch (e) {}
-function showEditor(yaml) {
-  $('#manageUi').hidden = yaml;
-  $('#manageYaml').hidden = !yaml;
-  $('#tabUi').classList.toggle('on', !yaml);
-  $('#tabYaml').classList.toggle('on', yaml);
-}
-async function setEditorTab(yaml) {
-  if (yaml) $('#mYaml').value = specYaml($('#mName').value, editRows);
-  else {
-    try { const parsed = await parseSpec($('#mYaml').value); editRows = parsed.rows; $('#mName').value = parsed.name; renderRows(); }
-    catch (e) { $('#mError').textContent = t('yamlError', e.message); $('#mError').hidden = false; return; }
-  }
-  $('#mError').hidden = true;
-  editorMode = yaml ? 'yaml' : 'form';
-  try { localStorage.setItem('mbEditor', editorMode); } catch (e) {}
-  showEditor(yaml);
-}
-
-// What the editor holds now, from the form or the YAML
-async function editorSpec() {
-  if ($('#manageYaml').hidden) return {name: $('#mName').value.trim(), rows: editRows};
-  return parseSpec($('#mYaml').value);
-}
-
 async function saveManage() {
   $('#mError').hidden = true;
   let spec;
-  try { spec = await editorSpec(); }
+  try { spec = await devEditor.get(); }
   catch (e) { $('#mError').textContent = t('yamlError', e.message); $('#mError').hidden = false; return; }
   const lines = diffLines(managed.io, spec.rows, spec.name);
   try { await sendLines(managed.id, lines); }
   catch (e) { $('#mError').textContent = e.message; $('#mError').hidden = false; return; }
   managed.io = JSON.parse(await proxyCommand(managed.id, 'io json')).io;
-  editRows = rowsFromIo(managed.io);
-  $('#mName').value = managed.io.name;
-  renderRows();
-  $('#mYaml').value = specYaml(managed.io.name, editRows);
+  devEditor.load(managed.io.name, rowsFromIo(managed.io), managed.io.pins);
+  $('#mSave').classList.remove('pri');
   $('#recipeNotice').hidden = true;
   showManageState();
   note(lines.length ? t('saved') : t('unchanged'));
@@ -1092,7 +1300,7 @@ async function saveManage() {
 async function saveAsConfig() {
   $('#mError').hidden = true;
   try {
-    const spec = await editorSpec();
+    const spec = await devEditor.get();
     const r = await api('api/specs', {text: specYaml(spec.name, spec.rows)});
     if (r.error) throw new Error(r.error);
     note(t('configSaved', r.spec.name));
@@ -1118,15 +1326,6 @@ async function applyManage() {
   if (managed) showManageState();
 }
 
-$('#tabUi').onclick = () => setEditorTab(false);
-$('#tabYaml').onclick = () => setEditorTab(true);
-$('#mAdd').onclick = () => {
-  const used = new Set(editRows.map(r => r.slot));
-  const slot = [0, 1, 2, 3, 4, 5, 6, 7].find(s => !used.has(s));
-  if (slot === undefined) return;
-  editRows.push({slot, type: 'relay', pin: managed.io.pins[0], pin2: managed.io.pins[1], inverted: false, name: ''});
-  renderRows();
-};
 $('#mSave').onclick = saveManage;
 $('#mSaveConfig').onclick = saveAsConfig;
 $('#mApply').onclick = applyManage;
@@ -1194,7 +1393,6 @@ function renderWizard() {
       : `<p class="sub">${t('noFactory')}</p>`;
   } else if (wiz.step === 'configure') {
     title = t('wConfigure');
-    if (wiz.configText === undefined) wiz.configText = EMPTY_YAML;
     const recipeList = catalogItems().filter(i => i.kind === 'recipe');
     body = `<div class="sub">${t('configureHelp')}</div>
       <div class="row"><label class="field" style="flex:1"><span>${t('startFrom')}</span><select onchange="pickConfig(this.value)">
@@ -1202,7 +1400,7 @@ function renderWizard() {
         ${(specs || []).length ? `<optgroup label="${t('fromConfigs')}">${specs.map(sp => `<option value="config:${esc(sp.slug)}">${esc(sp.name)}</option>`).join('')}</optgroup>` : ''}
         ${recipeList.length ? `<optgroup label="${t('fromRecipes')}">${recipeList.map((r, i) => `<option value="recipe:${i}">${esc(r.title)}</option>`).join('')}</optgroup>` : ''}
       </select></label></div>
-      <textarea class="yaml" id="wYaml" spellcheck="false" oninput="wiz.configText = this.value; wiz.configOk = ''">${esc(wiz.configText)}</textarea>
+      <div id="wizEditor"></div>
       <label class="check sub"><input type="checkbox" ${wiz.saveConfig ? 'checked' : ''} onchange="wiz.saveConfig = this.checked">${t('saveToConfigs')}</label>
       ${wiz.configOk ? `<div class="notice">${esc(wiz.configOk)}</div>` : ''}
       ${wiz.error ? `<div class="error">${esc(wiz.error)}</div>` : ''}
@@ -1257,6 +1455,15 @@ function renderWizard() {
   }
   $('#wTitle').textContent = title;
   $('#wBody').innerHTML = body;
+  if (wiz.step === 'configure') {
+    if (!wiz.editorReady) {
+      wiz.editorReady = true;
+      wizEditor.host = null;
+      if (wiz.configText) wizEditor.loadText(wiz.configText);
+      else wizEditor.load('My device', [{slot: 0, type: 'relay', pin: 4, pin2: 0, inverted: false, name: 'Lamp'}], SAFE_PINS);
+    }
+    wizEditor.mount($('#wizEditor'));
+  }
   const pass = $('#wPass');
   if (pass && !wiz.waiting) (wiz.host ? pass : $('#wHost')).focus();
 }
@@ -1266,22 +1473,23 @@ function isGenericFile(file) {
   return /^mb_generic-/.test(file) || (specs || []).some(sp => sp.factory.includes(file));
 }
 
+const wizEditor = new ConfigEditor('wiz');
+
 async function pickConfig(value) {
-  if (value === 'empty') wiz.configText = EMPTY_YAML;
-  else if (value.startsWith('config:')) wiz.configText = (await api(`api/specs/${value.slice(7)}`)).text;
+  if (value === 'empty') wizEditor.load('My device', [], SAFE_PINS);
+  else if (value.startsWith('config:')) await wizEditor.loadText((await api(`api/specs/${value.slice(7)}`)).text);
   else if (value.startsWith('recipe:')) {
     const r = catalogItems().filter(i => i.kind === 'recipe')[+value.slice(7)];
-    wiz.configText = r.text || specYaml(r.title, rowsOf(r.connections));
+    if (r.text) await wizEditor.loadText(r.text); else wizEditor.load(r.title, rowsOf(r.connections), SAFE_PINS);
   }
-  wiz.configOk = ''; wiz.error = '';
-  renderWizard();
+  wiz.error = '';
 }
 
 async function configureNext() {
-  try { wiz.configSpec = await parseSpec(wiz.configText); }
+  try { wiz.configSpec = await wizEditor.get(); }
   catch (e) { wiz.error = t('yamlError', e.message); renderWizard(); return; }
   if (wiz.saveConfig) {
-    const r = await api('api/specs', {text: wiz.configText});
+    const r = await api('api/specs', {text: wizEditor.text()});
     if (r.error) { wiz.error = r.error; renderWizard(); return; }
     invalidateSpecs();
   }

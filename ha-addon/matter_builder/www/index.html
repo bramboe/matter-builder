@@ -230,7 +230,10 @@ const TEXT = {
     ownDevices: 'Own devices', save: 'Save', newDevice: 'New device', specHelp: 'Describe what is built: name, application and, for a generic device, its connections. Wi-Fi, Thread and passwords are set on the device itself.',
     startFrom: 'Start from', check: 'Check', specOk: s => `Valid: ${s.name} ${s.version} (${s.app}).`, specSaved: 'Saved.', edit: 'Edit', del: 'Delete',
     buildThis: 'Build', updateFile: 'Update file', factoryFile: 'For a new ESP32 (USB)', confirmDelete: n => `Delete the spec “${n}”? Built files stay.`,
-    flashHelp: 'A new ESP32: write the USB image with esptool (“write_flash 0x0 file”) or a web flasher; then join its setup network and link it here.',
+    flashHelp: 'Connect the ESP32 with USB to this computer, then install. Afterwards join its setup network and link it here. Needs Chrome or Edge, and Home Assistant over HTTPS.',
+    installUsb: 'Install via USB', backupFirst: 'First save a backup of the whole flash', noSerial: 'This browser cannot use USB here: use Chrome or Edge, and open Home Assistant over HTTPS.',
+    usbConnecting: 'Connecting…', usbChip: c => `Found: ${c}`, wrongChip: c => `This is a ${c}, not an ESP32-C6.`, usbBackup: p => `Backup: ${p} %`,
+    usbWriting: p => `Installing: ${p} %`, usbDone: 'Installed. The ESP32 restarts and opens its setup network.',
     buildingSpec: n => `Building ${n}`,
     readyMade: 'Ready-made firmware', checkReleases: 'Check now', signedRelease: r => `Release ${r}, signature checked.`,
     noReleases: 'No releases yet. Signed, ready-made firmware appears here once the project publishes it. In developer mode you can build it yourself.',
@@ -272,7 +275,10 @@ const TEXT = {
     ownDevices: 'Eigen apparaten', save: 'Opslaan', newDevice: 'Nieuw apparaat', specHelp: 'Beschrijf wat er gebouwd wordt: naam, toepassing en bij een algemeen apparaat de aansluitingen. Wi-Fi, Thread en wachtwoorden stel je op het apparaat zelf in.',
     startFrom: 'Begin met', check: 'Controleren', specOk: s => `Klopt: ${s.name} ${s.version} (${s.app}).`, specSaved: 'Opgeslagen.', edit: 'Wijzigen', del: 'Verwijderen',
     buildThis: 'Bouwen', updateFile: 'Updatebestand', factoryFile: 'Voor een nieuwe ESP32 (USB)', confirmDelete: n => `De spec “${n}” verwijderen? Gebouwde bestanden blijven.`,
-    flashHelp: 'Een nieuwe ESP32: schrijf het USB-image met esptool (“write_flash 0x0 bestand”) of een webflasher; verbind daarna met zijn setup-netwerk en koppel hem hier.',
+    flashHelp: 'Sluit de ESP32 met USB aan op deze computer en installeer. Verbind daarna met zijn setup-netwerk en koppel hem hier. Vraagt Chrome of Edge, en Home Assistant via HTTPS.',
+    installUsb: 'Installeren via USB', backupFirst: 'Eerst een back-up van de hele flash bewaren', noSerial: 'Deze browser kan hier geen USB gebruiken: gebruik Chrome of Edge, en open Home Assistant via HTTPS.',
+    usbConnecting: 'Verbinden…', usbChip: c => `Gevonden: ${c}`, wrongChip: c => `Dit is een ${c}, geen ESP32-C6.`, usbBackup: p => `Back-up: ${p} %`,
+    usbWriting: p => `Installeren: ${p} %`, usbDone: 'Geïnstalleerd. De ESP32 herstart en opent zijn setup-netwerk.',
     buildingSpec: n => `${n} bouwen`,
     readyMade: 'Kant-en-klare firmware', checkReleases: 'Nu controleren', signedRelease: r => `Release ${r}, handtekening gecontroleerd.`,
     noReleases: 'Nog geen releases. Ondertekende, kant-en-klare firmware verschijnt hier zodra het project die publiceert. In de ontwikkelaarsmodus kun je zelf bouwen.',
@@ -716,7 +722,9 @@ function specCard(sp) {
     ${sp.error ? `<div class="error">${esc(sp.error)}</div>` : ''}
     ${fw ? `<div class="row"><div class="label">${t('updateFile')}<div class="sub mono">${esc(fw)}</div></div><a class="button text" href="api/download/${encodeURIComponent(fw)}">↓</a></div>` : ''}
     ${factory ? `<div class="row"><div class="label">${t('factoryFile')}<div class="sub mono">${esc(factory)}</div></div><a class="button text" href="api/download/${encodeURIComponent(factory)}">↓</a></div>
-      <div class="sub">${t('flashHelp')}</div>` : ''}
+      <label class="row" style="min-height:36px;border:0"><input type="checkbox" id="backup-${sp.slug}" checked><span class="sub">${t('backupFirst')}</span></label>
+      <div class="actions"><button class="pri" onclick="flashUsb('${esc(factory)}', '${sp.slug}')">${t('installUsb')}</button></div>
+      <div class="sub" id="usb-${sp.slug}">${t('flashHelp')}</div>` : ''}
     <div class="actions"><button class="pri" onclick="buildSpec('${sp.slug}')" ${sp.error || !state.toolchain || state.job.running ? 'disabled' : ''}>${t('buildThis')}</button>
       <button class="text" onclick="editSpec('${sp.slug}')">${t('edit')}</button>
       <button class="warn" onclick="deleteSpec('${sp.slug}', '${esc(sp.name)}')">${t('del')}</button></div></div>`;
@@ -760,6 +768,44 @@ async function deleteSpec(slug, name) {
 $('#specExample').onchange = () => { $('#specText').value = exampleTexts[$('#specExample').value] || ''; specMessage(); };
 $('#specCheck').onclick = () => postSpec(true);
 $('#specSave').onclick = () => postSpec(false);
+
+
+// Install via USB in the browser (Web Serial, esptool-js 0.7.0 shipped with
+// the add-on): optional full-flash backup first, then the factory image at 0
+async function flashUsb(file, slug) {
+  const status = $(`#usb-${slug}`);
+  const say = text => { status.textContent = text; };
+  if (!('serial' in navigator) || !window.isSecureContext) { say(t('noSerial')); return; }
+  let transport = null;
+  try {
+    const {ESPLoader, Transport} = await import('./esptool.js');
+    const port = await navigator.serial.requestPort();
+    transport = new Transport(port, false);
+    say(t('usbConnecting'));
+    const quiet = {clean() {}, writeLine() {}, write() {}};
+    const loader = new ESPLoader({transport, baudrate: 460800, terminal: quiet});
+    const chip = await loader.main();
+    if (!/ESP32-C6/i.test(chip)) { say(t('wrongChip', chip)); return; }
+    say(t('usbChip', chip));
+    if ($(`#backup-${slug}`).checked) {
+      const size = loader.flashSizeBytes((await loader.detectFlashSize()) || '8MB');
+      const backup = await loader.readFlash(0, size, (_, got) => say(t('usbBackup', Math.round(100 * got / size))));
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(new Blob([backup]));
+      link.download = `backup-${slug}-${new Date().toISOString().slice(0, 10)}.bin`;
+      link.click();
+    }
+    const data = new Uint8Array(await (await fetch(`api/download/${encodeURIComponent(file)}`)).arrayBuffer());
+    await loader.writeFlash({fileArray: [{data, address: 0}], flashMode: 'keep', flashFreq: 'keep', flashSize: 'keep',
+      eraseAll: false, compress: true, reportProgress: (_, written, total) => say(t('usbWriting', Math.round(100 * written / total)))});
+    await loader.after('hard_reset');
+    say(t('usbDone'));
+  } catch (e) {
+    say(e.message || String(e));
+  } finally {
+    if (transport) try { await transport.disconnect(); } catch (e) {}
+  }
+}
 
 $('#checkReleases').onclick = async () => { await api('api/releases/check', {}); refresh(); };
 $('#devMode').onchange = async () => { await api('api/settings', {dev_mode: $('#devMode').checked}); refresh(); };

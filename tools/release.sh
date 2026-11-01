@@ -39,6 +39,6 @@ build esp32 build sdkconfig
 build esp32c6 build-c6 sdkconfig.c6
 git -C "$ROOT" archive --format=tar.gz --prefix="octo-matter-$VERSION/" \
     -o "$OUT/octo-matter-$VERSION-source.tar.gz" HEAD
-cp "$ROOT/docs/install.md" "$OUT/INSTALL.md"
+cp "$ROOT/firmware/bridge/docs/install.md" "$OUT/INSTALL.md"
 (cd "$OUT" && find . -type f ! -name SHA256SUMS | sort | xargs shasum -a 256 > SHA256SUMS)
 echo "Release in $OUT"

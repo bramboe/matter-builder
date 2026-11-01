@@ -1,6 +1,5 @@
 #!/bin/bash
 # Builds one application for the ESP32-C6 from the sources in the image:
-#   build.sh bridge          the Octo bed bridge  (octo_bridge-<version>.bin)
 #   build.sh generic         the generic device   (mb_generic-<version>.bin)
 #   build.sh spec <file>     a device spec (tools/mb_generate.py): <name>-<version>.bin
 # Each also gives factory/<project>-<version>-factory.bin for a new ESP32 (USB).
@@ -8,7 +7,7 @@
 # connected are set on the device's own page. Images land in $MB_DATA/firmware.
 set -eo pipefail
 
-APP="${1:-bridge}"
+APP="${1:-generic}"
 DATA="${MB_DATA:-/data}"
 SRC="${MB_SRC:-/opt/octo-matter}"
 WORK="$DATA/work/octo-matter"
@@ -16,7 +15,6 @@ BUILD="$DATA/build/$APP-esp32c6"
 export CCACHE_DIR="$DATA/ccache"
 
 case "$APP" in
-    bridge) TITLE="Octo bridge" ;;
     generic) TITLE="Generic device" ;;
     spec) TITLE="Device from spec"; SPEC_FILE="${2:?usage: build.sh spec <file>}" ;;
     *) echo "unknown application: $APP"; exit 2 ;;

@@ -4,9 +4,5 @@ name: generic
 app: mb_generic
 kind: standard
 format: 1
-title:
-  en: Generic device
-  nl: Generiek apparaat
-description:
-  en: Relays, LEDs, buttons, contacts, motion and SHT4x sensors on free pins, set up on the device or in the add-on.
-  nl: Relais, LED's, knoppen, contacten, beweging en SHT4x-sensoren op vrije pinnen, ingesteld op het apparaat of in de add-on.
+title: Generic device
+description: Relays, LEDs, buttons, contacts, motion and SHT4x sensors on free pins, set up on the device or in the add-on.

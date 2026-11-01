@@ -1,7 +1,7 @@
 // The Thread network of the device (ESP32-C6): the operational dataset from
 // Home Assistant, pasted on the settings page ("thread dataset <hex>") and
-// kept in NVS. A dataset built into the app (mb_core::App, e.g. from the
-// Octo bridge's secrets.h) is used only when none was set there. A new
+// kept in NVS. A dataset built into the app (mb_core::App, e.g. from a
+// developer's secrets.h) is used only when none was set there. A new
 // dataset is joined at the next start.
 
 #pragma once

@@ -8,7 +8,7 @@ passwords, bed MAC/PIN: those are set on the device's own page):
 
     device:
       name: Shed                # name in controllers, and <slug>.local
-      app: generic              # generic | octo_bridge: the application built
+      app: generic              # the application built (now only generic)
       board: esp32-c6           # board profile (only esp32-c6 for now)
       version: 0.1.0
     connections:                # generic only: factory setting, editable on the page
@@ -28,7 +28,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-APPS = {"generic": "firmware/generic", "octo_bridge": "firmware/bridge"}
+APPS = {"generic": "firmware/generic"}
 BOARDS = {"esp32-c6"}
 TYPES = {"relay", "led", "button", "contact", "motion", "sht4x"}
 SAFE_PINS = {0, 1, 2, 3, 4, 5, 6, 7, 10, 11, 18, 19, 20, 21, 22, 23}  # see firmware/generic/main/io.cpp

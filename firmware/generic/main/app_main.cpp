@@ -56,26 +56,6 @@ std::string cmd_matter(const std::vector<std::string>& args) {
     return matter_info::matter_json();
 }
 
-// The language of the settings page, so every browser shows the same
-std::string cmd_language(const std::vector<std::string>& args) {
-    char code[4] = "en";
-    nvs_handle_t nvs;
-    if (args.size() == 2 && args[1].size() == 2) {
-        if (nvs_open("io", NVS_READWRITE, &nvs) == ESP_OK) {
-            nvs_set_str(nvs, "lang", args[1].c_str());
-            nvs_commit(nvs);
-            nvs_close(nvs);
-        }
-        return args[1] + "\n";
-    }
-    if (nvs_open("io", NVS_READONLY, &nvs) == ESP_OK) {
-        size_t size = sizeof(code);
-        nvs_get_str(nvs, "lang", code, &size);
-        nvs_close(nvs);
-    }
-    return std::string(code) + "\n";
-}
-
 std::string cmd_json(const std::vector<std::string>&) { return io::state_json(); }
 
 #ifdef HAS_SPEC
@@ -138,7 +118,6 @@ extern "C" void app_main() {
     add_command("io", "io [json|set|clear|test|apply|confirm|cancel]  connections\n", io::command);
     add_command("name", "name [<text>]                           the device's name\n", io::name_command);
     add_command("json", "json                                    state for the settings page\n", cmd_json);
-    add_command("language", "language [en|nl]                        settings page language\n", cmd_language);
 
     boot_guard::early();
     program_access::start(recovery);  // the BOOT button, also in configuration mode

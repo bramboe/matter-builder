@@ -1,117 +1,68 @@
-# octo-matter
+# Matter Builder
 
-ESP32-firmware die Octo-bedden (Octo Actuators, BLE `FFE0/FFE1` met 4-cijferige
-PIN) als standaard **Matter**-apparaten aanbiedt. Geen ESPHome, geen
-Bluetooth-proxy en geen HACS-integratie nodig: Home Assistant koppelt de bedden
-via de gewone Matter-integratie.
+ESP32 devices as standard **Matter** devices, over Thread or Wi-Fi, set up
+like ESPHome but without a Home Assistant integration of their own: they work
+in Home Assistant, Apple Home and Google Home at the same time, and keep
+working when Home Assistant is off.
 
-Opvolger van de Home Assistant-integratie
-[octo-bed](https://github.com/bramboe/octo-bed); het BLE-protocol is daaruit
-geport en wordt met golden vectors gelijk gehouden.
+- **Ready-made, signed firmware.** Ordinary users do not build. The standard
+  firmware, the *generic device*, covers relays, LEDs, buttons, contacts,
+  motion and SHT4x sensors on free pins of an ESP32-C6.
+- **Set up on the device.** Every device has a settings page of its own:
+  password, Wi-Fi, Thread network and what is connected. Nothing personal is
+  built into the firmware.
+- **Home Assistant add-on as extra.** It finds and links devices, edits their
+  connections as a form or as YAML, updates them, and installs firmware on a
+  new ESP32 over USB. In developer mode it builds firmware itself.
+- **Safe adoption.** Linking a program needs the device's password and a
+  press of its BOOT button. Firmware updates are only accepted when they are
+  signed; new connections run on trial and are rolled back automatically.
 
-> **Status: 1.0.** Eén bridge bedient twee bedden. Per bed: hoofd en benen
-> (Window Covering), licht, een stopknop en een presetkeuze (plat, stand 1-3,
-> zelfde als het andere bed, huidige stand bewaren). Hoofd en benen bewegen
-> samen als ze dezelfde kant op gaan, anders na elkaar. Op de ESP draait een
-> instellingenpagina voor bedden, looptijden en kalibratie. Zie
-> [docs/ontwerp.md](docs/ontwerp.md).
+## Layers
 
-## Borden
-
-| Bord | Matter via | Build |
+| Layer | What | Needs building |
 |---|---|---|
-| **ESP32-C6** (aanbevolen) | Thread, via een Thread border router | `build-c6/`, `sdkconfig.c6` |
-| Klassieke ESP32 | Wi-Fi | `build/`, `sdkconfig` |
+| Standard firmware (`generic`) | General building blocks, configured on the device | No |
+| Packages | Firmware with code of its own (e.g. a Bluetooth protocol), built and signed by its source | No, for the user |
+| Developer mode | Your own code, built in Home Assistant | Yes |
 
-Bluetooth is op beide alleen voor de bedden: Matter wordt via het netwerk
-gekoppeld (Thread-dataset of Wi-Fi uit `secrets.h`), niet via BLE.
+See [docs/matter-builder-design.md](docs/matter-builder-design.md) for the
+design, including package sources and the catalog.
 
-In Home Assistant verschijnen de stopknop als drukknop en de presetkeuze als
-keuzelijst; Apple Home toont alleen de covers en het licht. "Beide" (per bed
-en voor beide bedden) zijn groepen in Home Assistant.
+## Repository
 
-## Terug naar ESPHome
-
-Altijd mogelijk, zie [docs/esphome-fallback.md](docs/esphome-fallback.md).
-Maak **vóór de eerste flash** van een ESPHome-apparaat een backup:
-
-```sh
-tools/backup_flash.sh /dev/cu.usbserial-XXXX
-```
-
-## Opbouw
-
-| Pad | Inhoud |
+| Path | Contents |
 |---|---|
-| `components/octo_protocol` | Octo BLE-pakketprotocol (C++ port van `protocol.py`) |
-| `components/octo_core` | Bedverbindingen, boot guard, console-commando's, HTTP-API en instellingenpagina |
-| `firmware/bridge` | De Matter-bridge (esp-matter release/v1.6) |
-| `test/host` | Host-tests tegen golden vectors uit de Python-referentie |
-| `tools/` | `octo.sh` (console via het netwerk), release, vectorgenerator, flash-backup en -restore |
-| `docs/` | Ontwerp, installatie en terugvalprocedure |
+| `components/mb_core` | Shared core: Matter and Thread setup, settings page API, adoption, OTA, configuration mode, boot guard |
+| `firmware/generic` | The generic device (ESP32-C6, esp-matter release/v1.6) |
+| `ha-addon/matter_builder` | The Home Assistant add-on |
+| `tools/mb_generate.py` | Turns a device spec (YAML) into a project |
+| `tools/release_manifest.py` | Writes and signs a release manifest |
+| `examples/` | Example device specs |
+| `.github/workflows/release.yml` | Builds and signs a release for a tag `v*` |
 
-## Bouwen
+## Building
 
-Vereist ESP-IDF v5.5.5 (`~/esp/esp-idf-v5.5.5`, met `install.sh esp32,esp32c6`)
-en esp-matter `release/v1.6` (`~/esp/esp-matter`). Kopieer
-`firmware/bridge/main/secrets.example.h` naar `secrets.h` (staat niet in git); voor
-de C6 hoeft daar niets in: Wi-Fi en Thread stel je in op de pagina. Het wachtwoord van de pagina kies je
-op de pagina zelf.
+Needs ESP-IDF v5.5.5 (`~/esp/esp-idf-v5.5.5`, `install.sh esp32c6`) and
+esp-matter `release/v1.6` at commit `fe1efc6c` (`~/esp/esp-matter`):
 
 ```sh
 . ~/esp/esp-idf-v5.5.5/export.sh && . ~/esp/esp-matter/export.sh
-cd firmware/bridge
-idf.py -B build-c6 -D SDKCONFIG=sdkconfig.c6 set-target esp32c6   # eenmalig
-idf.py -B build-c6 -D SDKCONFIG=sdkconfig.c6 build                # ESP32-C6
-idf.py build                                                      # klassieke ESP32
+cd firmware/generic
+idf.py -B build -D SDKCONFIG=build/sdkconfig -D IDF_TARGET=esp32c6 build
 ```
 
-`tools/release.sh` bouwt beide en zet een release met SHA256SUMS en
-[installatie-instructies](docs/install.md) in `dist/`. De images bevatten je
-`secrets.h`: deel ze niet.
+The add-on's developer mode does the same with the same versions
+(`ha-addon/matter_builder/toolchain.sh` and `build.sh`).
 
-## Bedienen
+## Releases
 
-`tools/octo.sh <commando>` stuurt een consolecommando via het netwerk
-(`OCTO_HOST=<ip>`, of `[ipv6]` of `<naam>.local` voor de C6). Updates:
-`tools/octo.sh --ota firmware/bridge/build-c6/octo_bridge.bin`.
+A tag `v<version>` builds the firmware in GitHub Actions, writes
+`manifest.json` with the SHA-256 of every image and signs it with ECDSA P-256
+(secret `MB_SIGNING_KEY`). The add-on checks the signature against
+`ha-addon/matter_builder/release-key.pem` and every image against its hash
+before it installs anything.
 
-De instellingenpagina staat op `http://<adres>/`; `tools/octo.sh system` toont
-het adres. De eerste keer kies je daar een wachtwoord; daarna vraagt ze er
-één keer per browser om. Vergeten: `password reset` op de seriële console.
-`tools/octo.sh` gebruikt `OCTO_TOKEN=<wachtwoord>`. Op de pagina kun je:
-
-- een bed kiezen uit de Bluetooth-scan en met PIN en naam opslaan;
-- per motor de looptijd invullen, of meten: helemaal omlaag, *Start meting*,
-  en *Stop* zodra het onderdeel bovenaan is;
-- bewegen, stoppen, het licht schakelen en standen kiezen of bewaren;
-- de koppelcode zien.
-
-In de console (zie `help`), de PIN wordt in NVS opgeslagen, niet in de firmware:
-
-```
-octo> scan
-octo> bed set 0 AA:BB:CC:DD:EE:01 0000 Sam
-octo> status
-octo> move 0 head up 3
-octo> preset 0 save 1
-octo> preset 0 1
-octo> stop 0
-```
-
-Koppelen met Matter: elke bridge maakt bij de eerste start een eigen
-koppelcode (`matter` toont die), `matter open` opent een koppelvenster voor
-een extra controller, `matter fabrics` en `matter remove <n>` tonen en
-verwijderen gekoppelde controllers.
-
-## Host-tests
-
-```sh
-test/host/run.sh
-```
-
-Na een protocolwijziging in octo-bed: `tools/gen_vectors.py ../octo-bed`.
-
-## Licentie
+## License
 
 MIT

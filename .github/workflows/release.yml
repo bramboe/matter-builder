@@ -3,9 +3,9 @@ name: Release
 # Ready-made firmware for users who do not build: the same toolchain and
 # scripts as the Home Assistant add-on's developer mode (ha-addon/matter_builder),
 # so a release can be rebuilt there and compared. A tag "v<version>" builds
-# the Octo bridge and the generic device for the ESP32-C6 (an update image and
-# a factory image for a new ESP32 each), writes a manifest with SHA-256 hashes, signs it (secret MB_SIGNING_KEY, ECDSA P-256) and
-# publishes everything as a GitHub release. The add-on checks the signature
+# the generic device for the ESP32-C6 (an update image and a factory image for
+# a new ESP32), writes a manifest with SHA-256 hashes, signs it (secret
+# MB_SIGNING_KEY, ECDSA P-256) and publishes everything as a GitHub release. The add-on checks the signature
 # against ha-addon/matter_builder/release-key.pem before it installs anything.
 #
 # The Matter toolchain needs more disk than a runner has free, so the build
@@ -58,7 +58,6 @@ jobs:
               if [ ! -f "/mb/toolchain/ready-$ESP_MATTER_COMMIT" ]; then
                 bash /src/ha-addon/matter_builder/toolchain.sh
               fi
-              bash /src/ha-addon/matter_builder/build.sh bridge
               bash /src/ha-addon/matter_builder/build.sh generic
               chown -R '"$(id -u):$(id -g)"' /mb'
 

@@ -37,7 +37,7 @@ PORT = int(os.environ.get("MB_PORT", "8099"))
 INGRESS = "172.30.32.2"
 ALLOW_ANY = os.environ.get("MB_ALLOW_ANY") == "1"  # local testing only
 COMMIT = os.environ.get("ESP_MATTER_COMMIT", "")
-CONFIG_HOST = "octo-bridge.local"  # a proxy in configuration mode
+CONFIG_HOST = "octo-bridge.local"  # configuration mode of firmware that does not say where
 PROGRAM_NAME = "Home Assistant"
 
 PROXIES = DATA / "proxies.json"
@@ -334,12 +334,15 @@ def update_proxy(proxy, image):
         log("!! The proxy did not go to configuration mode")
         return False
 
-    log(f"== Looking for {CONFIG_HOST}")
+    # The proxy says where it will be ("... http://matter-builder.local/")
+    found = re.search(r"http://([A-Za-z0-9-]+\.local)/", text)
+    host = found.group(1) if found else CONFIG_HOST
+    log(f"== Looking for {host}")
     address = None
     end = time.time() + 150
     while time.time() < end and not address:
         time.sleep(3)
-        address = mdns_resolve(CONFIG_HOST)
+        address = mdns_resolve(host)
     if not address:
         log("!! Not found on Wi-Fi: it returns to Thread by itself within 15 minutes")
         return False
@@ -586,12 +589,12 @@ def examples():
 # ---------------------------------------------------------------- management
 
 # What the management pages may send to a proxy: its connections, name,
-# language and Wi-Fi; nothing that changes access or the firmware
-ALLOWED_COMMANDS = ("io ", "name ", "language ", "wifi ssid ", "wifi password ")
+# and Wi-Fi; nothing that changes access or the firmware
+ALLOWED_COMMANDS = ("io ", "name ", "wifi ssid ", "wifi password ")
 
 
 def allowed(line):
-    return line in ("io json", "json", "language") or line.startswith(ALLOWED_COMMANDS)
+    return line in ("io json", "json") or line.startswith(ALLOWED_COMMANDS)
 
 
 def version_key(name):
@@ -831,13 +834,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             save_settings(settings)
             return self.reply(settings)
         if path == "/api/toolchain":
-            started = start_job("toolchain", "Toolchain installeren", lambda: run_script("toolchain.sh"))
+            started = start_job("toolchain", "Installing the toolchain", lambda: run_script("toolchain.sh"))
             return self.reply({"started": started})
         if path == "/api/build":
             if not toolchain_ready():
                 return self.reply({"error": "install the toolchain first"}, 400)
-            app = "generic" if data.get("app") == "generic" else "bridge"
-            started = start_job("build", app, lambda: run_script("build.sh", app))
+            started = start_job("build", "generic", lambda: run_script("build.sh", "generic"))
             return self.reply({"started": started})
         parts = path.strip("/").split("/")
         if len(parts) == 4 and parts[:2] == ["api", "proxy"]:
@@ -853,7 +855,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     return self.reply({"error": "unknown firmware"}, 400)
                 if proxy.get("app") and not image.name.startswith(proxy["app"] + "-"):
                     return self.reply({"error": "firmware for another application"}, 400)
-                started = start_job("update", f"{proxy['name']} bijwerken", lambda: update_proxy(proxy, image))
+                started = start_job("update", proxy["name"], lambda: update_proxy(proxy, image))
                 return self.reply({"started": started})
             if parts[3] == "command":
                 line = str(data.get("line", "")).strip()

@@ -1,7 +1,7 @@
 # Matter Builder generic firmware (ESP32-C6, Thread): what is connected is
-# set on the settings page, not built in. Taken from the Octo bridge's
-# settings, without Bluetooth (no beds) and with the clusters of the
-# standard components: switch (button), occupancy (motion sensor).
+# set on the settings page, not built in. Without Bluetooth, and with the
+# clusters of the standard components: switch (button), occupancy (motion
+# sensor).
 CONFIG_BT_ENABLED=n
 CONFIG_SUPPORT_SWITCH_CLUSTER=y
 CONFIG_SUPPORT_OCCUPANCY_SENSING_CLUSTER=y
@@ -34,7 +34,7 @@ CONFIG_HTTPD_MAX_REQ_HDR_LEN=1024
 CONFIG_CUSTOM_DEVICE_INSTANCE_INFO_PROVIDER=y
 CONFIG_CUSTOM_COMMISSIONABLE_DATA_PROVIDER=y
 # Must equal PROJECT_VER_NUMBER in CMakeLists.txt (checked there)
-CONFIG_DEVICE_SOFTWARE_VERSION_NUMBER=1
+CONFIG_DEVICE_SOFTWARE_VERSION_NUMBER=101
 
 # One endpoint per connection (at most 8), plus room for reserving numbers
 CONFIG_ESP_MATTER_MAX_DYNAMIC_ENDPOINT_COUNT=12

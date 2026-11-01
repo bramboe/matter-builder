@@ -89,9 +89,6 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
     <button id="token" data-t="changePassword"></button>
     <button id="wizOpen" data-t="wizMenu"></button>
     <button id="reboot" data-t="restart"></button>
-    <div class="row" style="padding:0 16px;min-height:44px"><div class="label sub" data-t="language"></div>
-      <select id="lang" class="field" style="padding:4px 8px"><option value="en">English</option>
-        <option value="nl">Nederlands</option></select></div>
   </div>
 </header>
 
@@ -114,7 +111,7 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
   <div class="section-head"><h2 data-t="configMode"></h2></div>
   <div class="grid"><div class="card">
     <div class="sub" id="cfgInfo"></div>
-    <div class="sub" data-t="configBedsHelp" style="margin-top:6px"></div>
+    <div class="sub" data-t="configConnectionsHelp" style="margin-top:6px"></div>
     <div class="features"><button class="pri" type="button" id="cfgExit" data-t="configDone"></button></div>
     <div class="sub" id="cfgBack"></div>
     <details style="margin-top:8px"><summary data-t="firmwareUpdate"></summary>
@@ -246,225 +243,63 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
 <div id="toast"></div>
 
 <script>
-// Texts per language. The language is stored on the bridge ("language"), so
-// the page and the preset names in Home Assistant use the same one.
+// The page's texts
 const TEXT = {
-  en: {
-    configInfoAp: s => `Setup network “${s}”. Set your own Wi-Fi and the Thread network below; the beds can be added already.`, configApGo: 'Continue on my Wi-Fi', configApMoved: h => `The bridge restarts on your Wi-Fi. Connect this phone to your own Wi-Fi again and open http://${h}/`, configApDone: h => `The bridge goes to Thread. Connect this phone to your own Wi-Fi again; the page is then at http://${h}/`,
-    threadTitle: 'Thread network', threadChange: 'Set network', threadHelp: 'Paste the dataset from Home Assistant: Settings › Devices & services › Thread › Configure, then (i) at the preferred network.', threadDataset: 'Dataset (hex)', threadNone: 'No Thread network set yet: the bridge stays in configuration mode until you paste one.', threadNow: (name, ch, src) => `Network '${name}', channel ${ch}` + (src === 'secrets' ? ' (built into the firmware)' : ''), threadSaved: 'Saved: the bridge joins it at the next start', threadSavedConfig: 'Saved: the bridge joins it when you finish configuration mode', threadBad: 'This is not a Thread dataset. Copy the whole hex text from Home Assistant.',
-    title: 'Octo beds',
-    network: 'Network', thread: 'Thread', wifi: 'Wi-Fi',
-    pairLater: 'Add a bed first. The pairing code shows up here once a bed is connected, so the beds reach Home Assistant and Apple Home with their names.',
-    loginTitle: 'Sign in', loginHelp: "Enter the password of this bridge. Forgot it? Hold the BOOT button for 5 to 10 seconds and let go: the bridge opens its setup network, where you choose a new one.", password: 'Password', login: 'Sign in', wrongPassword: 'Wrong password.', stateIdle: 'Not connected', stateBusy: 'Connecting…', weakSignal: 'Weak signal: place the bridge closer to the bed.', changePassword: 'Change password', restart: 'Restart', language: 'Language',
-    settings: 'Settings', pairingCode: 'Pairing code', openWindow: 'Open pairing window',
-    deviceNetwork: 'Device and network', device: 'Device', vidPid: 'Vendor / product ID',
-    testIds: 'Test IDs of the Matter standard', system: 'System', freeMemory: 'Free memory', uptime: 'Running',
-    connecting: 'Connecting…', bedsConnected: (r, c) => `${r} of ${c} beds connected`, noBeds: 'No bed added yet',
-    noConnection: 'No connection', setupTitle: 'Choose a password', setupHelp: 'This bridge has no password yet. Choose one: you need it to open this page on another device.', changeTitle: 'Change password', newPassword: 'New password', repeatPassword: 'Repeat password', save: 'Save', passwordShort: 'Use at least 8 characters.', passwordMismatch: 'The passwords differ.', passwordSaved: 'Password saved',
-    passwordRefused: 'password refused', error: 'Error',
-    flat: 'Flat', fullyRaised: 'Fully raised', raised: v => `${v}% raised`,
-    up: 'Up', stop: 'Stop', down: 'Down', head: 'Head', legs: 'Legs', light: 'Light', underBed: 'Bed light',
-    off: 'Off', on: 'On', presets: 'Presets', preset: n => `Preset ${n}`, notSaved: 'Not saved yet',
-    match: n => `Match ${n}`, headLegs: (h, l) => `Head ${h}%, legs ${l}%`, saveCurrent: 'Save current position',
-    confirmSave: n => `Save the current position as preset ${n}?`,
-    calibration: 'Calibration',
-    calibrationHelp: 'The position is worked out from the travel time. Measure it per motor: fully down, start the measurement and stop as soon as the part is at the top.',
-    travelTime: 'Travel time from flat to fully raised', seconds: 'Seconds', save: 'Save',
-    travelsAndMeasure: 'Travel times and measuring', measuring: (p, s) => `Measuring ${p}: ${s} s`,
-    step1: '1. Fully down', step2: '2. Start measuring', step3: '3. At the top: stop',
-    connected: r => `Connected · ${r} dBm`, drops: n => `drops ${n}`, rename: 'Rename', remove: 'Remove',
-    discovered: 'Discovered',
-    searching: 'Looking for Octo beds… Turn off the OCTO app and other bridges: a bed only shows up while nothing else is connected to it.',
-    octoBed: 'Octo bed', name: 'Name', namePlaceholder: 'e.g. Sam', bedPin: 'PIN of the bed',
-    pinStored: 'The PIN is only stored on the ESP.', cancel: 'Cancel', add: 'Add', maxBeds: 'At most 2 beds',
-    maxBedsHelp: 'At most 2 beds: remove one first.', giveName: 'Give the bed a name.', pinDigits: 'The PIN has 4 digits.',
-    newName: 'New name', confirmRemove: n => `Remove ${n}? The bridge disconnects and forgets the PIN.`,
-    configMode: 'Configuration mode', configHelp: 'For a firmware update: the bridge restarts on Wi-Fi for 15 minutes, with Thread, Matter and the beds off. Then it goes back by itself.',
-    wifiNetwork: 'Wi-Fi network', wifiPassword: 'Wi-Fi password', wifiPassKeep: 'saved, leave empty to keep', saved: 'Saved',
-    configStart: 'Start configuration mode', configNeedsWifi: 'Enter the Wi-Fi network first.',
-    configConfirm: h => `Restart on Wi-Fi? The beds do not work in Home Assistant until the bridge is back (at most 15 minutes). Then open http://${h}/`,
-    configStarted: h => `Restarting on Wi-Fi: open http://${h}/ in a minute`,
-    firmwareUpdate: 'Firmware update', firmwareFile: 'Firmware file (.bin)', install: 'Install', configExit: 'Back to normal',
-    configInfo: (s, ip, m) => `On Wi-Fi “${s}”, ${ip}. Back to normal after ${m} min without activity.`, uploading: p => `Uploading… ${p}%`,
-    uploadDone: 'Installed: the bridge restarts in normal mode.', chooseFile: 'Choose a firmware file.',
-    configBedsHelp: 'Add and calibrate the beds here. Pairing with Home Assistant or Apple Home and the presets follow in the normal mode.',
-    configDone: 'Done: back to normal', backStarted: h => `Going back to normal: http://${h}/ opens by itself in a minute.`, backStartedNoHome: 'Going back to normal. Open the bridge at its usual address in a minute.',
-    moveManual: link => `Not reachable yet. Open ${link} yourself.`,
-    wizMenu: 'Setup wizard', wizTitle: 'Welcome', wizHelp: 'Set up Wi-Fi first: the setup then runs over Wi-Fi and goes much faster. The beds keep using Thread afterwards; Wi-Fi is only used for setup and updates.',
-    wizSkip: 'Skip', wizGo: 'Continue over Wi-Fi', wizMovingTitle: 'Switching to Wi-Fi…', wizSkipped: 'Skipped: everything works over Thread, but it can be slower.',
-    resultPassword: c => `Last time the Wi-Fi password was refused (code ${c}). Check the password.`, resultNotFound: c => `Last time the Wi-Fi network was not found (code ${c}). Check the name: the bridge only uses 2.4 GHz.`, resultNoConnect: c => `Last time there was no Wi-Fi connection within a minute (code ${c}).`,
-    windowOpen: 'Pairing window open', windowClosed: 'Pairing window closed',
-    pairExtra: 'For another controller (e.g. Apple Home): open the pairing window and scan the code within 5 minutes.',
-    accessTitle: 'Programs with access', accessHelp: 'Programs such as the Home Assistant add-on get a key of their own. They ask with this password and need a press of the BOOT button.', accessNone: 'No programs linked.', accessPending: (n, s) => `${n} asks for access: press the BOOT button briefly (${s} s left).`, revoke: 'Revoke', confirmRevoke: n => `Revoke the access of ${n}?`, pairAfterConfig: 'Pairing works once the bridge is back on Thread.',
-    pairFirst: 'Not paired yet. Scan the code in Home Assistant (Add Matter device) or in Apple Home.',
-    disconnect: 'Disconnect', confirmDisconnect: v => `Disconnect ${v}? The beds disappear there until you pair again.`,
-    confirmRestart: 'Restart?', hours: 'h',
-    waiting: 'Connecting to the bed…', waitingHelp: 'Keep the bed in range and turn off the OCTO app and other bridges: a bed accepts only one connection. The controls appear once the bed has accepted the PIN.', pinRefused: 'The bed refused the PIN. Remove the bed and add it again with the right PIN.',
-  },
-  nl: {
-    configInfoAp: s => `Setup-netwerk “${s}”. Stel hieronder je eigen Wi-Fi en het Thread-netwerk in; bedden toevoegen kan al.`, configApGo: 'Verder via mijn Wi-Fi', configApMoved: h => `De bridge start opnieuw op je Wi-Fi. Verbind deze telefoon weer met je eigen Wi-Fi en open http://${h}/`, configApDone: h => `De bridge gaat op Thread. Verbind deze telefoon weer met je eigen Wi-Fi; de pagina staat dan op http://${h}/`,
-    threadTitle: 'Thread-netwerk', threadChange: 'Netwerk instellen', threadHelp: 'Plak de dataset uit Home Assistant: Instellingen › Apparaten & diensten › Thread › Configureren, dan (i) bij het voorkeursnetwerk.', threadDataset: 'Dataset (hex)', threadNone: 'Nog geen Thread-netwerk ingesteld: de bridge blijft in de configuratiemodus tot je er een plakt.', threadNow: (name, ch, src) => `Netwerk '${name}', kanaal ${ch}` + (src === 'secrets' ? ' (ingebouwd in de firmware)' : ''), threadSaved: 'Opgeslagen: de bridge gaat erop bij de volgende start', threadSavedConfig: 'Opgeslagen: de bridge gaat erop zodra je de configuratiemodus afsluit', threadBad: 'Dit is geen Thread-dataset. Kopieer de hele hex-tekst uit Home Assistant.',
-    title: 'Octo bedden',
-    network: 'Netwerk', thread: 'Thread', wifi: 'Wi-Fi',
-    pairLater: 'Voeg eerst een bed toe. De koppelcode verschijnt hier zodra een bed verbonden is, zodat de bedden met hun naam in Home Assistant en Apple Home komen.',
-    loginTitle: 'Inloggen', loginHelp: "Vul het wachtwoord van deze bridge in. Vergeten? Houd de BOOT-knop 5 tot 10 seconden ingedrukt en laat los: de bridge opent zijn setup-netwerk, waar je een nieuw wachtwoord kiest.", password: 'Wachtwoord', login: 'Inloggen', wrongPassword: 'Onjuist wachtwoord.', stateIdle: 'Niet verbonden', stateBusy: 'Verbinden…', weakSignal: 'Zwak signaal: zet de bridge dichter bij het bed.', changePassword: 'Wachtwoord wijzigen', restart: 'Herstarten', language: 'Taal',
-    settings: 'Instellingen', pairingCode: 'Koppelcode', openWindow: 'Koppelvenster openen',
-    deviceNetwork: 'Apparaat en netwerk', device: 'Apparaat', vidPid: 'Vendor-/product-ID',
-    testIds: "Test-ID's van de Matter-standaard", system: 'Systeem', freeMemory: 'Vrij geheugen', uptime: 'Actief',
-    connecting: 'Verbinden…', bedsConnected: (r, c) => `${r} van ${c} bedden verbonden`, noBeds: 'Nog geen bed toegevoegd',
-    noConnection: 'Geen verbinding', setupTitle: 'Kies een wachtwoord', setupHelp: 'Deze bridge heeft nog geen wachtwoord. Kies er een: je hebt het nodig om deze pagina op een ander apparaat te openen.', changeTitle: 'Wachtwoord wijzigen', newPassword: 'Nieuw wachtwoord', repeatPassword: 'Herhaal wachtwoord', save: 'Opslaan', passwordShort: 'Gebruik minstens 8 tekens.', passwordMismatch: 'De wachtwoorden verschillen.', passwordSaved: 'Wachtwoord opgeslagen',
-    passwordRefused: 'wachtwoord geweigerd', error: 'Fout',
-    flat: 'Plat', fullyRaised: 'Helemaal omhoog', raised: v => `${v}% omhoog`,
-    up: 'Omhoog', stop: 'Stop', down: 'Omlaag', head: 'Hoofd', legs: 'Benen', light: 'Licht', underBed: 'Bedverlichting',
-    off: 'Uit', on: 'Aan', presets: 'Standen', preset: n => `Stand ${n}`, notSaved: 'Nog niet bewaard',
-    match: n => `Zelfde als ${n}`, headLegs: (h, l) => `Hoofd ${h}%, benen ${l}%`, saveCurrent: 'Huidige stand bewaren',
-    confirmSave: n => `Huidige stand bewaren als stand ${n}?`,
-    calibration: 'Kalibratie',
-    calibrationHelp: 'De stand wordt berekend uit de looptijd. Meet die per motor: helemaal omlaag, start de meting en stop zodra het onderdeel bovenaan is.',
-    travelTime: 'Looptijd van plat tot helemaal omhoog', seconds: 'Seconden', save: 'Bewaar',
-    travelsAndMeasure: 'Looptijden en meten', measuring: (p, s) => `Meting ${p}: ${s} s`,
-    step1: '1. Helemaal omlaag', step2: '2. Start meting', step3: '3. Bovenaan: stop',
-    connected: r => `Verbonden · ${r} dBm`, drops: n => `onderbrekingen ${n}`, rename: 'Naam wijzigen', remove: 'Verwijderen',
-    discovered: 'Ontdekt',
-    searching: 'Zoeken naar Octo-bedden… Zet de OCTO-app en andere bridges uit: een bed is alleen zichtbaar als niets anders ermee verbonden is.',
-    octoBed: 'Octo-bed', name: 'Naam', namePlaceholder: 'bijv. Sam', bedPin: 'PIN van het bed',
-    pinStored: 'De PIN wordt alleen op de ESP opgeslagen.', cancel: 'Annuleren', add: 'Toevoegen', maxBeds: 'Maximaal 2 bedden',
-    maxBedsHelp: 'Maximaal 2 bedden: verwijder er eerst één.', giveName: 'Geef het bed een naam.', pinDigits: 'De PIN heeft 4 cijfers.',
-    newName: 'Nieuwe naam', confirmRemove: n => `${n} verwijderen? De bridge verbreekt de verbinding en vergeet de PIN.`,
-    configMode: 'Configuratiemodus', configHelp: 'Voor een firmware-update: de bridge herstart 15 minuten op Wi-Fi, met Thread, Matter en de bedden uit. Daarna gaat hij vanzelf terug.',
-    wifiNetwork: 'Wi-Fi-netwerk', wifiPassword: 'Wi-Fi-wachtwoord', wifiPassKeep: 'opgeslagen, leeg laten om te houden', saved: 'Opgeslagen',
-    configStart: 'Configuratiemodus starten', configNeedsWifi: 'Vul eerst het Wi-Fi-netwerk in.',
-    configConfirm: h => `Herstarten op Wi-Fi? De bedden werken in Home Assistant niet tot de bridge terug is (hooguit 15 minuten). Open daarna http://${h}/`,
-    configStarted: h => `Herstart op Wi-Fi: open over een minuut http://${h}/`,
-    firmwareUpdate: 'Firmware-update', firmwareFile: 'Firmwarebestand (.bin)', install: 'Installeren', configExit: 'Terug naar normaal',
-    configInfo: (s, ip, m) => `Op Wi-Fi “${s}”, ${ip}. Terug naar normaal na ${m} min zonder activiteit.`, uploading: p => `Uploaden… ${p}%`,
-    uploadDone: 'Geïnstalleerd: de bridge start opnieuw in de normale modus.', chooseFile: 'Kies een firmwarebestand.',
-    configBedsHelp: 'Voeg hier de bedden toe en kalibreer ze. Koppelen met Home Assistant of Apple Home en de standen volgen in de normale modus.',
-    configDone: 'Klaar: terug naar normaal', backStarted: h => `Terug naar normaal: http://${h}/ opent over een minuut vanzelf.`, backStartedNoHome: 'Terug naar normaal. Open de bridge over een minuut op het gewone adres.',
-    moveManual: link => `Nog niet bereikbaar. Open zelf ${link}.`,
-    wizMenu: 'Installatiewizard', wizTitle: 'Welkom', wizHelp: 'Stel eerst Wi-Fi in: de installatie loopt dan via Wi-Fi en gaat veel sneller. De bedden gebruiken daarna gewoon Thread; Wi-Fi is alleen voor installatie en updates.',
-    wizSkip: 'Overslaan', wizGo: 'Verder via Wi-Fi', wizMovingTitle: 'Overstappen naar Wi-Fi…', wizSkipped: 'Overgeslagen: alles werkt via Thread, maar dat kan langzamer gaan.',
-    resultPassword: c => `Vorige keer werd het Wi-Fi-wachtwoord geweigerd (code ${c}). Controleer het wachtwoord.`, resultNotFound: c => `Vorige keer werd het Wi-Fi-netwerk niet gevonden (code ${c}). Controleer de naam: de bridge gebruikt alleen 2,4 GHz.`, resultNoConnect: c => `Vorige keer kwam er binnen een minuut geen Wi-Fi-verbinding (code ${c}).`,
-    windowOpen: 'Koppelvenster open', windowClosed: 'Koppelvenster gesloten',
-    pairExtra: 'Voor een extra controller (bijv. Apple Home): open het koppelvenster en scan de code binnen 5 minuten.',
-    accessTitle: 'Programma’s met toegang', accessHelp: 'Programma’s zoals de Home Assistant-add-on krijgen een eigen sleutel. Ze vragen die aan met dit wachtwoord en een druk op de BOOT-knop.', accessNone: 'Geen programma’s gekoppeld.', accessPending: (n, s) => `${n} vraagt toegang: druk kort op de BOOT-knop (nog ${s} s).`, revoke: 'Intrekken', confirmRevoke: n => `Toegang van ${n} intrekken?`, pairAfterConfig: 'Koppelen kan zodra de bridge weer op Thread is.',
-    pairFirst: 'Nog niet gekoppeld. Scan de code in Home Assistant (Matter-apparaat toevoegen) of in Apple Home.',
-    disconnect: 'Loskoppelen', confirmDisconnect: v => `${v} loskoppelen? De bedden verdwijnen daar tot je opnieuw koppelt.`,
-    confirmRestart: 'Herstarten?', hours: 'u',
-    waiting: 'Verbinden met het bed…', waitingHelp: 'Houd het bed binnen bereik en zet de OCTO-app en andere bridges uit: een bed accepteert maar één verbinding. De bediening verschijnt zodra het bed de PIN heeft geaccepteerd.', pinRefused: 'Het bed weigerde de PIN. Verwijder het bed en voeg het opnieuw toe met de juiste PIN.',
-  },
-  de: {
-    configInfoAp: s => `Einrichtungsnetz „${s}“. Stellen Sie unten Ihr WLAN und das Thread-Netzwerk ein; Betten können Sie schon hinzufügen.`, configApGo: 'Weiter über mein WLAN', configApMoved: h => `Die Bridge startet in Ihrem WLAN neu. Verbinden Sie dieses Telefon wieder mit Ihrem WLAN und öffnen Sie http://${h}/`, configApDone: h => `Die Bridge geht ins Thread-Netzwerk. Verbinden Sie dieses Telefon wieder mit Ihrem WLAN; die Seite ist dann unter http://${h}/`,
-    threadTitle: 'Thread-Netzwerk', threadChange: 'Netzwerk einstellen', threadHelp: 'Fügen Sie den Datensatz aus Home Assistant ein: Einstellungen › Geräte & Dienste › Thread › Konfigurieren, dann (i) beim bevorzugten Netzwerk.', threadDataset: 'Datensatz (hex)', threadNone: 'Noch kein Thread-Netzwerk eingestellt: Die Bridge bleibt im Konfigurationsmodus, bis Sie eines einfügen.', threadNow: (name, ch, src) => `Netzwerk '${name}', Kanal ${ch}` + (src === 'secrets' ? ' (in der Firmware)' : ''), threadSaved: 'Gespeichert: Die Bridge verbindet sich beim nächsten Start', threadSavedConfig: 'Gespeichert: Die Bridge verbindet sich, sobald Sie den Konfigurationsmodus beenden', threadBad: 'Das ist kein Thread-Datensatz. Kopieren Sie den ganzen Hex-Text aus Home Assistant.',
-    title: 'Octo-Betten',
-    network: 'Netzwerk', thread: 'Thread', wifi: 'WLAN',
-    pairLater: 'Fügen Sie zuerst ein Bett hinzu. Der Kopplungscode erscheint hier, sobald ein Bett verbunden ist, damit die Betten mit ihrem Namen in Home Assistant und Apple Home ankommen.',
-    loginTitle: 'Anmelden', loginHelp: "Geben Sie das Passwort dieser Bridge ein. Vergessen? Halten Sie die BOOT-Taste 5 bis 10 Sekunden gedrückt und lassen Sie los: Die Bridge öffnet ihr Einrichtungsnetz, dort wählen Sie ein neues.", password: 'Passwort', login: 'Anmelden', wrongPassword: 'Falsches Passwort.', stateIdle: 'Nicht verbunden', stateBusy: 'Verbinde…', weakSignal: 'Schwaches Signal: Stellen Sie die Bridge näher ans Bett.', changePassword: 'Passwort ändern', restart: 'Neu starten', language: 'Sprache',
-    settings: 'Einstellungen', pairingCode: 'Kopplungscode', openWindow: 'Kopplungsfenster öffnen',
-    deviceNetwork: 'Gerät und Netzwerk', device: 'Gerät', vidPid: 'Hersteller-/Produkt-ID',
-    testIds: 'Test-IDs des Matter-Standards', system: 'System', freeMemory: 'Freier Speicher', uptime: 'Laufzeit',
-    connecting: 'Verbinde…', bedsConnected: (r, c) => `${r} von ${c} Betten verbunden`, noBeds: 'Noch kein Bett hinzugefügt',
-    noConnection: 'Keine Verbindung', setupTitle: 'Passwort wählen', setupHelp: 'Diese Bridge hat noch kein Passwort. Wählen Sie eines: Sie brauchen es, um diese Seite auf einem anderen Gerät zu öffnen.', changeTitle: 'Passwort ändern', newPassword: 'Neues Passwort', repeatPassword: 'Passwort wiederholen', save: 'Speichern', passwordShort: 'Mindestens 8 Zeichen verwenden.', passwordMismatch: 'Die Passwörter sind verschieden.', passwordSaved: 'Passwort gespeichert',
-    passwordRefused: 'Passwort abgelehnt', error: 'Fehler',
-    flat: 'Flach', fullyRaised: 'Ganz hoch', raised: v => `${v}% hoch`,
-    up: 'Hoch', stop: 'Stopp', down: 'Runter', head: 'Kopf', legs: 'Beine', light: 'Licht', underBed: 'Bettbeleuchtung',
-    off: 'Aus', on: 'An', presets: 'Positionen', preset: n => `Position ${n}`, notSaved: 'Noch nicht gespeichert',
-    match: n => `Wie ${n}`, headLegs: (h, l) => `Kopf ${h}%, Beine ${l}%`, saveCurrent: 'Aktuelle Position speichern',
-    confirmSave: n => `Aktuelle Position als Position ${n} speichern?`,
-    calibration: 'Kalibrierung',
-    calibrationHelp: 'Die Position wird aus der Laufzeit berechnet. Messen Sie sie je Motor: ganz runter, Messung starten und stoppen, sobald das Teil oben ist.',
-    travelTime: 'Laufzeit von flach bis ganz hoch', seconds: 'Sekunden', save: 'Speichern',
-    travelsAndMeasure: 'Laufzeiten und Messen', measuring: (p, s) => `Messung ${p}: ${s} s`,
-    step1: '1. Ganz runter', step2: '2. Messung starten', step3: '3. Oben: stopp',
-    connected: r => `Verbunden · ${r} dBm`, drops: n => `Unterbrechungen ${n}`, rename: 'Umbenennen', remove: 'Entfernen',
-    discovered: 'Entdeckt',
-    searching: 'Suche nach Octo-Betten… Schalten Sie die OCTO-App und andere Bridges aus: Ein Bett ist nur sichtbar, solange nichts anderes damit verbunden ist.',
-    octoBed: 'Octo-Bett', name: 'Name', namePlaceholder: 'z. B. Sam', bedPin: 'PIN des Bettes',
-    pinStored: 'Die PIN wird nur auf dem ESP gespeichert.', cancel: 'Abbrechen', add: 'Hinzufügen', maxBeds: 'Höchstens 2 Betten',
-    maxBedsHelp: 'Höchstens 2 Betten: entfernen Sie zuerst eins.', giveName: 'Geben Sie dem Bett einen Namen.', pinDigits: 'Die PIN hat 4 Ziffern.',
-    newName: 'Neuer Name', confirmRemove: n => `${n} entfernen? Die Bridge trennt die Verbindung und vergisst die PIN.`,
-    configMode: 'Konfigurationsmodus', configHelp: 'Für ein Firmware-Update: Die Bridge startet für 15 Minuten im WLAN neu, Thread, Matter und die Betten sind dann aus. Danach wechselt sie von selbst zurück.',
-    wifiNetwork: 'WLAN-Netz', wifiPassword: 'WLAN-Passwort', wifiPassKeep: 'gespeichert, leer lassen zum Behalten', saved: 'Gespeichert',
-    configStart: 'Konfigurationsmodus starten', configNeedsWifi: 'Geben Sie zuerst das WLAN-Netz ein.',
-    configConfirm: h => `Im WLAN neu starten? Die Betten funktionieren in Home Assistant erst wieder, wenn die Bridge zurück ist (höchstens 15 Minuten). Öffnen Sie dann http://${h}/`,
-    configStarted: h => `Neustart im WLAN: Öffnen Sie in einer Minute http://${h}/`,
-    firmwareUpdate: 'Firmware-Update', firmwareFile: 'Firmware-Datei (.bin)', install: 'Installieren', configExit: 'Zurück zum Normalbetrieb',
-    configInfo: (s, ip, m) => `Im WLAN „${s}“, ${ip}. Zurück zum Normalbetrieb nach ${m} Min. ohne Aktivität.`, uploading: p => `Hochladen… ${p}%`,
-    uploadDone: 'Installiert: Die Bridge startet im Normalbetrieb neu.', chooseFile: 'Wählen Sie eine Firmware-Datei.',
-    configBedsHelp: 'Fügen Sie hier die Betten hinzu und kalibrieren Sie sie. Die Kopplung mit Home Assistant oder Apple Home und die Positionen folgen im Normalbetrieb.',
-    configDone: 'Fertig: zurück zum Normalbetrieb', backStarted: h => `Zurück zum Normalbetrieb: http://${h}/ öffnet sich in einer Minute von selbst.`, backStartedNoHome: 'Zurück zum Normalbetrieb. Öffnen Sie die Bridge in einer Minute unter der gewohnten Adresse.',
-    moveManual: link => `Noch nicht erreichbar. Öffnen Sie ${link} selbst.`,
-    wizMenu: 'Einrichtungsassistent', wizTitle: 'Willkommen', wizHelp: 'Richten Sie zuerst das WLAN ein: Die Einrichtung läuft dann über WLAN und geht viel schneller. Die Betten nutzen danach wieder Thread; WLAN dient nur der Einrichtung und Updates.',
-    wizSkip: 'Überspringen', wizGo: 'Weiter über WLAN', wizMovingTitle: 'Wechsel zum WLAN…', wizSkipped: 'Übersprungen: Alles funktioniert über Thread, kann aber langsamer sein.',
-    resultPassword: c => `Beim letzten Mal wurde das WLAN-Passwort abgelehnt (Code ${c}). Prüfen Sie das Passwort.`, resultNotFound: c => `Beim letzten Mal wurde das WLAN nicht gefunden (Code ${c}). Prüfen Sie den Namen: Die Bridge nutzt nur 2,4 GHz.`, resultNoConnect: c => `Beim letzten Mal kam innerhalb einer Minute keine WLAN-Verbindung zustande (Code ${c}).`,
-    windowOpen: 'Kopplungsfenster offen', windowClosed: 'Kopplungsfenster geschlossen',
-    pairExtra: 'Für einen weiteren Controller (z. B. Apple Home): Kopplungsfenster öffnen und den Code innerhalb von 5 Minuten scannen.',
-    accessTitle: 'Programme mit Zugriff', accessHelp: 'Programme wie das Home-Assistant-Add-on erhalten einen eigenen Schlüssel. Sie fragen mit diesem Passwort und einem Druck auf die BOOT-Taste an.', accessNone: 'Keine Programme verbunden.', accessPending: (n, s) => `${n} bittet um Zugriff: BOOT-Taste kurz drücken (noch ${s} s).`, revoke: 'Entziehen', confirmRevoke: n => `Zugriff von ${n} entziehen?`, pairAfterConfig: 'Koppeln geht, sobald die Bridge wieder im Thread-Netz ist.',
-    pairFirst: 'Noch nicht gekoppelt. Scannen Sie den Code in Home Assistant (Matter-Gerät hinzufügen) oder in Apple Home.',
-    disconnect: 'Trennen', confirmDisconnect: v => `${v} trennen? Die Betten verschwinden dort, bis Sie erneut koppeln.`,
-    confirmRestart: 'Neu starten?', hours: 'Std.',
-    waiting: 'Verbinde mit dem Bett…', waitingHelp: 'Halten Sie das Bett in Reichweite und schalten Sie die OCTO-App und andere Bridges aus: Ein Bett akzeptiert nur eine Verbindung. Die Bedienung erscheint, sobald das Bett die PIN akzeptiert hat.', pinRefused: 'Das Bett hat die PIN abgelehnt. Entfernen Sie das Bett und fügen Sie es mit der richtigen PIN erneut hinzu.',
-  },
-  es: {
-    configInfoAp: s => `Red de configuración «${s}». Configure abajo su Wi-Fi y la red Thread; ya puede añadir las camas.`, configApGo: 'Continuar por mi Wi-Fi', configApMoved: h => `El puente se reinicia en su Wi-Fi. Vuelva a conectar este teléfono a su Wi-Fi y abra http://${h}/`, configApDone: h => `El puente pasa a Thread. Vuelva a conectar este teléfono a su Wi-Fi; la página estará en http://${h}/`,
-    threadTitle: 'Red Thread', threadChange: 'Configurar red', threadHelp: 'Pegue el conjunto de datos de Home Assistant: Ajustes › Dispositivos y servicios › Thread › Configurar, luego (i) en la red preferida.', threadDataset: 'Conjunto de datos (hex)', threadNone: 'Aún no hay red Thread: el puente sigue en modo de configuración hasta que pegue una.', threadNow: (name, ch, src) => `Red '${name}', canal ${ch}` + (src === 'secrets' ? ' (incluida en el firmware)' : ''), threadSaved: 'Guardado: el puente se une en el próximo inicio', threadSavedConfig: 'Guardado: el puente se une al salir del modo de configuración', threadBad: 'Esto no es un conjunto de datos Thread. Copie todo el texto hex de Home Assistant.',
-    title: 'Camas Octo',
-    network: 'Red', thread: 'Thread', wifi: 'Wi-Fi',
-    pairLater: 'Añada primero una cama. El código de vinculación aparece aquí cuando una cama esté conectada, para que las camas lleguen a Home Assistant y Apple Home con su nombre.',
-    loginTitle: 'Iniciar sesión', loginHelp: "Introduzca la contraseña de este puente. ¿La olvidó? Mantenga pulsado el botón BOOT de 5 a 10 segundos y suéltelo: el puente abre su red de configuración, donde elige una nueva.", password: 'Contraseña', login: 'Entrar', wrongPassword: 'Contraseña incorrecta.', stateIdle: 'No conectada', stateBusy: 'Conectando…', weakSignal: 'Señal débil: acerque el puente a la cama.', changePassword: 'Cambiar contraseña', restart: 'Reiniciar', language: 'Idioma',
-    settings: 'Ajustes', pairingCode: 'Código de vinculación', openWindow: 'Abrir ventana de vinculación',
-    deviceNetwork: 'Dispositivo y red', device: 'Dispositivo', vidPid: 'ID de fabricante / producto',
-    testIds: 'IDs de prueba del estándar Matter', system: 'Sistema', freeMemory: 'Memoria libre', uptime: 'Activo',
-    connecting: 'Conectando…', bedsConnected: (r, c) => `${r} de ${c} camas conectadas`, noBeds: 'Aún no hay camas',
-    noConnection: 'Sin conexión', setupTitle: 'Elija una contraseña', setupHelp: 'Este puente aún no tiene contraseña. Elija una: la necesita para abrir esta página en otro dispositivo.', changeTitle: 'Cambiar contraseña', newPassword: 'Nueva contraseña', repeatPassword: 'Repita la contraseña', save: 'Guardar', passwordShort: 'Use al menos 8 caracteres.', passwordMismatch: 'Las contraseñas no coinciden.', passwordSaved: 'Contraseña guardada',
-    passwordRefused: 'contraseña rechazada', error: 'Error',
-    flat: 'Plano', fullyRaised: 'Totalmente arriba', raised: v => `${v}% arriba`,
-    up: 'Subir', stop: 'Parar', down: 'Bajar', head: 'Cabeza', legs: 'Piernas', light: 'Luz', underBed: 'Luz de la cama',
-    off: 'Apagar', on: 'Encender', presets: 'Posiciones', preset: n => `Posición ${n}`, notSaved: 'Aún no guardada',
-    match: n => `Igual que ${n}`, headLegs: (h, l) => `Cabeza ${h}%, piernas ${l}%`, saveCurrent: 'Guardar posición actual',
-    confirmSave: n => `¿Guardar la posición actual como posición ${n}?`,
-    calibration: 'Calibración',
-    calibrationHelp: 'La posición se calcula a partir del tiempo de recorrido. Mídalo por motor: totalmente abajo, inicie la medición y pare en cuanto la parte llegue arriba.',
-    travelTime: 'Tiempo de plano a totalmente arriba', seconds: 'Segundos', save: 'Guardar',
-    travelsAndMeasure: 'Tiempos y medición', measuring: (p, s) => `Midiendo ${p}: ${s} s`,
-    step1: '1. Totalmente abajo', step2: '2. Iniciar medición', step3: '3. Arriba: parar',
-    connected: r => `Conectada · ${r} dBm`, drops: n => `cortes ${n}`, rename: 'Cambiar nombre', remove: 'Eliminar',
-    discovered: 'Descubiertas',
-    searching: 'Buscando camas Octo… Apague la app OCTO y otros puentes: una cama solo aparece mientras nada más está conectado a ella.',
-    octoBed: 'Cama Octo', name: 'Nombre', namePlaceholder: 'p. ej. Sam', bedPin: 'PIN de la cama',
-    pinStored: 'El PIN solo se guarda en el ESP.', cancel: 'Cancelar', add: 'Añadir', maxBeds: 'Como máximo 2 camas',
-    maxBedsHelp: 'Como máximo 2 camas: elimine una primero.', giveName: 'Ponga un nombre a la cama.', pinDigits: 'El PIN tiene 4 cifras.',
-    newName: 'Nuevo nombre', confirmRemove: n => `¿Eliminar ${n}? El puente se desconecta y olvida el PIN.`,
-    configMode: 'Modo de configuración', configHelp: 'Para actualizar el firmware: el puente se reinicia 15 minutos en Wi-Fi, con Thread, Matter y las camas apagados. Después vuelve solo.',
-    wifiNetwork: 'Red Wi-Fi', wifiPassword: 'Contraseña Wi-Fi', wifiPassKeep: 'guardada, deja vacío para mantenerla', saved: 'Guardado',
-    configStart: 'Iniciar modo de configuración', configNeedsWifi: 'Introduce primero la red Wi-Fi.',
-    configConfirm: h => `¿Reiniciar en Wi-Fi? Las camas no funcionan en Home Assistant hasta que vuelva el puente (15 minutos como máximo). Después abre http://${h}/`,
-    configStarted: h => `Reiniciando en Wi-Fi: abre http://${h}/ en un minuto`,
-    firmwareUpdate: 'Actualización de firmware', firmwareFile: 'Archivo de firmware (.bin)', install: 'Instalar', configExit: 'Volver al modo normal',
-    configInfo: (s, ip, m) => `En Wi-Fi «${s}», ${ip}. Vuelve al modo normal tras ${m} min sin actividad.`, uploading: p => `Subiendo… ${p}%`,
-    uploadDone: 'Instalado: el puente se reinicia en modo normal.', chooseFile: 'Elige un archivo de firmware.',
-    configBedsHelp: 'Añade y calibra aquí las camas. La vinculación con Home Assistant o Apple Home y las posiciones se hacen después en el modo normal.',
-    configDone: 'Listo: volver al modo normal', backStarted: h => `Volviendo al modo normal: http://${h}/ se abre solo en un minuto.`, backStartedNoHome: 'Volviendo al modo normal. Abre el puente en su dirección habitual dentro de un minuto.',
-    moveManual: link => `Aún no responde. Abre ${link} tú mismo.`,
-    wizMenu: 'Asistente de configuración', wizTitle: 'Bienvenido', wizHelp: 'Configura primero el Wi-Fi: la instalación irá por Wi-Fi y será mucho más rápida. Después las camas siguen usando Thread; el Wi-Fi solo se usa para instalar y actualizar.',
-    wizSkip: 'Omitir', wizGo: 'Seguir por Wi-Fi', wizMovingTitle: 'Cambiando a Wi-Fi…', wizSkipped: 'Omitido: todo funciona por Thread, pero puede ir más lento.',
-    resultPassword: c => `La última vez se rechazó la contraseña Wi-Fi (código ${c}). Revisa la contraseña.`, resultNotFound: c => `La última vez no se encontró la red Wi-Fi (código ${c}). Revisa el nombre: el puente solo usa 2,4 GHz.`, resultNoConnect: c => `La última vez no hubo conexión Wi-Fi en un minuto (código ${c}).`,
-    windowOpen: 'Ventana de vinculación abierta', windowClosed: 'Ventana de vinculación cerrada',
-    pairExtra: 'Para otro controlador (p. ej. Apple Home): abra la ventana de vinculación y escanee el código en 5 minutos.',
-    accessTitle: 'Programas con acceso', accessHelp: 'Programas como el complemento de Home Assistant reciben una clave propia. La piden con esta contraseña y una pulsación del botón BOOT.', accessNone: 'Ningún programa vinculado.', accessPending: (n, s) => `${n} pide acceso: pulse brevemente el botón BOOT (quedan ${s} s).`, revoke: 'Revocar', confirmRevoke: n => `¿Revocar el acceso de ${n}?`, pairAfterConfig: 'La vinculación funciona cuando el puente vuelva a Thread.',
-    pairFirst: 'Aún no vinculado. Escanee el código en Home Assistant (Añadir dispositivo Matter) o en Apple Home.',
-    disconnect: 'Desvincular', confirmDisconnect: v => `¿Desvincular ${v}? Las camas desaparecen allí hasta que vuelva a vincular.`,
-    confirmRestart: '¿Reiniciar?', hours: 'h',
-    waiting: 'Conectando con la cama…', waitingHelp: 'Mantenga la cama al alcance y apague la app OCTO y otros puentes: una cama solo acepta una conexión. Los controles aparecen cuando la cama haya aceptado el PIN.', pinRefused: 'La cama rechazó el PIN. Elimine la cama y vuelva a añadirla con el PIN correcto.',
-  },
-};
-
-// The generic device: its own texts on top of the shared ones (the other
-// languages fall back to English for these)
-Object.assign(TEXT.en, {
-  title: 'Matter Builder', connections: 'Connections', connectionCount: n => `${n} connected`, noConnections: 'nothing connected yet',
-  configBedsHelp: 'The connections work here. Pairing with Home Assistant or Apple Home happens afterwards in normal mode.',
+  title: 'Matter Builder',
+  configInfoAp: s => `Setup network “${s}”. Set your own Wi-Fi and the Thread network below; connections can be added already.`,
+  configApGo: 'Continue on my Wi-Fi',
+  configApMoved: h => `The device restarts on your Wi-Fi. Connect this phone to your own Wi-Fi again and open http://${h}/`,
+  configApDone: h => `The device goes to Thread. Connect this phone to your own Wi-Fi again; the page is then at http://${h}/`,
+  threadTitle: 'Thread network', threadChange: 'Set network',
+  threadHelp: 'Paste the dataset from Home Assistant: Settings › Devices & services › Thread › Configure, then (i) at the preferred network.',
+  threadDataset: 'Dataset (hex)',
+  threadNone: 'No Thread network set yet: the device stays in configuration mode until you paste one.',
+  threadNow: (name, ch, src) => `Network '${name}', channel ${ch}` + (src === 'secrets' ? ' (built into the firmware)' : ''),
+  threadSaved: 'Saved: the device joins it at the next start',
+  threadSavedConfig: 'Saved: the device joins it when you finish configuration mode',
+  threadBad: 'This is not a Thread dataset. Copy the whole hex text from Home Assistant.',
+  network: 'Network', thread: 'Thread', wifi: 'Wi-Fi',
+  loginTitle: 'Sign in',
+  loginHelp: 'Enter the password of this device. Forgot it? Hold the BOOT button for 5 to 10 seconds and let go: the device opens its setup network, where you choose a new one.',
+  password: 'Password', login: 'Sign in', wrongPassword: 'Wrong password.', changePassword: 'Change password', restart: 'Restart',
+  settings: 'Settings', pairingCode: 'Pairing code', openWindow: 'Open pairing window',
+  deviceNetwork: 'Device and network', device: 'Device', vidPid: 'Vendor / product ID',
+  testIds: 'Test IDs of the Matter standard', system: 'System', freeMemory: 'Free memory', uptime: 'Running',
+  connecting: 'Connecting…', noConnection: 'No connection',
+  setupTitle: 'Choose a password', setupHelp: 'This device has no password yet. Choose one: you need it to open this page on another device.',
+  changeTitle: 'Change password', newPassword: 'New password', repeatPassword: 'Repeat password', save: 'Save',
+  passwordShort: 'Use at least 8 characters.', passwordMismatch: 'The passwords differ.', passwordSaved: 'Password saved',
+  passwordRefused: 'password refused', error: 'Error', cancel: 'Cancel',
+  configMode: 'Configuration mode',
+  configHelp: 'For a firmware update: the device restarts on Wi-Fi for 15 minutes, with Thread and Matter off. Then it returns by itself.',
+  wifiNetwork: 'Wi-Fi network', wifiPassword: 'Wi-Fi password', wifiPassKeep: 'saved, leave empty to keep', saved: 'Saved',
+  configStart: 'Start configuration mode', configNeedsWifi: 'Enter the Wi-Fi network first.',
+  configConfirm: h => `Restart on Wi-Fi? The device does not work in Home Assistant until it is back (at most 15 minutes). Then open http://${h}/`,
+  configStarted: h => `Restarting on Wi-Fi: open http://${h}/ in a minute`,
+  firmwareUpdate: 'Firmware update', firmwareFile: 'Firmware file (.bin)', install: 'Install',
+  configInfo: (s, ip, m) => `On Wi-Fi “${s}”, ${ip}. Back to normal after ${m} min without activity.`, uploading: p => `Uploading… ${p}%`,
+  uploadDone: 'Installed: the device restarts in normal mode.', chooseFile: 'Choose a firmware file.',
+  configConnectionsHelp: 'The connections work here. Pairing with Home Assistant or Apple Home happens afterwards in normal mode.',
+  configDone: 'Done: back to normal', backStarted: h => `Going back to normal: http://${h}/ opens by itself in a minute.`,
+  backStartedNoHome: 'Going back to normal. Open the device at its usual address in a minute.',
+  moveManual: link => `Not reachable yet. Open ${link} yourself.`,
+  wizMenu: 'Setup wizard', wizTitle: 'Welcome',
+  wizHelp: 'Set up Wi-Fi first: installing then goes over Wi-Fi and is much faster. The device then uses Thread as usual; Wi-Fi is only for setup and updates.',
+  wizSkip: 'Skip', wizGo: 'Continue over Wi-Fi', wizMovingTitle: 'Switching to Wi-Fi…', wizSkipped: 'Skipped: everything works over Thread, but it can be slower.',
+  resultPassword: c => `Last time the Wi-Fi password was refused (code ${c}). Check the password.`,
+  resultNotFound: c => `Last time the Wi-Fi network was not found (code ${c}). Check the name: the device only uses 2.4 GHz.`,
+  resultNoConnect: c => `Last time there was no Wi-Fi connection within a minute (code ${c}).`,
+  windowOpen: 'Pairing window open', windowClosed: 'Pairing window closed',
+  pairExtra: 'For another controller (e.g. Apple Home): open the pairing window and scan the code within 5 minutes.',
+  accessTitle: 'Programs with access',
+  accessHelp: 'Programs such as the Home Assistant add-on get a key of their own. They ask with this password and need a press of the BOOT button.',
+  accessNone: 'No programs linked.', accessPending: (n, s) => `${n} asks for access: press the BOOT button briefly (${s} s left).`,
+  revoke: 'Revoke', confirmRevoke: n => `Revoke the access of ${n}?`, pairAfterConfig: 'Pairing works once the device is back on Thread.',
+  pairFirst: 'Not paired yet. Scan the code in Home Assistant (Add Matter device) or in Apple Home.',
   pairLater: 'Add a connection first. The pairing code shows up here then, so controllers get your connections with their names.',
+  disconnect: 'Disconnect', confirmDisconnect: v => `Disconnect ${v}? This device disappears there until you pair again.`,
+  confirmRestart: 'Restart?', hours: 'h',
+  connections: 'Connections', connectionCount: n => `${n} connected`, noConnections: 'nothing connected yet',
   ioType: 'Type', relay: 'Relay / switch', led: 'LED (dimmable)', button: 'Push button', contact: 'Contact (door, window)',
   motion: 'Motion sensor (PIR)', sht4x: 'Temperature and humidity (SHT4x)',
   relayHelp: 'An output: on or off. Appears as a plug in Home Assistant and Apple Home.',
@@ -475,7 +310,7 @@ Object.assign(TEXT.en, {
   sht4xHelp: 'An I²C sensor (address 0x44) on two pins: SDA and SCL.',
   pin: 'Pin', pinSda: 'SDA', inverted: 'Inverted (active low relay, or input the other way round)', name: 'Name',
   addConnection: 'Add a connection', editConnection: n => `Edit “${n}”`, edit: 'Edit', remove: 'Remove',
-  confirmRemove: n => `Remove “${n}”?`, testOn: 'On', testOff: 'Off', active: 'active', inactive: 'idle',
+  confirmRemove: n => `Remove “${n}”?`, testOn: 'On', testOff: 'Off',
   contactClosed: 'closed', contactOpen: 'open', motionSeen: 'motion', motionNone: 'no motion', pressed: 'pressed', released: 'released',
   waitingValue: 'waiting for a reading', notActive: 'not active yet: apply the changes',
   ioChanged: 'Changes are not active yet. Applying restarts the device; you then have 2 minutes to keep them.',
@@ -484,46 +319,12 @@ Object.assign(TEXT.en, {
   keep: 'Keep', undo: 'Back now', full: 'All 8 connections are in use.',
   deviceNameTitle: 'Name', deviceNameHelp: 'What Home Assistant and Apple Home call this device. Takes effect after a restart.',
   nameSaved: 'Name saved',
-  configHelp: 'For a firmware update: the device restarts on Wi-Fi for 15 minutes, with Thread and Matter off. Then it returns by itself.',
-  wizHelp: 'Set up Wi-Fi first: installing then goes over Wi-Fi and is much faster. The device then uses Thread as usual; Wi-Fi is only for setup and updates.',
-});
-Object.assign(TEXT.nl, {
-  title: 'Matter Builder', connections: 'Aansluitingen', connectionCount: n => `${n} aangesloten`, noConnections: 'nog niets aangesloten',
-  configBedsHelp: 'De aansluitingen werken hier. Koppelen met Home Assistant of Apple Home gebeurt daarna in de gewone modus.',
-  pairLater: 'Voeg eerst een aansluiting toe. De koppelcode verschijnt dan hier, zodat controllers je aansluitingen met hun naam krijgen.',
-  ioType: 'Soort', relay: 'Relais / schakelaar', led: 'LED (dimbaar)', button: 'Drukknop', contact: 'Contact (deur, raam)',
-  motion: 'Bewegingsmelder (PIR)', sht4x: 'Temperatuur en vochtigheid (SHT4x)',
-  relayHelp: 'Een uitgang: aan of uit. Verschijnt als stekker in Home Assistant en Apple Home.',
-  ledHelp: 'Een uitgang met helderheid (PWM). Verschijnt als dimbare lamp.',
-  buttonHelp: 'Een ingang naar massa. Kort, dubbel en lang indrukken worden gebeurtenissen.',
-  contactHelp: 'Een ingang naar massa: gesloten is “contact”. Verschijnt als contactsensor.',
-  motionHelp: 'Een ingang van een PIR-sensor die de pin hoog maakt. Verschijnt als aanwezigheidssensor.',
-  sht4xHelp: 'Een I²C-sensor (adres 0x44) op twee pinnen: SDA en SCL.',
-  pin: 'Pin', pinSda: 'SDA', inverted: 'Omgekeerd (relais actief laag, of ingang andersom)', name: 'Naam',
-  addConnection: 'Aansluiting toevoegen', editConnection: n => `“${n}” wijzigen`, edit: 'Wijzigen', remove: 'Verwijderen',
-  confirmRemove: n => `“${n}” verwijderen?`, testOn: 'Aan', testOff: 'Uit', active: 'actief', inactive: 'rust',
-  contactClosed: 'dicht', contactOpen: 'open', motionSeen: 'beweging', motionNone: 'geen beweging', pressed: 'ingedrukt', released: 'los',
-  waitingValue: 'wacht op een meting', notActive: 'nog niet actief: pas de wijzigingen toe',
-  ioChanged: 'Wijzigingen zijn nog niet actief. Toepassen herstart het apparaat; daarna heb je 2 minuten om ze te houden.',
-  apply: 'Toepassen (herstart)', discard: 'Verwerpen',
-  trialText: s => `Nieuwe aansluitingen op proef: houd ze binnen ${s} s, anders gaat het apparaat terug naar de vorige.`,
-  keep: 'Houden', undo: 'Nu terug', full: 'Alle 8 aansluitingen zijn in gebruik.',
-  deviceNameTitle: 'Naam', deviceNameHelp: 'Hoe Home Assistant en Apple Home dit apparaat noemen. Werkt na een herstart.',
-  nameSaved: 'Naam opgeslagen',
-  configHelp: 'Voor een firmware-update: het apparaat herstart 15 minuten op Wi-Fi, met Thread en Matter uit. Daarna gaat het vanzelf terug.',
-  wizHelp: 'Stel eerst Wi-Fi in: de installatie loopt dan via Wi-Fi en gaat veel sneller. Het apparaat gebruikt daarna gewoon Thread; Wi-Fi is alleen voor installatie en updates.',
-});
+};
+const t = (key, ...args) => { const v = TEXT[key]; return typeof v === 'function' ? v(...args) : v; };
 
-let lang = 'en';
-try { lang = localStorage.getItem('octoLang') || (navigator.language || 'en').slice(0, 2); } catch (e) {}
-if (!TEXT[lang]) lang = 'en';
-const t = (key, ...args) => { const v = TEXT[lang][key] ?? TEXT.en[key]; return typeof v === 'function' ? v(...args) : v; };
-
-function applyLanguage() {
-  document.documentElement.lang = lang;
+function applyTexts() {
   document.title = t('title');
   document.querySelectorAll('[data-t]').forEach(el => { el.textContent = t(el.dataset.t); });
-  $('#lang').value = lang;
   renderLogin();
 }
 
@@ -803,14 +604,6 @@ async function removeFabric(index, vendor) {
   loadMatter();
 }
 
-// The bridge's language wins, so all browsers and Home Assistant agree
-async function loadLanguage() {
-  try {
-    const code = (await cmd('language')).trim();
-    if (TEXT[code] && code !== lang) { lang = code; applyLanguage(); refresh(); loadMatter(); }
-  } catch (e) {}
-}
-
 $('#menuBtn').onclick = e => { e.stopPropagation(); $('#menu').classList.toggle('open'); };
 $('#menu').onclick = e => e.stopPropagation();
 document.addEventListener('click', closeMenus);
@@ -818,14 +611,6 @@ $('#reboot').onclick = () => { if (confirm(t('confirmRestart'))) run('reboot'); 
 $('#token').onclick = () => { closeMenus(); showLogin(false, 'change'); };
 $('#loginCancel').onclick = () => { $('#login').hidden = true; $('#app').hidden = false; };
 $('#openWindow').onclick = async () => { await run('matter open'); loadMatter(); };
-$('#lang').onchange = async () => {
-  lang = $('#lang').value;
-  try { localStorage.setItem('octoLang', lang); } catch (e) {}
-  applyLanguage();
-  try { await cmd('language ' + lang); } catch (e) {}
-  refresh();
-  loadMatter();
-};
 
 // Configuration mode: one boot on Wi-Fi for a fast first setup and updates.
 // The connections work; Matter (pairing) waits for the normal mode.
@@ -844,7 +629,7 @@ function showConfigMode(c) {
     : t('configInfo', c.ssid, c.ip || c.host, Math.ceil(c.remaining / 60));
 }
 
-// Wait until `url` answers, then open it (the bridge restarts in between)
+// Wait until `url` answers, then open it (the device restarts in between)
 function moveTo(url, textEl) {
   const started = Date.now();
   const tryOnce = async () => {
@@ -983,9 +768,9 @@ $('#otaForm').onsubmit = e => {
   xhr.send(file);
 };
 
-applyLanguage();
+applyTexts();
 $('#sys').textContent = t('connecting');
-function startApp() { loadLanguage(); refresh(); loadMatter(); loadWifi(); loadThread(); loadAccess(); }
+function startApp() { refresh(); loadMatter(); loadWifi(); loadThread(); loadAccess(); }
 function keepToken(value) {
   token = value;
   try { localStorage.setItem('mbToken', token); } catch (err) {}
@@ -1013,7 +798,7 @@ $('#loginForm').onsubmit = e => {
   keepToken(value);
   startApp();
 };
-// A bridge without a password asks for one first; older firmware has no /auth
+// A device without a password asks for one first; older firmware has no /auth
 (async () => {
   try {
     const r = await fetch('/auth');

@@ -177,7 +177,7 @@ std::string setup_ap_name() {
     return name;
 }
 
-// An open network "Octo-Bridge-XXXX" at 192.168.4.1, with DNS answering every
+// An open network "<ap_prefix>-XXXX" at 192.168.4.1, with DNS answering every
 // name with that address so phones open the page by themselves
 void start_ap() {
     std::strncpy(ap_ssid, setup_ap_name().c_str(), sizeof(ap_ssid) - 1);
@@ -229,7 +229,9 @@ void start_mdns() {
         return;
     }
     mdns_hostname_set(hostname());
-    mdns_instance_name_set("Octo bridge (configuration mode)");
+    static char instance[64];
+    std::snprintf(instance, sizeof(instance), "%.40s (configuration mode)", mb_core::app().product_name);
+    mdns_instance_name_set(instance);
     mdns_service_add(nullptr, "_http", "_tcp", 80, nullptr, 0);
 }
 
@@ -389,7 +391,7 @@ void run() {
     ESP_ERROR_CHECK(esp_timer_start_periodic(timer, CHECK_INTERVAL_US));
     set_command_override(command_in_config_mode);
 
-    // What works without Matter keeps working (the Octo bridge: its beds)
+    // What works without Matter keeps working (the app's config_mode_start)
     if (mb_core::app().config_mode_start != nullptr) {
         mb_core::app().config_mode_start();
     }

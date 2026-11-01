@@ -5,7 +5,9 @@ Matter Builder sets up and maintains ESP32 devices that act as standard
 Home and Google Home at the same time, and keep working when Home Assistant
 is off: every device has a settings page of its own.
 
-The first application is the **Octo bed bridge** (ESP32-C6, Thread).
+The standard firmware is the **generic device** (ESP32-C6, Thread): relays,
+LEDs, buttons, contacts, motion and SHT4x sensors on free pins, set up on the
+device's page or in the add-on.
 
 ## What the add-on does
 
@@ -19,9 +21,9 @@ The first application is the **Octo bed bridge** (ESP32-C6, Thread).
   as a form or as YAML. Changes are saved as a draft on the device; *Apply*
   restarts it with the draft on trial, and *Keep* within 2 minutes makes it
   permanent. Without that, the device goes back by itself.
-- **All proxies**: send the Wi-Fi network for configuration mode or the page
-  language to every linked device at once, or update every device to the
-  newest firmware of its own kind, one after the other.
+- **All proxies**: send the Wi-Fi network for configuration mode to every
+  linked device at once, or update every device to the newest firmware of its
+  own kind, one after the other.
 - **Firmware**: ready-made firmware to install, and in **developer mode** your
   own builds.
 
@@ -42,8 +44,8 @@ its password and network; link it here afterwards.
 
 ## Own devices (developer mode)
 
-Describe a device in YAML: its name, the application (generic or the Octo
-bridge) and, for a generic device, its connections as factory setting.
+Describe a device in YAML: its name, the application (generic) and its
+connections as factory setting.
 Wi-Fi, Thread and passwords are never in the spec: they are set on the
 device's own page. *Build* generates the project (tools/mb_generate.py) and
 produces an update file and an image for a new ESP32 over USB. The spec is
@@ -68,8 +70,8 @@ password are set on the device's own page.
 
 A device on Thread is too slow for a 2 MB upload. The add-on therefore
 switches it to *configuration mode* on Wi-Fi for a moment, uploads the
-firmware in about 20 seconds, and the device returns to Thread. The beds (or
-other connected devices) are unavailable for a few minutes. If the new
+firmware in about 20 seconds, and the device returns to Thread. What is
+connected to it is unavailable for a few minutes. If the new
 firmware cannot get online, the device goes back to the previous one by
 itself.
 

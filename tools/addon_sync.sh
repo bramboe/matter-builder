@@ -17,12 +17,11 @@ EXCLUDES="--exclude build/ --exclude build-*/ --exclude secrets.h --exclude sdkc
 set -f  # the exclude patterns are not for the shell
 mkdir -p "$ADDON/src/firmware"
 # shellcheck disable=SC2086  # word splitting of the exclude list is intended
-rsync -a --delete $EXCLUDES "$ROOT/components" "$ADDON/src/"
+# Only what the add-on builds: mb_core and the generic device
+rsync -a --delete --delete-excluded $EXCLUDES --exclude 'octo_*/' "$ROOT/components" "$ADDON/src/"
 # shellcheck disable=SC2086
-for app in bridge generic; do
-    # shellcheck disable=SC2086
-    rsync -a --delete $EXCLUDES "$ROOT/firmware/$app" "$ADDON/src/firmware/"
-done
+rsync -a --delete $EXCLUDES "$ROOT/firmware/generic" "$ADDON/src/firmware/"
+rm -rf "$ADDON/src/firmware/bridge"
 mkdir -p "$ADDON/src/tools"
 cp "$ROOT/tools/mb_generate.py" "$ADDON/src/tools/"
 # shellcheck disable=SC2086

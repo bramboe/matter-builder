@@ -58,7 +58,6 @@ summary::after{content:"";margin-left:auto;margin-right:6px;width:8px;height:8px
 .switch input::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .2s}
 .switch input:checked{background:var(--primary)}
 .switch input:checked::after{left:18px}
-.lang{border:0;background:none;color:var(--mute);font:inherit}
 .tabs{display:flex;gap:4px;margin:6px 0}
 .tabs button{min-height:32px}
 .tabs button.on{background:var(--chip);color:var(--primary)}
@@ -70,7 +69,6 @@ textarea.yaml{width:100%;min-height:260px;font:12px/1.5 ui-monospace,Menlo,monos
 <header>
   <h1>Matter Builder</h1>
   <label class="switch"><input type="checkbox" id="devMode"><span data-t="devMode"></span></label>
-  <select class="lang" id="lang" aria-label="Language"><option value="en">EN</option><option value="nl">NL</option></select>
 </header>
 <main>
 <div class="section" id="intro" hidden>
@@ -155,11 +153,7 @@ textarea.yaml{width:100%;min-height:260px;font:12px/1.5 ui-monospace,Menlo,monos
       </form>
     </div>
     <div class="card">
-      <h3 data-t="pageLanguage"></h3>
-      <div class="row"><label class="field" style="flex:1"><span data-t="pageLanguage"></span><select id="bLang">
-        <option value="nl">Nederlands</option><option value="en">English</option><option value="de">Deutsch</option><option value="es">Español</option></select></label>
-        <button class="pri" id="bLangSend" data-t="sendAll"></button></div>
-      <h3 style="margin-top:12px" data-t="updateAll"></h3><div class="sub" data-t="updateAllHelp"></div>
+      <h3 data-t="updateAll"></h3><div class="sub" data-t="updateAllHelp"></div>
       <div class="actions"><button class="pri" id="bUpdate" data-t="updateAll"></button></div>
     </div>
     <div class="card" id="bulkResult" hidden><h3 data-t="result"></h3><div id="bulkRows"></div></div>
@@ -181,8 +175,7 @@ textarea.yaml{width:100%;min-height:260px;font:12px/1.5 ui-monospace,Menlo,monos
       <div class="sub warnText" id="systemAdvice" hidden></div>
       <div class="row"><div class="label">Toolchain<div class="sub" id="toolchainText"></div></div>
         <button id="toolchainBtn" data-t="install"></button></div>
-      <div class="actions"><button class="pri" id="buildBtn" data-t="build"></button>
-        <button class="pri" id="buildGenericBtn" data-t="buildGeneric"></button></div>
+      <div class="actions"><button class="pri" id="buildGenericBtn" data-t="buildGeneric"></button></div>
       <div id="builds" style="margin-top:8px"></div>
     </div>
     <div class="card" id="jobCard" hidden>
@@ -206,7 +199,6 @@ function setHtml(el, html) {
 }
 
 const TEXT = {
-  en: {
     devMode: 'Developer mode', introTitle: 'Welcome',
     introText: 'Matter Builder sets up ESP32 devices that work as standard Matter devices in Home Assistant, Apple Home and Google Home, over Wi-Fi or Thread. Every device keeps working without Home Assistant and has a settings page of its own.',
     introStep1: 'Put firmware on an ESP32 (ready-made below).', introStep2: 'Set it up on its own page: password, Wi-Fi, Thread and what is connected.',
@@ -229,7 +221,7 @@ const TEXT = {
     saved: 'Saved as draft.', unchanged: 'Nothing changed.', applying: 'Restarting with the new connections…',
     trialLeft: s => `On trial: keep within ${s} s.`, kept: 'Kept.', yamlError: e => `YAML: ${e}`, full: 'All 8 connections are in use.',
     allProxies: 'All proxies', bulkWifiHelp: 'The network for configuration mode (updates, first setup) of every linked proxy.',
-    wifiName: 'Network', wifiPassword: 'Password', sendAll: 'Send to all', pageLanguage: 'Language of the pages',
+    wifiName: 'Network', wifiPassword: 'Password', sendAll: 'Send to all',
     updateAll: 'Update all', updateAllHelp: 'Every proxy to the newest firmware of its own kind, one after the other; stops at the first problem.',
     result: 'Result',
     ownDevices: 'Own devices', save: 'Save', newDevice: 'New device', specHelp: 'Describe what is built: name, application and, for a generic device, its connections. Wi-Fi, Thread and passwords are set on the device itself.',
@@ -246,64 +238,13 @@ const TEXT = {
     host: 'This host', cores: 'cores', memory: 'GB memory', disk: 'GB free',
     fewCores: 'Few cores or little memory: the first build takes an hour or more. More cores for the Home Assistant machine help most (about 1.5 GB memory per core).',
     toolchainReady: 'Ready', toolchainMissing: 'Not installed: about 6 GB, 15 minutes or more. Not included in backups.',
-    install: 'Install', build: 'Build Octo bridge (ESP32-C6)', buildGeneric: 'Build generic device (ESP32-C6)', ownBuilds: 'Own builds',
-    apps: {octo_bridge: 'Octo bed bridge', mb_generic: 'Generic device'}, nothingConnected: 'Nothing connected yet',
+    install: 'Install', buildGeneric: 'Build generic device (ESP32-C6)', ownBuilds: 'Own builds',
+    apps: {mb_generic: 'Generic device'}, nothingConnected: 'Nothing connected yet',
     log: 'Log', running: t => `Running since ${t}`, done: 'Done.', failed: 'Failed: see the log.', step: (d, t) => `Step ${d} of ${t}`,
-    jobs: {toolchain: 'Installing the toolchain', all: 'Updating all proxies', build: a => a === 'generic' ? 'Building the generic device' : 'Building the Octo bridge', update: n => `Updating ${n}`},
-  },
-  nl: {
-    devMode: 'Ontwikkelaarsmodus', introTitle: 'Welkom',
-    introText: 'Matter Builder zet ESP32-apparaten op die als gewone Matter-apparaten werken in Home Assistant, Apple Home en Google Home, over Wi-Fi of Thread. Elk apparaat werkt ook zonder Home Assistant en heeft een eigen instellingenpagina.',
-    introStep1: 'Zet firmware op een ESP32 (kant-en-klaar hieronder).', introStep2: 'Stel hem in op zijn eigen pagina: wachtwoord, Wi-Fi, Thread en wat er aangesloten is.',
-    introStep3: 'Koppel hem hier, zodat deze add-on hem kan tonen en bijwerken.',
-    proxies: 'Proxies', addTitle: 'Proxy koppelen',
-    addHelp: 'Het adres van de instellingenpagina van de proxy en het wachtwoord daarvan. De add-on krijgt een eigen sleutel; het wachtwoord wordt niet bewaard.',
-    address: 'Adres', pagePassword: 'Wachtwoord van de pagina', link: 'Koppelen', wrongPassword: 'Onjuist wachtwoord.',
-    pressBoot: s => `Druk nu kort op de BOOT-knop van de proxy (nog ${s} s). Knop niet bereikbaar? Zet de stroom drie keer kort uit en aan.`,
-    linked: 'Gekoppeld.', notLinked: 'Niet gekoppeld: de BOOT-knop is niet op tijd ingedrukt. Probeer opnieuw.',
-    found: 'Gevonden', foundHelp: 'Gevonden op het netwerk, nog niet gekoppeld.', linkThis: 'Koppelen',
-    keyRejected: 'De proxy accepteert de sleutel van de add-on niet meer (ingetrokken, of de proxy is gereset).', linkAgain: 'Opnieuw koppelen',
-    checking: 'Status ophalen…', unreachable: 'Niet bereikbaar', firmware: 'Firmware', network: 'Netwerk', connected: 'verbonden',
-    key: 'Sleutel van de add-on', show: 'Tonen', hide: 'Verbergen', copy: 'Kopiëren', update: 'Bijwerken', openPage: 'Instellingen openen', rename: 'Naam wijzigen', forget: 'Vergeten',
-    confirmUpdate: f => `${f} installeren? De proxy gaat een paar minuten naar Wi-Fi; wat erop aangesloten is, is dan niet bereikbaar.`,
-    confirmForget: 'Deze proxy vergeten? Trek de sleutel ook in op de pagina van de proxy (Programma’s met toegang).', name: 'Naam',
-    manageHelp: 'Aansluitingen worden als concept op het apparaat opgeslagen; toepassen herstart het, houd ze daarna binnen 2 minuten.', close: 'Sluiten',
-    deviceName: 'Naam van het apparaat', addConnection: 'Aansluiting toevoegen', saveDraft: 'Opslaan', applyRestart: 'Toepassen (herstart)', keep: 'Houden',
-    manage: 'Aansluitingen', slot: 'Aansluiting', type: 'Soort', pin: 'Pin', scl: 'SCL', inverted: 'Omgekeerd', remove: 'Verwijderen',
-    types: {relay: 'Relais', led: 'LED', button: 'Drukknop', contact: 'Contact', motion: 'Bewegingsmelder', sht4x: 'SHT4x'},
-    saved: 'Opgeslagen als concept.', unchanged: 'Niets gewijzigd.', applying: 'Herstart met de nieuwe aansluitingen…',
-    trialLeft: s => `Op proef: houd ze binnen ${s} s.`, kept: 'Gehouden.', yamlError: e => `YAML: ${e}`, full: 'Alle 8 aansluitingen zijn in gebruik.',
-    allProxies: 'Alle proxies', bulkWifiHelp: 'Het netwerk voor de configuratiemodus (updates, eerste instelling) van elke gekoppelde proxy.',
-    wifiName: 'Netwerk', wifiPassword: 'Wachtwoord', sendAll: 'Naar alle sturen', pageLanguage: 'Taal van de pagina’s',
-    updateAll: 'Alles bijwerken', updateAllHelp: 'Elke proxy naar de nieuwste firmware van zijn eigen soort, een voor een; stopt bij het eerste probleem.',
-    result: 'Resultaat',
-    ownDevices: 'Eigen apparaten', save: 'Opslaan', newDevice: 'Nieuw apparaat', specHelp: 'Beschrijf wat er gebouwd wordt: naam, toepassing en bij een algemeen apparaat de aansluitingen. Wi-Fi, Thread en wachtwoorden stel je op het apparaat zelf in.',
-    startFrom: 'Begin met', check: 'Controleren', specOk: s => `Klopt: ${s.name} ${s.version} (${s.app}).`, specSaved: 'Opgeslagen.', edit: 'Wijzigen', del: 'Verwijderen',
-    buildThis: 'Bouwen', updateFile: 'Updatebestand', factoryFile: 'Voor een nieuwe ESP32 (USB)', confirmDelete: n => `De spec “${n}” verwijderen? Gebouwde bestanden blijven.`,
-    flashHelp: 'Sluit de ESP32 met USB aan op deze computer en installeer. Verbind daarna met zijn setup-netwerk en koppel hem hier. Vraagt Chrome of Edge, en Home Assistant via HTTPS.',
-    installUsb: 'Installeren via USB', backupFirst: 'Eerst een back-up van de hele flash bewaren', noSerial: 'Deze browser kan hier geen USB gebruiken: gebruik Chrome of Edge, en open Home Assistant via HTTPS.',
-    usbConnecting: 'Verbinden…', usbChip: c => `Gevonden: ${c}`, wrongChip: c => `Dit is een ${c}, geen ESP32-C6.`, usbBackup: p => `Back-up: ${p} %`,
-    usbWriting: p => `Installeren: ${p} %`, usbDone: 'Geïnstalleerd. De ESP32 herstart en opent zijn setup-netwerk.',
-    buildingSpec: n => `${n} bouwen`,
-    readyMade: 'Kant-en-klare firmware', checkReleases: 'Nu controleren', signedRelease: r => `Release ${r}, handtekening gecontroleerd.`,
-    noReleases: 'Nog geen releases. Ondertekende, kant-en-klare firmware verschijnt hier zodra het project die publiceert. In de ontwikkelaarsmodus kun je zelf bouwen.',
-    devTitle: 'Ontwikkelaarsmodus', devHelp: 'Bouwt firmware in Home Assistant met vaste versies van ESP-IDF (v5.5.5) en esp-matter (release/v1.6). Er gaat niets persoonlijks in.',
-    host: 'Deze host', cores: 'kernen', memory: 'GB geheugen', disk: 'GB vrij',
-    fewCores: 'Weinig kernen of geheugen: de eerste build duurt een uur of langer. Meer kernen voor de Home Assistant-machine helpt het meest (ongeveer 1,5 GB geheugen per kern).',
-    toolchainReady: 'Klaar', toolchainMissing: 'Niet geïnstalleerd: ongeveer 6 GB, 15 minuten of langer. Gaat niet mee in back-ups.',
-    install: 'Installeren', build: 'Octo-bridge bouwen (ESP32-C6)', buildGeneric: 'Generiek apparaat bouwen (ESP32-C6)', ownBuilds: 'Eigen builds',
-    apps: {octo_bridge: 'Octo-bedbridge', mb_generic: 'Generiek apparaat'}, nothingConnected: 'Nog niets aangesloten',
-    log: 'Log', running: t => `Bezig sinds ${t}`, done: 'Klaar.', failed: 'Mislukt: zie het log.', step: (d, t) => `Stap ${d} van ${t}`,
-    jobs: {toolchain: 'Toolchain installeren', all: 'Alle proxies bijwerken', build: a => a === 'generic' ? 'Generiek apparaat bouwen' : 'Octo-bridge bouwen', update: n => `${n} bijwerken`},
-  },
+    jobs: {toolchain: 'Installing the toolchain', all: 'Updating all proxies', build: () => 'Building the generic device', update: n => `Updating ${n}`},
 };
-let lang = 'en';
-try { lang = localStorage.getItem('mbLang') || (navigator.language || '').slice(0, 2); } catch (e) {}
-if (!TEXT[lang]) lang = 'en';
-function t(key, ...args) { const v = TEXT[lang][key]; return typeof v === 'function' ? v(...args) : v; }
-function applyLanguage() {
-  document.documentElement.lang = lang;
-  $('#lang').value = lang;
+function t(key, ...args) { const v = TEXT[key]; return typeof v === 'function' ? v(...args) : v; }
+function applyTexts() {
   document.querySelectorAll('[data-t]').forEach(el => { el.textContent = t(el.dataset.t); });
 }
 
@@ -313,12 +254,12 @@ async function api(path, body) {
   const r = await fetch(path, body === undefined ? {} : {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
   return r.json();
 }
-const date = seconds => new Date(seconds * 1000).toLocaleString(lang, {dateStyle: 'medium', timeStyle: 'short'});
+const date = seconds => new Date(seconds * 1000).toLocaleString('en', {dateStyle: 'medium', timeStyle: 'short'});
 const gb = bytes => (bytes / 2 ** 30).toFixed(bytes < 10 * 2 ** 30 ? 1 : 0);
 
 const CHIP = '<svg viewBox="0 0 24 24"><path d="M6 4h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2m1 3v10h10V7H7m3 3h4v4h-4v-4M8 1h2v2H8V1m3 0h2v2h-2V1m3 0h2v2h-2V1M8 21h2v2H8v-2m3 0h2v2h-2v-2m3 0h2v2h-2v-2M1 8h2v2H1V8m0 3h2v2H1v-2m0 3h2v2H1v-2m20-6h2v2h-2V8m0 3h2v2h-2v-2m0 3h2v2h-2v-2"/></svg>';
 
-// "running: app1 @0x320000: octo_bridge 1.0.8 (…)" and "thread: attached, role child, …"
+// "running: app1 @0x320000: mb_generic 0.1.1 (…)" and "thread: attached, role child, …"
 function summary(s) {
   if (!s) return `<div class="sub">${t('checking')}</div>`;
   if (!s.ok && s.auth) return `<div class="sub warnText">${t('keyRejected')}</div>`;
@@ -331,11 +272,11 @@ function summary(s) {
   const io = s.io ? s.io.slots.filter(c => c.type !== 'none').map(c => `<div class="row"><div class="label">${esc(c.name)}</div>
       <div class="sub">${esc(c.type)}${c.temperature !== undefined ? ` · ${c.temperature.toFixed(1)} °C · ${c.humidity.toFixed(0)} %` : ''}</div></div>`).join('')
     || `<div class="row"><div class="sub">${t('nothingConnected')}</div></div>` : '';
-  return `<div class="row"><div class="label">${t('firmware')}</div><div>${esc((TEXT[lang].apps[app] || app) + ' ' + version)}</div></div>
+  return `<div class="row"><div class="label">${t('firmware')}</div><div>${esc((TEXT.apps[app] || app) + ' ' + version)}</div></div>
     <div class="row"><div class="label">${t('network')}</div><div class="sub">${esc(net.split(',').slice(0, 2).join(','))}</div></div>${beds}${io}`;
 }
 
-// Only firmware of the proxy's own application (octo_bridge-…, mb_generic-…)
+// Only firmware of the proxy's own application (mb_generic-…)
 function firmwareFiles(p) {
   const files = [...state.releases.map(r => r.file), ...(state.settings.dev_mode ? state.builds.map(b => b.file) : [])];
   return p.app ? files.filter(f => f.startsWith(p.app + '-')) : files;
@@ -389,8 +330,8 @@ function prefillLink(host) {
 // new ESP32 over USB
 function releaseRow(r) {
   const pkg = (state.packages || []).find(p => p.app === r.app);
-  const title = pkg ? (pkg.title[lang] || pkg.title.en) : (TEXT[lang].apps[r.app] || r.app);
-  const about = pkg ? (pkg.description[lang] || pkg.description.en) : '';
+  const title = pkg ? pkg.title : (TEXT.apps[r.app] || r.app);
+  const about = pkg ? pkg.description : '';
   const factory = (state.release_factory || []).find(f => f.app === r.app && f.version === r.version);
   const slug = 'release-' + r.app;
   return `<div class="row"><div class="label">${esc(title)} ${esc(r.version)}${about ? `<div class="sub">${esc(about)}</div>` : ''}
@@ -423,7 +364,7 @@ function render() {
   $('#toolchainText').textContent = state.toolchain ? t('toolchainReady') : t('toolchainMissing');
   $('#toolchainBtn').hidden = state.toolchain;
   $('#toolchainBtn').disabled = state.job.running;
-  $('#buildBtn').disabled = $('#buildGenericBtn').disabled = !state.toolchain || state.job.running;
+  $('#buildGenericBtn').disabled = !state.toolchain || state.job.running;
   $('#builds').innerHTML = state.builds.length ? `<div class="sub" style="margin:8px 0 0">${t('ownBuilds')}</div>` +
     state.builds.map(b => `<div class="row"><div class="label mono">${esc(b.file)}
       <div class="sub">${date(b.date)} · ${(b.size / 2 ** 20).toFixed(2)} MB</div></div></div>`).join('') : '';
@@ -448,7 +389,7 @@ async function loadStatuses() {
 async function loadJob() {
   const j = await api('api/job');
   $('#jobCard').hidden = false;
-  const jobs = TEXT[lang].jobs;
+  const jobs = TEXT.jobs;
   $('#jobTitle').textContent = j.kind === 'build' && j.title.startsWith('spec:') ? t('buildingSpec', j.title.slice(5))
     : j.kind === 'update' && j.title === 'all' ? jobs.all : j.kind === 'update' ? jobs.update(j.title) : j.kind === 'build' ? jobs.build(j.title) : jobs[j.kind] || j.title;
   $('#jobState').textContent = j.running ? t('running', date(j.started)) : j.ok ? t('done') : t('failed');
@@ -527,7 +468,6 @@ $('#linkForm').onsubmit = async e => {
   poll();
 };
 $('#toolchainBtn').onclick = async () => { await api('api/toolchain', {}); refresh(); };
-$('#buildBtn').onclick = async () => { await api('api/build', {app: 'bridge'}); refresh(); };
 $('#buildGenericBtn').onclick = async () => { await api('api/build', {app: 'generic'}); refresh(); };
 
 // ---------------------------------------------------------------- manage
@@ -601,7 +541,7 @@ function renderRows() {
   $('#mConns').innerHTML = editRows.map((r, i) => `<div class="conn">
       <label class="field"><span>${t('slot')}</span><input value="${r.slot}" disabled></label>
       <label class="field"><span>${t('type')}</span><select onchange="editRows[${i}].type=this.value;renderRows()">
-        ${TYPES.map(x => `<option value="${x}" ${x === r.type ? 'selected' : ''}>${esc(TEXT[lang].types[x])}</option>`).join('')}</select></label>
+        ${TYPES.map(x => `<option value="${x}" ${x === r.type ? 'selected' : ''}>${esc(TEXT.types[x])}</option>`).join('')}</select></label>
       <label class="field"><span>${r.type === 'sht4x' ? 'SDA' : t('pin')}</span><select onchange="editRows[${i}].pin=+this.value">${pins.replace(`value="${r.pin}"`, `value="${r.pin}" selected`)}</select></label>
       ${r.type === 'sht4x' ? `<label class="field"><span>${t('scl')}</span><select onchange="editRows[${i}].pin2=+this.value">${pins.replace(`value="${r.pin2}"`, `value="${r.pin2}" selected`)}</select></label>` : ''}
       <label class="field"><span>${t('name')}</span><input maxlength="23" value="${esc(r.name)}" oninput="editRows[${i}].name=this.value"></label>
@@ -659,7 +599,7 @@ async function saveManage() {
     before.delete(r.slot);
     if (old && JSON.stringify(old) === JSON.stringify(r)) continue;
     const pins = r.type === 'sht4x' ? `${r.pin} ${r.pin2}` : `${r.pin}`;
-    lines.push(`io set ${r.slot} ${r.type} ${pins}${r.inverted ? ' inverted' : ''} ${(r.name || TEXT[lang].types[r.type]).trim().replace(/\s+/g, ' ')}`);
+    lines.push(`io set ${r.slot} ${r.type} ${pins}${r.inverted ? ' inverted' : ''} ${(r.name || TEXT.types[r.type]).trim().replace(/\s+/g, ' ')}`);
   }
   for (const slot of before.keys()) lines.push(`io clear ${slot}`);
   if (name && name !== managed.io.name) lines.push(`name ${name}`);
@@ -724,7 +664,6 @@ $('#bulkWifi').onsubmit = async e => {
   $('#bPass').value = '';
   showBulk(r.results || []);
 };
-$('#bLangSend').onclick = async () => showBulk((await api('api/bulk', {lines: [`language ${$('#bLang').value}`]})).results || []);
 $('#bUpdate').onclick = async () => {
   if (!confirm(t('updateAllHelp'))) return;
   await api('api/bulk/update', {});
@@ -831,14 +770,8 @@ async function flashUsb(file, slug) {
 
 $('#checkReleases').onclick = async () => { await api('api/releases/check', {}); refresh(); };
 $('#devMode').onchange = async () => { await api('api/settings', {dev_mode: $('#devMode').checked}); refresh(); };
-$('#lang').onchange = () => {
-  lang = $('#lang').value;
-  try { localStorage.setItem('mbLang', lang); } catch (e) {}
-  applyLanguage();
-  if (state) render();
-};
 
-applyLanguage();
+applyTexts();
 refresh().then(loadStatuses);
 setInterval(() => { if (!document.hidden) refresh(); }, 3000);
 setInterval(() => { if (!document.hidden) loadStatuses(); }, 30000);

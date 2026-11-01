@@ -1,7 +1,0 @@
-# The Octo bed bridge. The beds (Bluetooth address, PIN, name) are added on
-# the bridge's own page.
-device:
-  name: Octo Bed Bridge
-  app: octo_bridge
-  board: esp32-c6
-  version: 1.0.10

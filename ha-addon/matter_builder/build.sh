@@ -1,6 +1,7 @@
 #!/bin/bash
 # Builds one application for the ESP32-C6 from the sources in the image:
 #   build.sh generic         the generic device   (mb_generic-<version>.bin)
+#   build.sh bridge          the Octo bed bridge  (octo_bridge-<version>.bin)
 #   build.sh spec <file>     a device spec (tools/mb_generate.py): <name>-<version>.bin
 #   build.sh project <dir>   an ESP-IDF project of a package source, on mb_core
 #                            from these sources (MB_COMPONENTS): <project>-<version>.bin
@@ -18,6 +19,7 @@ export CCACHE_DIR="$DATA/ccache"
 
 case "$APP" in
     generic) TITLE="Generic device" ;;
+    bridge) TITLE="Octo bed bridge" ;;
     spec) TITLE="Device from spec"; SPEC_FILE="${2:?usage: build.sh spec <file>}" ;;
     project) TITLE="Package"; PROJECT_SRC="${2:?usage: build.sh project <dir>}" ;;
     *) echo "unknown application: $APP"; exit 2 ;;

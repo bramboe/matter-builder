@@ -53,6 +53,11 @@ button:disabled{opacity:.38;cursor:default;filter:none}
 .field span{font-size:12px;color:var(--mute)}
 .field input,.field select{font:inherit;border:0;background:none;color:var(--fg);padding:2px 0;outline:none;min-width:0}
 .field.short{width:96px}
+/* An eye on password fields: show what is typed */
+.field.has-eye{position:relative;padding-right:44px}
+.eye{position:absolute;right:4px;bottom:2px;width:36px;height:36px;min-height:0;display:grid;place-items:center;border:0;padding:0;border-radius:18px;background:none;color:var(--mute);cursor:pointer}
+.eye:hover{color:var(--fg)}
+.eye svg{width:20px;height:20px;fill:currentColor}
 .form{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:8px 0}
 details{border-top:1px solid var(--line);margin-top:10px}
 summary{display:flex;align-items:center;min-height:48px;cursor:pointer;font-weight:500;list-style:none}
@@ -265,7 +270,7 @@ const TEXT = {
   settings: 'Settings', pairingCode: 'Pairing code', openWindow: 'Open pairing window',
   deviceNetwork: 'Device and network', device: 'Device', vidPid: 'Vendor / product ID',
   testIds: 'Test IDs of the Matter standard', system: 'System', freeMemory: 'Free memory', uptime: 'Running',
-  connecting: 'Connecting…', noConnection: 'No connection',
+  showPassword: 'Show password', hidePassword: 'Hide password', connecting: 'Connecting…', noConnection: 'No connection',
   setupTitle: 'Choose a password', setupHelp: 'This device has no password yet. Choose one: you need it to open this page on another device.',
   changeTitle: 'Change password', newPassword: 'New password', repeatPassword: 'Repeat password', save: 'Save',
   passwordShort: 'Use at least 8 characters.', passwordMismatch: 'The passwords differ.', passwordSaved: 'Password saved',
@@ -767,6 +772,36 @@ $('#otaForm').onsubmit = e => {
   xhr.onerror = () => { $('#otaProgress').textContent = t('noConnection'); };
   xhr.send(file);
 };
+
+// An eye on every password field, also those drawn later: show or hide what
+// is typed. Submitting a form hides them again.
+const EYE = 'M12,9A3,3 0 0,0 9,12A3,3 0 0,0 12,15A3,3 0 0,0 15,12A3,3 0 0,0 12,9M12,17A5,5 0 0,1 7,12A5,5 0 0,1 12,7A5,5 0 0,1 17,12A5,5 0 0,1 12,17M12,4.5C7,4.5 2.73,7.61 1,12C2.73,16.39 7,19.5 12,19.5C17,19.5 21.27,16.39 23,12C21.27,7.61 17,4.5 12,4.5Z';
+const EYE_OFF = 'M11.83,9L15,12.16C15,12.11 15,12.05 15,12A3,3 0 0,0 12,9C11.94,9 11.89,9 11.83,9M7.53,9.8L9.08,11.35C9.03,11.56 9,11.77 9,12A3,3 0 0,0 12,15C12.22,15 12.44,14.97 12.65,14.92L14.2,16.47C13.53,16.8 12.79,17 12,17A5,5 0 0,1 7,12C7,11.21 7.2,10.47 7.53,9.8M2,4.27L4.28,6.55L4.73,7C3.08,8.3 1.78,10 1,12C2.73,16.39 7,19.5 12,19.5C13.55,19.5 15.03,19.2 16.38,18.66L16.81,19.08L19.73,22L21,20.73L3.27,3M12,7A5,5 0 0,1 17,12C17,12.64 16.87,13.26 16.64,13.82L19.57,16.75C21.07,15.5 22.27,13.86 23,12C21.27,7.61 17,4.5 12,4.5C10.6,4.5 9.26,4.75 8,5.2L10.17,7.35C10.74,7.13 11.35,7 12,7Z';
+function addEye(input) {
+  if (input.dataset.eye) return;
+  input.dataset.eye = '1';
+  const field = input.closest('.field') || input.parentElement;
+  field.classList.add('has-eye');
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'eye';
+  const draw = () => {
+    const shown = input.type === 'text';
+    button.innerHTML = `<svg viewBox="0 0 24 24"><path d="${shown ? EYE_OFF : EYE}"/></svg>`;
+    button.setAttribute('aria-label', shown ? t('hidePassword') : t('showPassword'));
+  };
+  input.redrawEye = draw;
+  button.onmousedown = e => e.preventDefault();
+  button.onclick = e => { e.preventDefault(); input.type = input.type === 'password' ? 'text' : 'password'; draw(); input.focus(); };
+  draw();
+  field.appendChild(button);
+}
+document.querySelectorAll('input[type=password]').forEach(addEye);
+new MutationObserver(() => document.querySelectorAll('input[type=password]:not([data-eye])').forEach(addEye))
+  .observe(document.body, {childList: true, subtree: true});
+document.addEventListener('submit', () => document.querySelectorAll('input[data-eye]').forEach(i => {
+  if (i.type === 'text') { i.type = 'password'; i.redrawEye(); }
+}), true);
 
 applyTexts();
 $('#sys').textContent = t('connecting');

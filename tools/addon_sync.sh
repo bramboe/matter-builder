@@ -23,6 +23,10 @@ for app in bridge generic; do
     # shellcheck disable=SC2086
     rsync -a --delete $EXCLUDES "$ROOT/firmware/$app" "$ADDON/src/firmware/"
 done
+mkdir -p "$ADDON/src/tools"
+cp "$ROOT/tools/mb_generate.py" "$ADDON/src/tools/"
+# shellcheck disable=SC2086
+rsync -a --delete $EXCLUDES "$ROOT/examples" "$ADDON/src/"
 cp "$ROOT/LICENSE" "$ADDON/src/"
 echo "sources: $(du -sh "$ADDON/src" | cut -f1)"
 

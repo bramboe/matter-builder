@@ -19,6 +19,10 @@ struct App {
     // The settings page, gzip-compressed (target_add_binary_data)
     const char* page_gz_start;
     const char* page_gz_end;
+    // The device spec the firmware was generated from (main/spec.yaml), or
+    // nullptr: served at GET /spec, so adopting the device recovers it
+    const char* spec_start;
+    const char* spec_end;
     // Built into older firmware, used until the page sets its own (may be "")
     const char* http_token_fallback;
     const char* thread_dataset_fallback;

@@ -125,12 +125,27 @@ esp_err_t handle_info(httpd_req_t* req) {
     const esp_app_desc_t* app = esp_app_get_description();
     uint8_t mac[6] = {};
     esp_read_mac(mac, ESP_MAC_BASE);
-    char out[160];
+    char out[192];
     std::snprintf(out, sizeof(out),
-                  "{\"kind\":\"matter-builder\",\"app\":\"%s\",\"version\":\"%s\",\"id\":\"%02X%02X%02X%02X%02X%02X\"}",
-                  app->project_name, app->version, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+                  "{\"kind\":\"matter-builder\",\"app\":\"%s\",\"version\":\"%s\",\"id\":\"%02X%02X%02X%02X%02X%02X\","
+                  "\"spec\":%s}",
+                  app->project_name, app->version, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
+                  mb_core::app().spec_start != nullptr ? "true" : "false");
     httpd_resp_set_type(req, "application/json");
     return httpd_resp_sendstr(req, out);
+}
+
+// The spec the firmware was generated from (owner or a linked program)
+esp_err_t handle_spec(httpd_req_t* req) {
+    if (!authorized(req)) {
+        return ESP_OK;
+    }
+    const mb_core::App& app = mb_core::app();
+    if (app.spec_start == nullptr) {
+        return httpd_resp_send_404(req);
+    }
+    httpd_resp_set_type(req, "text/yaml; charset=utf-8");
+    return httpd_resp_send(req, app.spec_start, app.spec_end - app.spec_start);
 }
 
 esp_err_t handle_auth_get(httpd_req_t* req) {
@@ -334,7 +349,7 @@ void start(const char* fallback_token) {
     // instead of letting new requests wait for a free slot
     config.max_open_sockets = 5;
     config.lru_purge_enable = true;
-    config.max_uri_handlers = 12;  // 8 now: the default would be full
+    config.max_uri_handlers = 12;  // 9 in use: the default (8) would be full
     if (httpd_start(&server, &config) != ESP_OK) {
         ESP_LOGE(TAG, "HTTP server failed to start");
         return;
@@ -356,6 +371,12 @@ void start(const char* fallback_token) {
     info.method = HTTP_GET;
     info.handler = handle_info;
     httpd_register_uri_handler(server, &info);
+
+    httpd_uri_t spec = {};
+    spec.uri = "/spec";
+    spec.method = HTTP_GET;
+    spec.handler = handle_spec;
+    httpd_register_uri_handler(server, &spec);
 
     httpd_uri_t auth_get = {};
     auth_get.uri = "/auth";

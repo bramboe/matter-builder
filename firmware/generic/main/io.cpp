@@ -66,6 +66,8 @@ bool in_trial = false;
 esp_timer_handle_t trial_timer = nullptr;
 int64_t trial_end_us = 0;
 char device_name[33] = {};
+Slot factory[SLOTS] = {};
+const char* factory_name = nullptr;
 
 bool load(const char* key, Slot* slots) {
     nvs_handle_t nvs;
@@ -413,6 +415,11 @@ std::string cmd_set(const std::vector<std::string>& args) {
 
 void set_listener(const Listener& l) { listener = l; }
 
+void set_factory(const Slot* slots, const char* name) {
+    std::memcpy(factory, slots, sizeof(factory));
+    factory_name = name;
+}
+
 void start() {
     nvs_handle_t nvs;
     if (nvs_open(NVS_NAMESPACE, NVS_READONLY, &nvs) == ESP_OK) {
@@ -420,7 +427,9 @@ void start() {
         if (nvs_get_str(nvs, "name", device_name, &size) != ESP_OK) device_name[0] = '\0';
         nvs_close(nvs);
     }
-    load("active", running);
+    if (!load("active", running)) {
+        std::memcpy(running, factory, sizeof(running));  // nothing set on the page yet
+    }
     if (!load("draft", draft)) {
         std::memcpy(draft, running, sizeof(draft));
     }
@@ -487,7 +496,7 @@ void stop_outputs() {
     }
 }
 
-std::string name() { return device_name[0] ? device_name : DEFAULT_NAME; }
+std::string name() { return device_name[0] ? device_name : factory_name ? factory_name : DEFAULT_NAME; }
 
 std::string name_command(const std::vector<std::string>& args) {
     if (args.size() < 2) {

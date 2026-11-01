@@ -38,6 +38,15 @@
 extern const char index_html_start[] asm("_binary_index_html_gz_start");
 extern const char index_html_end[] asm("_binary_index_html_gz_end");
 
+// A bridge generated from a spec (tools/mb_generate.py) has its name and the
+// spec itself built in
+#if __has_include("spec_defaults.h")
+#include "spec_defaults.h"
+extern const char spec_start[] asm("_binary_spec_yaml_start");
+extern const char spec_end[] asm("_binary_spec_yaml_end");
+#define HAS_SPEC 1
+#endif
+
 namespace {
 
 std::string cmd_matter(const std::vector<std::string>& args) {
@@ -79,6 +88,11 @@ extern "C" void app_main() {
     app.vendor_name = "octo-matter";
     app.product_name = "Octo Bed Bridge";
     app.hostname = "octo-bridge";
+#ifdef HAS_SPEC
+    app.hostname = SPEC_SLUG;
+    app.spec_start = spec_start;
+    app.spec_end = spec_end;
+#endif
     app.ap_prefix = "Octo-Bridge";
     app.page_gz_start = index_html_start;
     app.page_gz_end = index_html_end;

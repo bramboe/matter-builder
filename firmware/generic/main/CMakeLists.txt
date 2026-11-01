@@ -14,3 +14,8 @@ add_custom_command(OUTPUT "${page_gz}"
     VERBATIM)
 add_custom_target(generic_page_gz DEPENDS "${page_gz}")
 target_add_binary_data(${COMPONENT_LIB} "${page_gz}" BINARY DEPENDS generic_page_gz)
+
+# A project generated from a spec (tools/mb_generate.py) carries the spec
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/spec.yaml")
+    target_add_binary_data(${COMPONENT_LIB} "${CMAKE_CURRENT_SOURCE_DIR}/spec.yaml" TEXT)
+endif()

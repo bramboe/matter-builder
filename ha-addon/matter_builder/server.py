@@ -44,12 +44,15 @@ PROXIES = DATA / "proxies.json"
 SETTINGS = DATA / "settings.json"
 NOTIFIED = DATA / "notified.json"
 RELEASES = DATA / "releases"
+SPECS = DATA / "specs"
+SRC = Path(os.environ.get("MB_SRC", "/opt/octo-matter"))
 RELEASE_KEY = HERE / "release-key.pem"
 # Where ready-made firmware comes from: GitHub releases, signed (see
 # .github/workflows/release.yml); the add-on option "releases_repo" overrides it
 DEFAULT_RELEASES_REPO = "bramboe/matter-builder"
 SUPERVISOR_TOKEN = os.environ.get("SUPERVISOR_TOKEN", "")
 FIRMWARE = DATA / "firmware"
+FACTORY = FIRMWARE / "factory"  # images for a new ESP32 (USB)
 JOB_LOG = DATA / "job.log"
 
 lock = threading.Lock()
@@ -540,6 +543,41 @@ def found_unlinked():
     return [d for d in devices if not linked(d["id"], d["host"], d["address"])]
 
 
+# ---------------------------------------------------------------- device specs
+
+def check_spec(text):
+    """(spec, None) when valid, else (None, error), using the generator itself."""
+    with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False) as f:
+        f.write(text)
+        path = f.name
+    try:
+        result = subprocess.run(["python3", str(SRC / "tools" / "mb_generate.py"), "--check", path],
+                                capture_output=True, text=True)
+    finally:
+        os.unlink(path)
+    if result.returncode != 0:
+        return None, (result.stderr.strip() or result.stdout.strip()).removeprefix("spec error: ")
+    return json.loads(result.stdout), None
+
+
+def list_specs():
+    out = []
+    for path in sorted(SPECS.glob("*.yaml")):
+        spec, error = check_spec(path.read_text())
+        project = spec["slug"].replace("-", "_") if spec else None
+        factory = [f.name for f in FACTORY.glob(f"{project}-*-factory.bin")] if project else []
+        out.append({"slug": path.stem, "name": spec["name"] if spec else path.stem, "app": spec["app"] if spec else "",
+                    "version": spec["version"] if spec else "", "error": error,
+                    "firmware": sorted((p.name for p in FIRMWARE.glob(f"{project}-*.bin")), key=version_key)
+                    if project else [], "factory": sorted(factory, key=lambda n: version_key(n.removesuffix("-factory.bin")))})
+    return out
+
+
+def examples():
+    folder = SRC / "examples"
+    return {p.stem: p.read_text() for p in sorted(folder.glob("*.yaml"))} if folder.exists() else {}
+
+
 # ---------------------------------------------------------------- management
 
 # What the management pages may send to a proxy: its connections, name,
@@ -683,6 +721,26 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                "releases": [{k: i[k] for k in ("file", "app", "version")} for i in release_state["images"]],
                                "release": release_state["release"], "release_error": release_state["error"],
                                "settings": load_settings(), "system": system_info()})
+        if path == "/api/specs":
+            return self.reply({"specs": list_specs(), "examples": examples()})
+        if path.startswith("/api/specs/"):
+            spec_file = SPECS / (Path(path).name + ".yaml")
+            if not spec_file.is_file():
+                return self.reply({"error": "unknown spec"}, 404)
+            return self.reply({"text": spec_file.read_text()})
+        if path.startswith("/api/download/"):
+            name = Path(path).name
+            file = FACTORY / name if name.endswith("-factory.bin") else FIRMWARE / name
+            if not file.is_file():
+                return self.reply({"error": "unknown file"}, 404)
+            body = file.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/octet-stream")
+            self.send_header("Content-Disposition", f'attachment; filename="{name}"')
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if path == "/api/job":
             with lock:
                 current = dict(job)
@@ -711,6 +769,28 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if not host or not password:
                 return self.reply({"error": "address and password are needed"}, 400)
             return self.reply(link_start(host, password))
+        if path == "/api/specs":
+            text = str(data.get("text", ""))
+            spec, error = check_spec(text)
+            if error:
+                return self.reply({"error": error}, 400)
+            if data.get("check_only"):
+                return self.reply({"spec": spec})
+            SPECS.mkdir(parents=True, exist_ok=True)
+            (SPECS / f"{spec['slug']}.yaml").write_text(text)
+            return self.reply({"spec": spec})
+        if path.startswith("/api/specs/") and path.endswith("/build"):
+            spec_file = SPECS / (Path(path).parent.name + ".yaml")
+            if not spec_file.is_file():
+                return self.reply({"error": "unknown spec"}, 404)
+            if not toolchain_ready():
+                return self.reply({"error": "install the toolchain first"}, 400)
+            started = start_job("build", f"spec:{spec_file.stem}", lambda: run_script("build.sh", "spec", str(spec_file)))
+            return self.reply({"started": started})
+        if path.startswith("/api/specs/") and path.endswith("/delete"):
+            spec_file = SPECS / (Path(path).parent.name + ".yaml")
+            spec_file.unlink(missing_ok=True)
+            return self.reply({"ok": True})
         if path == "/api/bulk":
             lines = [str(line) for line in data.get("lines", []) if allowed(str(line))]
             if not lines:

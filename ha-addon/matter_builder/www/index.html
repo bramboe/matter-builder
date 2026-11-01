@@ -127,6 +127,22 @@ textarea.yaml{width:100%;min-height:260px;font:12px/1.5 ui-monospace,Menlo,monos
   </div>
 </div>
 
+<div class="section" id="specSection" hidden>
+  <div class="section-head"><h2 data-t="ownDevices"></h2></div>
+  <div class="grid">
+    <div id="specList" style="display:contents"></div>
+    <div class="card">
+      <h3 id="specEditorTitle" data-t="newDevice"></h3>
+      <div class="sub" data-t="specHelp"></div>
+      <div class="row"><label class="field" style="flex:1"><span data-t="startFrom"></span><select id="specExample"></select></label></div>
+      <textarea class="yaml" id="specText" spellcheck="false"></textarea>
+      <div class="error" id="specError" hidden></div>
+      <div class="notice" id="specNotice" hidden></div>
+      <div class="actions"><button id="specCheck" data-t="check"></button><button class="pri" id="specSave" data-t="save"></button></div>
+    </div>
+  </div>
+</div>
+
 <div class="section">
   <div class="section-head"><h2 data-t="allProxies"></h2></div>
   <div class="grid">
@@ -211,6 +227,11 @@ const TEXT = {
     wifiName: 'Network', wifiPassword: 'Password', sendAll: 'Send to all', pageLanguage: 'Language of the pages',
     updateAll: 'Update all', updateAllHelp: 'Every proxy to the newest firmware of its own kind, one after the other; stops at the first problem.',
     result: 'Result',
+    ownDevices: 'Own devices', save: 'Save', newDevice: 'New device', specHelp: 'Describe what is built: name, application and, for a generic device, its connections. Wi-Fi, Thread and passwords are set on the device itself.',
+    startFrom: 'Start from', check: 'Check', specOk: s => `Valid: ${s.name} ${s.version} (${s.app}).`, specSaved: 'Saved.', edit: 'Edit', del: 'Delete',
+    buildThis: 'Build', updateFile: 'Update file', factoryFile: 'For a new ESP32 (USB)', confirmDelete: n => `Delete the spec “${n}”? Built files stay.`,
+    flashHelp: 'A new ESP32: write the USB image with esptool (“write_flash 0x0 file”) or a web flasher; then join its setup network and link it here.',
+    buildingSpec: n => `Building ${n}`,
     readyMade: 'Ready-made firmware', checkReleases: 'Check now', signedRelease: r => `Release ${r}, signature checked.`,
     noReleases: 'No releases yet. Signed, ready-made firmware appears here once the project publishes it. In developer mode you can build it yourself.',
     devTitle: 'Developer mode', devHelp: 'Builds firmware in Home Assistant with fixed versions of ESP-IDF (v5.5.5) and esp-matter (release/v1.6). Nothing personal is built in.',
@@ -248,6 +269,11 @@ const TEXT = {
     wifiName: 'Netwerk', wifiPassword: 'Wachtwoord', sendAll: 'Naar alle sturen', pageLanguage: 'Taal van de pagina’s',
     updateAll: 'Alles bijwerken', updateAllHelp: 'Elke proxy naar de nieuwste firmware van zijn eigen soort, een voor een; stopt bij het eerste probleem.',
     result: 'Resultaat',
+    ownDevices: 'Eigen apparaten', save: 'Opslaan', newDevice: 'Nieuw apparaat', specHelp: 'Beschrijf wat er gebouwd wordt: naam, toepassing en bij een algemeen apparaat de aansluitingen. Wi-Fi, Thread en wachtwoorden stel je op het apparaat zelf in.',
+    startFrom: 'Begin met', check: 'Controleren', specOk: s => `Klopt: ${s.name} ${s.version} (${s.app}).`, specSaved: 'Opgeslagen.', edit: 'Wijzigen', del: 'Verwijderen',
+    buildThis: 'Bouwen', updateFile: 'Updatebestand', factoryFile: 'Voor een nieuwe ESP32 (USB)', confirmDelete: n => `De spec “${n}” verwijderen? Gebouwde bestanden blijven.`,
+    flashHelp: 'Een nieuwe ESP32: schrijf het USB-image met esptool (“write_flash 0x0 bestand”) of een webflasher; verbind daarna met zijn setup-netwerk en koppel hem hier.',
+    buildingSpec: n => `${n} bouwen`,
     readyMade: 'Kant-en-klare firmware', checkReleases: 'Nu controleren', signedRelease: r => `Release ${r}, handtekening gecontroleerd.`,
     noReleases: 'Nog geen releases. Ondertekende, kant-en-klare firmware verschijnt hier zodra het project die publiceert. In de ontwikkelaarsmodus kun je zelf bouwen.',
     devTitle: 'Ontwikkelaarsmodus', devHelp: 'Bouwt firmware in Home Assistant met vaste versies van ESP-IDF (v5.5.5) en esp-matter (release/v1.6). Er gaat niets persoonlijks in.',
@@ -324,7 +350,7 @@ function proxyCard(p) {
       <select id="fw-${p.id}" onchange="chosen['${p.id}'] = this.value">${files.map(f => `<option ${chosen[p.id] === f ? 'selected' : ''}>${esc(f)}</option>`).join('')}</select></label>
       <button class="pri" onclick="updateProxy('${p.id}')" ${state.job.running ? 'disabled' : ''}>${t('update')}</button></div>` : ''}
     ${s && s.auth ? `<div class="actions"><button class="pri" onclick="prefillLink('${esc(p.host)}')">${t('linkAgain')}</button></div>` : ''}
-    <div class="actions">${p.app === 'mb_generic' ? `<button class="pri" onclick="openManage('${p.id}')">${t('manage')}</button>` : ''}
+    <div class="actions">${s && s.io ? `<button class="pri" onclick="openManage('${p.id}')">${t('manage')}</button>` : ''}
       <a class="button text" href="${esc(pageUrl(p.host))}" target="_blank" rel="noopener">${t('openPage')} ↗</a>
       <button class="text" onclick="renameProxy('${p.id}')">${t('rename')}</button>
       <button class="warn" onclick="forgetProxy('${p.id}')">${t('forget')}</button></div>
@@ -359,6 +385,9 @@ function render() {
         <div class="sub mono">${esc(r.file)}</div></div></div>`).join('')
     : `<div class="sub">${t('noReleases')}</div>` + (state.release_error ? `<div class="sub" style="margin-top:6px">${esc(state.release_error)}</div>` : '');
   $('#devCard').hidden = !dev;
+  $('#specSection').hidden = !dev;
+  if (dev && specs) $('#specList').innerHTML = specs.map(specCard).join('');
+  if (dev && !specs) loadSpecs();
   const sys = state.system;
   $('#system').textContent = `${sys.cores} ${t('cores')} · ${gb(sys.memory)} ${t('memory')} · ${gb(sys.disk_free)} ${t('disk')}`;
   $('#systemAdvice').textContent = t('fewCores');
@@ -376,6 +405,8 @@ async function refresh() {
   try { state = await api('api/state'); } catch (e) { return; }
   render();
   if (state.job.kind) loadJob();
+  if (specs && state.settings.dev_mode && !state.job.running && refresh.wasRunning) loadSpecs();
+  refresh.wasRunning = state.job.running;
 }
 
 async function loadStatuses() {
@@ -390,7 +421,8 @@ async function loadJob() {
   const j = await api('api/job');
   $('#jobCard').hidden = false;
   const jobs = TEXT[lang].jobs;
-  $('#jobTitle').textContent = j.kind === 'update' && j.title === 'all' ? jobs.all : j.kind === 'update' ? jobs.update(j.title) : j.kind === 'build' ? jobs.build(j.title) : jobs[j.kind] || j.title;
+  $('#jobTitle').textContent = j.kind === 'build' && j.title.startsWith('spec:') ? t('buildingSpec', j.title.slice(5))
+    : j.kind === 'update' && j.title === 'all' ? jobs.all : j.kind === 'update' ? jobs.update(j.title) : j.kind === 'build' ? jobs.build(j.title) : jobs[j.kind] || j.title;
   $('#jobState').textContent = j.running ? t('running', date(j.started)) : j.ok ? t('done') : t('failed');
   const p = j.progress || {};
   $('#jobBar').hidden = !(j.running && p.total);
@@ -670,6 +702,64 @@ $('#bUpdate').onclick = async () => {
   await api('api/bulk/update', {});
   refresh();
 };
+
+
+// ---------------------------------------------------------------- own devices
+// Specs (YAML) kept in the add-on; built in developer mode into an update
+// file and an image for a new ESP32
+let specs = null, exampleTexts = {};
+
+function specCard(sp) {
+  const latest = list => list.length ? list[list.length - 1] : null;
+  const fw = latest(sp.firmware), factory = latest(sp.factory);
+  return `<div class="card"><h3>${esc(sp.name)}</h3><div class="sub">${esc(sp.app)} · ${esc(sp.version)}</div>
+    ${sp.error ? `<div class="error">${esc(sp.error)}</div>` : ''}
+    ${fw ? `<div class="row"><div class="label">${t('updateFile')}<div class="sub mono">${esc(fw)}</div></div><a class="button text" href="api/download/${encodeURIComponent(fw)}">↓</a></div>` : ''}
+    ${factory ? `<div class="row"><div class="label">${t('factoryFile')}<div class="sub mono">${esc(factory)}</div></div><a class="button text" href="api/download/${encodeURIComponent(factory)}">↓</a></div>
+      <div class="sub">${t('flashHelp')}</div>` : ''}
+    <div class="actions"><button class="pri" onclick="buildSpec('${sp.slug}')" ${sp.error || !state.toolchain || state.job.running ? 'disabled' : ''}>${t('buildThis')}</button>
+      <button class="text" onclick="editSpec('${sp.slug}')">${t('edit')}</button>
+      <button class="warn" onclick="deleteSpec('${sp.slug}', '${esc(sp.name)}')">${t('del')}</button></div></div>`;
+}
+
+async function loadSpecs() {
+  const r = await api('api/specs');
+  specs = r.specs;
+  if (!Object.keys(exampleTexts).length) {
+    exampleTexts = r.examples;
+    $('#specExample').innerHTML = Object.keys(exampleTexts).map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+    if (!$('#specText').value) $('#specText').value = Object.values(exampleTexts)[0] || '';
+  }
+  $('#specList').innerHTML = specs.map(specCard).join('');
+}
+
+function specMessage(error, notice) {
+  $('#specError').hidden = !error; $('#specError').textContent = error || '';
+  $('#specNotice').hidden = !notice; $('#specNotice').textContent = notice || '';
+}
+
+async function postSpec(checkOnly) {
+  const r = await fetch('api/specs', {method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({text: $('#specText').value, check_only: checkOnly})}).then(x => x.json());
+  if (r.error) { specMessage(r.error); return; }
+  specMessage(null, checkOnly ? t('specOk', r.spec) : t('specSaved'));
+  if (!checkOnly) loadSpecs();
+}
+
+async function editSpec(slug) {
+  $('#specText').value = (await api(`api/specs/${slug}`)).text;
+  specMessage();
+  $('#specText').scrollIntoView({behavior: 'smooth', block: 'center'});
+}
+async function buildSpec(slug) { await api(`api/specs/${slug}/build`, {}); refresh(); }
+async function deleteSpec(slug, name) {
+  if (!confirm(t('confirmDelete', name))) return;
+  await api(`api/specs/${slug}/delete`, {});
+  loadSpecs();
+}
+$('#specExample').onchange = () => { $('#specText').value = exampleTexts[$('#specExample').value] || ''; specMessage(); };
+$('#specCheck').onclick = () => postSpec(true);
+$('#specSave').onclick = () => postSpec(false);
 
 $('#checkReleases').onclick = async () => { await api('api/releases/check', {}); refresh(); };
 $('#devMode').onchange = async () => { await api('api/settings', {dev_mode: $('#devMode').checked}); refresh(); };

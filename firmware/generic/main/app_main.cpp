@@ -27,6 +27,17 @@
 extern const char page_start[] asm("_binary_generic_html_gz_start");
 extern const char page_end[] asm("_binary_generic_html_gz_end");
 
+// A device generated from a spec (tools/mb_generate.py) has its name,
+// factory connections and the spec itself built in
+#if __has_include("spec_defaults.h")
+#include <cstring>
+
+#include "spec_defaults.h"
+extern const char spec_start[] asm("_binary_spec_yaml_start");
+extern const char spec_end[] asm("_binary_spec_yaml_end");
+#define HAS_SPEC 1
+#endif
+
 namespace {
 
 std::string cmd_matter(const std::vector<std::string>& args) {
@@ -67,6 +78,26 @@ std::string cmd_language(const std::vector<std::string>& args) {
 
 std::string cmd_json(const std::vector<std::string>&) { return io::state_json(); }
 
+#ifdef HAS_SPEC
+void load_spec_factory() {
+    io::Slot slots[io::SLOTS] = {};
+    const char* names[] = {"none", "relay", "led", "button", "contact", "motion", "sht4x"};
+    for (int i = 0; i < SPEC_CONNECTION_COUNT; ++i) {
+        const SpecConnection& c = SPEC_CONNECTIONS[i];
+        if (c.slot < 0 || c.slot >= io::SLOTS) continue;
+        io::Slot& s = slots[c.slot];
+        for (int t = 0; t < 7; ++t) {
+            if (std::strcmp(c.type, names[t]) == 0) s.type = static_cast<io::Type>(t);
+        }
+        s.pin = static_cast<uint8_t>(c.pin);
+        s.pin2 = static_cast<uint8_t>(c.scl);
+        s.flags = c.inverted ? io::INVERTED : 0;
+        std::strncpy(s.name, c.name, sizeof(s.name) - 1);
+    }
+    io::set_factory(slots, SPEC_NAME);
+}
+#endif
+
 // BOOT held 5-10 s: forget the page password and open the setup access
 // point, so the owner can choose a new one with the device in hand
 void recovery() {
@@ -88,6 +119,12 @@ extern "C" void app_main() {
     app.vendor_name = "Matter Builder";
     app.product_name = "Matter Builder device";
     app.hostname = "matter-builder";
+#ifdef HAS_SPEC
+    app.hostname = SPEC_SLUG;
+    app.spec_start = spec_start;
+    app.spec_end = spec_end;
+    load_spec_factory();
+#endif
     app.ap_prefix = "Matter-Builder";
     app.page_gz_start = page_start;
     app.page_gz_end = page_end;

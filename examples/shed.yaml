@@ -1,0 +1,17 @@
+# A generic device: what is connected is a factory setting here, and can
+# still be changed on the device's own page. Wi-Fi, Thread and the password
+# are set there too, never in this file.
+device:
+  name: Shed
+  app: generic
+  board: esp32-c6
+  version: 0.1.0
+
+connections:
+  - { slot: 0, type: relay, pin: 4, name: Pump }
+  - { slot: 1, type: contact, pin: 5, name: Door }
+  - slot: 2
+    type: sht4x
+    pin: 6
+    scl: 7
+    name: Climate

@@ -40,6 +40,10 @@ struct Listener {
 
 void set_listener(const Listener& listener);
 
+// The factory setting from the device spec (tools/mb_generate.py): used while
+// nothing has been set on the page yet. Call before start().
+void set_factory(const Slot* slots, const char* name);
+
 // Loads the connections (the draft during a trial) and starts the pins
 void start();
 

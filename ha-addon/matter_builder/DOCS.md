@@ -33,6 +33,15 @@ signed by the project; the add-on checks the signature against the key it
 ships with and the hash of every image before installing anything. A release
 that does not match is ignored.
 
+## Own devices (developer mode)
+
+Describe a device in YAML: its name, the application (generic or the Octo
+bridge) and, for a generic device, its connections as factory setting.
+Wi-Fi, Thread and passwords are never in the spec: they are set on the
+device's own page. *Build* generates the project (tools/mb_generate.py) and
+produces an update file and an image for a new ESP32 over USB. The spec is
+built into the firmware (GET /spec), so adopting the device recovers it.
+
 ## Developer mode
 
 Developer mode builds firmware inside Home Assistant, with fixed versions of

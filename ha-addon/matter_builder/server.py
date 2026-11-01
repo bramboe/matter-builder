@@ -374,8 +374,8 @@ def releases_repo():
         return DEFAULT_RELEASES_REPO
 
 
-def download(url, timeout=60):
-    req = urllib.request.Request(url, headers={"Accept": "application/octet-stream", "User-Agent": "matter-builder"})
+def download(url, timeout=60, accept="application/octet-stream"):
+    req = urllib.request.Request(url, headers={"Accept": accept, "User-Agent": "matter-builder"})
     with urllib.request.urlopen(req, timeout=timeout) as reply:
         return reply.read()
 
@@ -394,7 +394,8 @@ def check_releases():
     """The latest release: only kept when its manifest's signature is valid."""
     repo = releases_repo()
     try:
-        info = json.loads(download(f"https://api.github.com/repos/{repo}/releases/latest", 20))
+        info = json.loads(download(f"https://api.github.com/repos/{repo}/releases/latest", 20,
+                                     accept="application/vnd.github+json"))
         assets = {a["name"]: a["browser_download_url"] for a in info.get("assets", [])}
         manifest = download(assets["manifest.json"])
         signature = download(assets["manifest.json.sig"])

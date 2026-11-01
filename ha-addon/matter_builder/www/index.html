@@ -1284,7 +1284,10 @@ class SettingsEditor {
     try {
       const values = this.mode === 'yaml' ? this.check(this.fromYaml(this.yaml)) : this.check(this.values);
       const changed = Object.keys(values).filter(k => String(values[k]) !== String(this.saved[k]));
-      for (const k of changed) await proxyCommand(this.proxy, `settings set ${k} ${values[k]}`);
+      for (const k of changed) {
+        const reply = (await proxyCommand(this.proxy, `settings set ${k} ${values[k]}`)).trim();
+        if (/^error/i.test(reply)) throw new Error(reply.replace(/^error:\s*/i, ''));
+      }
       Object.assign(this.saved, values); Object.assign(this.values, values);
       this.notice = changed.length ? t('settingsSaved') : '';
       this.dirty = false;

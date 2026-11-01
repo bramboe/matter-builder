@@ -23,12 +23,9 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "http_api.h"
-#include "secrets.h"
+#include "mb_core.h"
 #include "thread_dataset.h"
 
-#ifndef OCTO_HTTP_TOKEN
-#define OCTO_HTTP_TOKEN ""  // the password is chosen on the settings page
-#endif
 
 namespace net {
 
@@ -61,7 +58,7 @@ void on_attach_limit(void*) {
 void on_attached() {
     attached = true;
     ESP_LOGI(TAG, "Attached to the Thread network");
-    http_api::start(OCTO_HTTP_TOKEN);
+    http_api::start(mb_core::app().http_token_fallback);
 }
 
 void on_device_event(const chip::DeviceLayer::ChipDeviceEvent* event, intptr_t) {
@@ -78,7 +75,7 @@ void on_device_event(const chip::DeviceLayer::ChipDeviceEvent* event, intptr_t) 
 }
 
 // Runs in the Matter thread. Joins the network from the settings page (or
-// secrets.h) unless the bridge already has that dataset.
+// the app) unless the bridge already has that dataset.
 void provision(intptr_t) {
     uint8_t tlvs[chip::Thread::kSizeOperationalDataset];
     const char* source = "none";

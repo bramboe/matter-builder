@@ -117,7 +117,8 @@ summary::after{content:"";margin-left:auto;margin-right:6px;width:8px;height:8px
       <div class="sub warnText" id="systemAdvice" hidden></div>
       <div class="row"><div class="label">Toolchain<div class="sub" id="toolchainText"></div></div>
         <button id="toolchainBtn" data-t="install"></button></div>
-      <div class="actions"><button class="pri" id="buildBtn" data-t="build"></button></div>
+      <div class="actions"><button class="pri" id="buildBtn" data-t="build"></button>
+        <button class="pri" id="buildGenericBtn" data-t="buildGeneric"></button></div>
       <div id="builds" style="margin-top:8px"></div>
     </div>
     <div class="card" id="jobCard" hidden>
@@ -158,9 +159,10 @@ const TEXT = {
     host: 'This host', cores: 'cores', memory: 'GB memory', disk: 'GB free',
     fewCores: 'Few cores or little memory: the first build takes an hour or more. More cores for the Home Assistant machine help most (about 1.5 GB memory per core).',
     toolchainReady: 'Ready', toolchainMissing: 'Not installed: about 6 GB, 15 minutes or more. Not included in backups.',
-    install: 'Install', build: 'Build Octo bridge (ESP32-C6)', ownBuilds: 'Own builds',
+    install: 'Install', build: 'Build Octo bridge (ESP32-C6)', buildGeneric: 'Build generic device (ESP32-C6)', ownBuilds: 'Own builds',
+    apps: {octo_bridge: 'Octo bed bridge', mb_generic: 'Generic device'}, nothingConnected: 'Nothing connected yet',
     log: 'Log', running: t => `Running since ${t}`, done: 'Done.', failed: 'Failed: see the log.', step: (d, t) => `Step ${d} of ${t}`,
-    jobs: {toolchain: 'Installing the toolchain', build: 'Building firmware', update: n => `Updating ${n}`},
+    jobs: {toolchain: 'Installing the toolchain', build: a => a === 'generic' ? 'Building the generic device' : 'Building the Octo bridge', update: n => `Updating ${n}`},
   },
   nl: {
     devMode: 'Ontwikkelaarsmodus', introTitle: 'Welkom',
@@ -184,9 +186,10 @@ const TEXT = {
     host: 'Deze host', cores: 'kernen', memory: 'GB geheugen', disk: 'GB vrij',
     fewCores: 'Weinig kernen of geheugen: de eerste build duurt een uur of langer. Meer kernen voor de Home Assistant-machine helpt het meest (ongeveer 1,5 GB geheugen per kern).',
     toolchainReady: 'Klaar', toolchainMissing: 'Niet geïnstalleerd: ongeveer 6 GB, 15 minuten of langer. Gaat niet mee in back-ups.',
-    install: 'Installeren', build: 'Octo-bridge bouwen (ESP32-C6)', ownBuilds: 'Eigen builds',
+    install: 'Installeren', build: 'Octo-bridge bouwen (ESP32-C6)', buildGeneric: 'Generiek apparaat bouwen (ESP32-C6)', ownBuilds: 'Eigen builds',
+    apps: {octo_bridge: 'Octo-bedbridge', mb_generic: 'Generiek apparaat'}, nothingConnected: 'Nog niets aangesloten',
     log: 'Log', running: t => `Bezig sinds ${t}`, done: 'Klaar.', failed: 'Mislukt: zie het log.', step: (d, t) => `Stap ${d} van ${t}`,
-    jobs: {toolchain: 'Toolchain installeren', build: 'Firmware bouwen', update: n => `${n} bijwerken`},
+    jobs: {toolchain: 'Toolchain installeren', build: a => a === 'generic' ? 'Generiek apparaat bouwen' : 'Octo-bridge bouwen', update: n => `${n} bijwerken`},
   },
 };
 let lang = 'en';
@@ -216,16 +219,21 @@ function summary(s) {
   if (!s.ok && s.auth) return `<div class="sub warnText">${t('keyRejected')}</div>`;
   if (!s.ok) return `<div class="sub"><span class="dot"></span>${t('unreachable')}: ${esc(s.error)}</div>`;
   const lines = s.system.split('\n');
-  const version = ((lines[0] || '').match(/octo_bridge (\S+)/) || [])[1] || '?';
+  const [, app, version] = (lines[0] || '').match(/: (\S+) (\S+) \(/) || [null, '', '?'];
   const net = lines.find(l => /^(thread|wifi|configuration mode)/.test(l)) || '';
   const beds = s.beds.split('\n').map(l => l.match(/bed \d '([^']*)' \S+: (\w+)/)).filter(Boolean)
     .map(m => `<div class="row"><div class="label">${esc(m[1])}</div><div class="sub"><span class="dot ${m[2] === 'ready' ? 'ok' : ''}"></span>${m[2] === 'ready' ? t('connected') : esc(m[2])}</div></div>`).join('');
-  return `<div class="row"><div class="label">${t('firmware')}</div><div>${esc(version)}</div></div>
-    <div class="row"><div class="label">${t('network')}</div><div class="sub">${esc(net.split(',').slice(0, 2).join(','))}</div></div>${beds}`;
+  const io = s.io ? s.io.slots.filter(c => c.type !== 'none').map(c => `<div class="row"><div class="label">${esc(c.name)}</div>
+      <div class="sub">${esc(c.type)}${c.temperature !== undefined ? ` · ${c.temperature.toFixed(1)} °C · ${c.humidity.toFixed(0)} %` : ''}</div></div>`).join('')
+    || `<div class="row"><div class="sub">${t('nothingConnected')}</div></div>` : '';
+  return `<div class="row"><div class="label">${t('firmware')}</div><div>${esc((TEXT[lang].apps[app] || app) + ' ' + version)}</div></div>
+    <div class="row"><div class="label">${t('network')}</div><div class="sub">${esc(net.split(',').slice(0, 2).join(','))}</div></div>${beds}${io}`;
 }
 
-function firmwareFiles() {
-  return [...state.releases.map(r => r.file), ...(state.settings.dev_mode ? state.builds.map(b => b.file) : [])];
+// Only firmware of the proxy's own application (octo_bridge-…, mb_generic-…)
+function firmwareFiles(p) {
+  const files = [...state.releases.map(r => r.file), ...(state.settings.dev_mode ? state.builds.map(b => b.file) : [])];
+  return p.app ? files.filter(f => f.startsWith(p.app + '-')) : files;
 }
 
 function pageUrl(host) {
@@ -235,7 +243,7 @@ function pageUrl(host) {
 
 function proxyCard(p) {
   const s = statuses[p.id];
-  const files = firmwareFiles();
+  const files = firmwareFiles(p);
   const token = shownTokens[p.id];
   return `<div class="card">
     <div class="tile"><div class="icon">${CHIP}</div><div class="info"><h3>${esc(p.name)}</h3>
@@ -288,7 +296,7 @@ function render() {
   $('#toolchainText').textContent = state.toolchain ? t('toolchainReady') : t('toolchainMissing');
   $('#toolchainBtn').hidden = state.toolchain;
   $('#toolchainBtn').disabled = state.job.running;
-  $('#buildBtn').disabled = !state.toolchain || state.job.running;
+  $('#buildBtn').disabled = $('#buildGenericBtn').disabled = !state.toolchain || state.job.running;
   $('#builds').innerHTML = state.builds.length ? `<div class="sub" style="margin:8px 0 0">${t('ownBuilds')}</div>` +
     state.builds.map(b => `<div class="row"><div class="label mono">${esc(b.file)}
       <div class="sub">${date(b.date)} · ${(b.size / 2 ** 20).toFixed(2)} MB</div></div></div>`).join('') : '';
@@ -312,7 +320,7 @@ async function loadJob() {
   const j = await api('api/job');
   $('#jobCard').hidden = false;
   const jobs = TEXT[lang].jobs;
-  $('#jobTitle').textContent = j.kind === 'update' ? jobs.update(j.title) : jobs[j.kind] || j.title;
+  $('#jobTitle').textContent = j.kind === 'update' ? jobs.update(j.title) : j.kind === 'build' ? jobs.build(j.title) : jobs[j.kind] || j.title;
   $('#jobState').textContent = j.running ? t('running', date(j.started)) : j.ok ? t('done') : t('failed');
   const p = j.progress || {};
   $('#jobBar').hidden = !(j.running && p.total);
@@ -389,7 +397,8 @@ $('#linkForm').onsubmit = async e => {
   poll();
 };
 $('#toolchainBtn').onclick = async () => { await api('api/toolchain', {}); refresh(); };
-$('#buildBtn').onclick = async () => { await api('api/build', {}); refresh(); };
+$('#buildBtn').onclick = async () => { await api('api/build', {app: 'bridge'}); refresh(); };
+$('#buildGenericBtn').onclick = async () => { await api('api/build', {app: 'generic'}); refresh(); };
 $('#devMode').onchange = async () => { await api('api/settings', {dev_mode: $('#devMode').checked}); refresh(); };
 $('#lang').onchange = () => {
   lang = $('#lang').value;

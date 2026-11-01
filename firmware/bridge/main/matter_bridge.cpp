@@ -23,6 +23,7 @@
 #include "bed_link.h"
 #include "esp_app_desc.h"
 #include "esp_log.h"
+#include "mb_core.h"
 #include "net.h"
 #include "nvs.h"
 #include "setup_code.h"
@@ -51,10 +52,8 @@ constexpr uint16_t REPORT_STEP = 100;  // report position changes of 1 %
 
 const char* NVS_NAMESPACE = "octo_pos";
 
-// What controllers show as manufacturer and model. Vendor and product ID
-// stay the Matter test IDs (0xFFF1/0x8000) that the test certificates need.
-constexpr const char* VENDOR_NAME = "octo-matter";
-constexpr const char* PRODUCT_NAME = "Octo Bed Bridge";
+// Manufacturer and model come from mb_core::App. Vendor and product ID stay
+// the Matter test IDs (0xFFF1/0x8000) that the test certificates need.
 constexpr const char* HARDWARE = "ESP32";
 constexpr const char* BED_VENDOR = "Octo";
 constexpr const char* BED_PRODUCT = "Octo bed";
@@ -95,8 +94,8 @@ class DeviceInfo : public chip::DeviceLayer::Internal::GenericDeviceInstanceInfo
 public:
     DeviceInfo() : GenericDeviceInstanceInfoProvider(chip::DeviceLayer::ConfigurationManagerImpl::GetDefaultInstance()) {}
 
-    CHIP_ERROR GetVendorName(char* buf, size_t size) override { return copy(VENDOR_NAME, buf, size); }
-    CHIP_ERROR GetProductName(char* buf, size_t size) override { return copy(PRODUCT_NAME, buf, size); }
+    CHIP_ERROR GetVendorName(char* buf, size_t size) override { return copy(mb_core::app().vendor_name, buf, size); }
+    CHIP_ERROR GetProductName(char* buf, size_t size) override { return copy(mb_core::app().product_name, buf, size); }
     CHIP_ERROR GetHardwareVersionString(char* buf, size_t size) override { return copy(HARDWARE, buf, size); }
 
 private:
@@ -748,7 +747,7 @@ void start() {
         attribute_t* node_label = attribute::get(0, BasicInformation::Id, BasicInformation::Attributes::NodeLabel::Id);
         if (node_label != nullptr && attribute::get_val(node_label, &root_label) == ESP_OK &&
             root_label.val.a.s == 0) {
-            esp_matter_attr_val_t name = esp_matter_char_str(const_cast<char*>(PRODUCT_NAME), std::strlen(PRODUCT_NAME));
+            esp_matter_attr_val_t name = esp_matter_char_str(const_cast<char*>(mb_core::app().product_name), std::strlen(mb_core::app().product_name));
             attribute::update(0, BasicInformation::Id, BasicInformation::Attributes::NodeLabel::Id, &name);
         }
         for (int i = 0; i < bed_link::MAX_BEDS; ++i) {
@@ -845,39 +844,8 @@ std::string preset_command(const std::vector<std::string>& args) {
     return mode >= MODE_SAVE ? "saved\n" : "OK\n";
 }
 
-std::string open_commissioning_window() {
-    chip::DeviceLayer::PlatformMgr().LockChipStack();
-    auto& manager = chip::Server::GetInstance().GetCommissioningWindowManager();
-    const CHIP_ERROR err = manager.IsCommissioningWindowOpen()
-                               ? CHIP_NO_ERROR
-                               : manager.OpenBasicCommissioningWindow(chip::System::Clock::Seconds32(300));
-    chip::DeviceLayer::PlatformMgr().UnlockChipStack();
-    return err == CHIP_NO_ERROR ? "commissioning window open for 5 minutes\n"
-                                : std::string("could not open the commissioning window: ") + err.AsString() + "\n";
-}
 
-std::string fabrics_text() {
-    std::string out;
-    chip::DeviceLayer::PlatformMgr().LockChipStack();
-    for (const auto& fabric : chip::Server::GetInstance().GetFabricTable()) {
-        const chip::CharSpan label = fabric.GetFabricLabel();
-        char line[96];
-        std::snprintf(line, sizeof(line), "fabric %u: vendor 0x%04X, fabric id 0x%" PRIX64 ", label '%.*s'\n",
-                      fabric.GetFabricIndex(), chip::to_underlying(fabric.GetVendorId()), fabric.GetFabricId(),
-                      static_cast<int>(label.size()), label.data());
-        out += line;
-    }
-    chip::DeviceLayer::PlatformMgr().UnlockChipStack();
-    return out.empty() ? "no fabrics\n" : out;
-}
 
-std::string remove_fabric(unsigned index) {
-    chip::DeviceLayer::PlatformMgr().LockChipStack();
-    const CHIP_ERROR err = chip::Server::GetInstance().GetFabricTable().Delete(static_cast<chip::FabricIndex>(index));
-    chip::DeviceLayer::PlatformMgr().UnlockChipStack();
-    return err == CHIP_NO_ERROR ? "fabric " + std::to_string(index) + " removed\n"
-                                : std::string("could not remove fabric: ") + err.AsString() + "\n";
-}
 
 std::string describe() {
     char qr[64] = {};
@@ -917,73 +885,6 @@ std::string describe() {
     return out + beds_text;
 }
 
-namespace {
 
-std::string json_text(const std::string& text) {
-    std::string out = "\"";
-    for (const char c : text) {
-        if (c == '"' || c == '\\') {
-            out += '\\';
-            out += c;
-        } else if (c == '\n') {
-            out += "\\n";
-        } else if (static_cast<unsigned char>(c) >= 0x20) {
-            out += c;
-        }
-    }
-    return out + "\"";
-}
-
-// Controllers by their Matter vendor ID
-const char* vendor_name(uint16_t vendor_id) {
-    switch (vendor_id) {
-        case 0x1349: return "Apple Home";
-        case 0x134B: return "Home Assistant";
-        case 0x6006: return "Google Home";
-        case 0x1217: return "Amazon Alexa";
-        case 0x110A: return "SmartThings";
-        default: return nullptr;
-    }
-}
-
-}  // namespace
-
-std::string matter_json() {
-    char qr[64] = {};
-    char manual[32] = {};
-    chip::MutableCharSpan qr_span(qr);
-    chip::MutableCharSpan manual_span(manual);
-    const auto flags = chip::RendezvousInformationFlags(chip::RendezvousInformationFlag::kOnNetwork);
-    std::string fabrics;
-
-    chip::DeviceLayer::PlatformMgr().LockChipStack();
-    const bool have_qr = GetQRCode(qr_span, flags) == CHIP_NO_ERROR;
-    const bool have_manual = GetManualPairingCode(manual_span, flags) == CHIP_NO_ERROR;
-    chip::Server& server = chip::Server::GetInstance();
-    const bool window_open = server.GetCommissioningWindowManager().IsCommissioningWindowOpen();
-    for (const auto& fabric : server.GetFabricTable()) {
-        const uint16_t vendor_id = chip::to_underlying(fabric.GetVendorId());
-        const char* vendor = vendor_name(vendor_id);
-        char hex[8];
-        std::snprintf(hex, sizeof(hex), "0x%04X", vendor_id);
-        const chip::CharSpan label = fabric.GetFabricLabel();
-        fabrics += std::string(fabrics.empty() ? "" : ",") + "{\"index\":" + std::to_string(fabric.GetFabricIndex()) +
-                   ",\"vendor\":" + json_text(vendor != nullptr ? vendor : hex) + ",\"vendor_id\":" + json_text(hex) +
-                   ",\"label\":" + json_text(std::string(label.data(), label.size())) + "}";
-    }
-    chip::DeviceLayer::PlatformMgr().UnlockChipStack();
-
-    int qr_size = 0;
-    const std::string path = have_qr ? setup_code::qr_svg_path(qr, qr_size) : "";
-
-    std::string out = "{\"product\":" + json_text(PRODUCT_NAME) + ",\"vendor\":" + json_text(VENDOR_NAME) +
-                      ",\"version\":" + json_text(esp_app_get_description()->version) +
-                      ",\"vid\":\"0xFFF1\",\"pid\":\"0x8000\"";
-    out += ",\"qr\":" + json_text(have_qr ? qr : "") + ",\"manual\":" + json_text(have_manual ? manual : "");
-    out += ",\"qr_size\":" + std::to_string(qr_size) + ",\"qr_path\":" + json_text(path);
-    out += std::string(",\"window_open\":") + (window_open ? "true" : "false");
-    out += ",\"fabrics\":[" + fabrics + "],\"network\":" + json_text(net::describe()) + "}\n";
-    return out;
-}
 
 }  // namespace matter_bridge

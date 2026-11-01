@@ -1,7 +1,8 @@
-// Configuration mode of a Thread bridge (ESP32-C6): one boot on Wi-Fi, for
+// Configuration mode of a Thread device (ESP32-C6): one boot on Wi-Fi, for
 // fast firmware updates and a fast first setup. Thread and Matter stay off;
-// BLE stays on, so beds can be added and calibrated (presets need Matter). The
-// settings page and /ota run on http://octo-bridge.local/.
+// what works without Matter keeps working (the Octo bridge: BLE and its
+// beds). The settings page and /ota run on http://<hostname>.local/ (the
+// app's name, mb_core::App).
 //
 // The mode lasts one boot. The bridge goes back to normal (Thread) after a
 // firmware update, after the given minutes without a command from the page
@@ -11,7 +12,7 @@
 //
 // Without a Wi-Fi network (a new bridge), or when it does not connect and
 // there is no Thread network either, the bridge opens its own open network
-// "Octo-Bridge-XXXX" instead: the page is then at http://192.168.4.1/ and
+// "<ap_prefix>-XXXX" instead: the page is then at http://192.168.4.1/ and
 // phones show it as the network's sign-in page.
 
 #pragma once

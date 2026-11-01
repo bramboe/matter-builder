@@ -6,11 +6,8 @@
 #include <lib/support/ThreadOperationalDataset.h>
 
 #include "nvs.h"
-#include "secrets.h"
+#include "mb_core.h"
 
-#ifndef OCTO_THREAD_DATASET
-#define OCTO_THREAD_DATASET ""  // set on the settings page
-#endif
 
 namespace thread_dataset {
 
@@ -28,6 +25,9 @@ int hex_value(char c) {
 
 // Returns the number of bytes, or 0 when the text is not valid hex.
 size_t parse_hex(const char* text, uint8_t* out, size_t max) {
+    if (text == nullptr) {
+        return 0;
+    }
     const size_t length = std::strlen(text);
     if (length == 0 || length % 2 != 0 || length / 2 > max) {
         return 0;
@@ -95,7 +95,7 @@ size_t wanted(uint8_t* tlvs, size_t max, const char** source) {
         *source = "page";
         return length;
     }
-    length = parse_hex(OCTO_THREAD_DATASET, tlvs, max);
+    length = parse_hex(mb_core::app().thread_dataset_fallback, tlvs, max);
     if (usable(tlvs, length, dataset)) {
         *source = "secrets";
         return length;

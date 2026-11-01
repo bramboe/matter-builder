@@ -1,0 +1,16 @@
+idf_component_register(
+    SRCS "app_main.cpp" "io.cpp" "matter_device.cpp"
+    INCLUDE_DIRS "."
+    REQUIRES mb_core esp_matter nvs_flash esp_driver_gpio esp_driver_ledc esp_driver_i2c esp_timer openthread
+)
+target_compile_options(${COMPONENT_LIB} PRIVATE "-DCHIP_HAVE_CONFIG_H")
+
+# The settings page, sent gzip-compressed: over Thread every kilobyte counts
+set(page "${CMAKE_CURRENT_SOURCE_DIR}/../web/generic.html")
+set(page_gz "${CMAKE_CURRENT_BINARY_DIR}/generic.html.gz")
+add_custom_command(OUTPUT "${page_gz}"
+    COMMAND gzip -9 -n -c "${page}" > "${page_gz}"
+    DEPENDS "${page}"
+    VERBATIM)
+add_custom_target(generic_page_gz DEPENDS "${page_gz}")
+target_add_binary_data(${COMPONENT_LIB} "${page_gz}" BINARY DEPENDS generic_page_gz)

@@ -19,7 +19,10 @@ mkdir -p "$ADDON/src/firmware"
 # shellcheck disable=SC2086  # word splitting of the exclude list is intended
 rsync -a --delete $EXCLUDES "$ROOT/components" "$ADDON/src/"
 # shellcheck disable=SC2086
-rsync -a --delete $EXCLUDES "$ROOT/firmware/bridge" "$ADDON/src/firmware/"
+for app in bridge generic; do
+    # shellcheck disable=SC2086
+    rsync -a --delete $EXCLUDES "$ROOT/firmware/$app" "$ADDON/src/firmware/"
+done
 cp "$ROOT/LICENSE" "$ADDON/src/"
 echo "sources: $(du -sh "$ADDON/src" | cut -f1)"
 

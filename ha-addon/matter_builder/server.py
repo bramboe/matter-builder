@@ -135,10 +135,13 @@ def command(proxy, line, timeout=20):
 
 
 def proxy_name(host, token):
-    """A name from what the proxy knows: its beds ("Alex & Sam")."""
+    """A name from what the proxy knows: its own name, or its beds ("Alex & Sam")."""
     status, text = request(resolve(host) or host, "/cmd", token, b"json")
     try:
-        names = [b["name"] for b in json.loads(text)["beds"] if b.get("configured") and b.get("name")]
+        state = json.loads(text)
+        if "io" in state:
+            return state["io"]["name"]
+        names = [b["name"] for b in state["beds"] if b.get("configured") and b.get("name")]
     except (ValueError, KeyError, TypeError):
         names = []
     return " & ".join(names) if status == 200 and names else host
@@ -150,10 +153,15 @@ def proxy_status(proxy):
         return {"ok": False, "auth": True, "error": "key no longer accepted"}
     if status != 200:
         return {"ok": False, "error": system.strip() or f"HTTP {status}"}
-    _, beds = command(proxy, "status")
-    if not proxy.get("device_id"):
+    _, state = command(proxy, "json")
+    try:
+        state = json.loads(state)
+    except ValueError:
+        state = {}
+    _, beds = command(proxy, "status") if "beds" in state else (0, "")
+    if not proxy.get("device_id") or not proxy.get("app"):
         remember_device_id(proxy)
-    return {"ok": True, "system": system, "beds": beds}
+    return {"ok": True, "system": system, "beds": beds, "io": state.get("io")}
 
 
 def remember_device_id(proxy):
@@ -165,6 +173,7 @@ def remember_device_id(proxy):
     for p in proxies:
         if p["id"] == proxy["id"]:
             p["device_id"] = device["id"]
+            p["app"] = device.get("app")
     save_proxies(proxies)
 
 
@@ -275,9 +284,10 @@ def start_job(kind, title, target):
     return True
 
 
-def run_script(name):
+def run_script(name, *args):
     with JOB_LOG.open("a") as out:
-        result = subprocess.run(["bash", str(HERE / name)], stdout=out, stderr=subprocess.STDOUT, env=os.environ.copy())
+        result = subprocess.run(["bash", str(HERE / name), *args], stdout=out, stderr=subprocess.STDOUT,
+                                env=os.environ.copy())
     log(f"== exit {result.returncode}")
     return result.returncode == 0
 
@@ -483,7 +493,8 @@ def link_poll(link_id):
         links.pop(link_id, None)
         device = device_info(pending["address"]) or {}
         proxy = {"id": secrets.token_hex(4), "name": proxy_name(pending["host"], reply["token"]), "host": pending["host"],
-                 "token": reply["token"], "added": int(time.time()), "device_id": device.get("id")}
+                 "token": reply["token"], "added": int(time.time()), "device_id": device.get("id"),
+                 "app": device.get("app")}
         # Linking again (a new key) replaces the old entry
         proxies = [p for p in load_proxies()
                    if p["host"] != pending["host"] and not (device.get("id") and p.get("device_id") == device["id"])]
@@ -544,7 +555,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path == "/api/state":
             with lock:
                 current = dict(job)
-            proxies = [{k: p[k] for k in ("id", "name", "host", "added")} for p in load_proxies()]
+            proxies = [{k: p.get(k) for k in ("id", "name", "host", "added", "app")} for p in load_proxies()]
             return self.reply({"proxies": proxies, "found": found_unlinked(), "toolchain": toolchain_ready(),
                                "builds": builds(), "job": current,
                                "releases": [], "settings": load_settings(), "system": system_info()})
@@ -588,7 +599,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path == "/api/build":
             if not toolchain_ready():
                 return self.reply({"error": "install the toolchain first"}, 400)
-            started = start_job("build", "Firmware bouwen", lambda: run_script("build.sh"))
+            app = "generic" if data.get("app") == "generic" else "bridge"
+            started = start_job("build", app, lambda: run_script("build.sh", app))
             return self.reply({"started": started})
         parts = path.strip("/").split("/")
         if len(parts) == 4 and parts[:2] == ["api", "proxy"]:
@@ -599,6 +611,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 image = FIRMWARE / Path(str(data.get("file", ""))).name
                 if not image.is_file():
                     return self.reply({"error": "unknown firmware"}, 400)
+                if proxy.get("app") and not image.name.startswith(proxy["app"] + "-"):
+                    return self.reply({"error": "firmware for another application"}, 400)
                 started = start_job("update", f"{proxy['name']} bijwerken", lambda: update_proxy(proxy, image))
                 return self.reply({"started": started})
             if parts[3] == "rename":

@@ -4,7 +4,6 @@
 #include <cstring>
 #include <memory>
 
-#include "bed_link.h"
 #include "boot_guard.h"
 #include "commands.h"
 #include "esp_app_desc.h"
@@ -14,6 +13,7 @@
 #include "esp_ota_ops.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "mb_core.h"
 #include "nvs.h"
 #include "program_access.h"
 
@@ -223,10 +223,8 @@ esp_err_t handle_link_get(httpd_req_t* req) {
     return httpd_resp_sendstr(req, program_access::link_poll(id).c_str());
 }
 
-// The settings page (web/index.html, embedded at build time). It holds no
+// The settings page comes from the app (mb_core::App). It holds no
 // secrets: everything it does goes through /cmd with the token.
-extern const char index_html_start[] asm("_binary_index_html_gz_start");
-extern const char index_html_end[] asm("_binary_index_html_gz_end");
 
 // The page changes only with the firmware, so the firmware's hash is its
 // ETag: a browser that has it gets "304 Not Modified" instead of the page.
@@ -250,7 +248,11 @@ esp_err_t handle_index(httpd_req_t* req) {
     }
     httpd_resp_set_type(req, "text/html; charset=utf-8");
     httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
-    return httpd_resp_send(req, index_html_start, index_html_end - index_html_start);
+    const mb_core::App& app = mb_core::app();
+    if (app.page_gz_start == nullptr) {
+        return httpd_resp_send_404(req);
+    }
+    return httpd_resp_send(req, app.page_gz_start, app.page_gz_end - app.page_gz_start);
 }
 
 void restart_task(void*) {
@@ -279,7 +281,7 @@ esp_err_t handle_ota(httpd_req_t* req) {
     if (req->content_len == 0 || req->content_len > target->size) {
         return ota_fail(req, 0, "image empty or larger than the firmware slot\n");
     }
-    bed_link::run_in_host([] { bed_link::stop_all(); });
+    mb_core::stop();
     ESP_LOGW(TAG, "OTA: writing %u bytes to %s", static_cast<unsigned>(req->content_len), target->label);
 
     std::unique_ptr<char[]> buf(new char[OTA_CHUNK]);

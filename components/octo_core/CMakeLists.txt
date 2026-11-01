@@ -1,9 +1,9 @@
-# Bed links, boot guard, console commands and the HTTP API of the Matter
-# bridge. The app provides net.cpp (see include/net.h).
+# The Octo part of the bridge: bed links over BLE, the bed commands and the
+# settings page. What all apps share is in mb_core.
 idf_component_register(
-    SRCS "program_access.cpp" "bed_link.cpp" "boot_guard.cpp" "commands.cpp" "http_api.cpp"
+    SRCS "bed_link.cpp" "octo_commands.cpp"
     INCLUDE_DIRS "include"
-    REQUIRES octo_protocol bt nvs_flash console esp_timer app_update esp_app_format esp_http_server esp_driver_gpio mbedtls
+    REQUIRES mb_core octo_protocol bt nvs_flash esp_timer
 )
 
 # The settings page is sent gzip-compressed: over Thread every kilobyte counts

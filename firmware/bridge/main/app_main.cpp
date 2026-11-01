@@ -15,28 +15,43 @@
 #include "esp_system.h"
 #include "http_api.h"
 #include "matter_bridge.h"
+#include "matter_info.h"
+#include "mb_core.h"
 #include "net.h"
 #include "nvs_flash.h"
+#include "octo_commands.h"
 #include "program_access.h"
+#include "secrets.h"
 
 #if CONFIG_OPENTHREAD_ENABLED
 #include <platform/ESP32/OpenthreadLauncher.h>
 #endif
 
+#ifndef OCTO_HTTP_TOKEN
+#define OCTO_HTTP_TOKEN ""  // the password is chosen on the settings page
+#endif
+#ifndef OCTO_THREAD_DATASET
+#define OCTO_THREAD_DATASET ""  // set on the settings page
+#endif
+
+// The settings page (octo_core/web/index.html, embedded at build time)
+extern const char index_html_start[] asm("_binary_index_html_gz_start");
+extern const char index_html_end[] asm("_binary_index_html_gz_end");
+
 namespace {
 
 std::string cmd_matter(const std::vector<std::string>& args) {
     if (args.size() == 2 && args[1] == "open") {
-        return matter_bridge::open_commissioning_window();
+        return matter_info::open_commissioning_window();
     }
     if (args.size() == 2 && args[1] == "json") {
-        return matter_bridge::matter_json();
+        return matter_info::matter_json();
     }
     if (args.size() == 2 && args[1] == "fabrics") {
-        return matter_bridge::fabrics_text();
+        return matter_info::fabrics_text();
     }
     if (args.size() == 3 && args[1] == "remove") {
-        return matter_bridge::remove_fabric(static_cast<unsigned>(std::strtoul(args[2].c_str(), nullptr, 10)));
+        return matter_info::remove_fabric(static_cast<unsigned>(std::strtoul(args[2].c_str(), nullptr, 10)));
     }
     return matter_bridge::describe();
 }
@@ -59,6 +74,21 @@ extern "C" void app_main() {
     if (err != ESP_OK) {
         ESP_LOGE("main", "NVS unavailable (%s)", esp_err_to_name(err));
     }
+
+    mb_core::App app = {};
+    app.vendor_name = "octo-matter";
+    app.product_name = "Octo Bed Bridge";
+    app.hostname = "octo-bridge";
+    app.ap_prefix = "Octo-Bridge";
+    app.page_gz_start = index_html_start;
+    app.page_gz_end = index_html_end;
+    app.http_token_fallback = OCTO_HTTP_TOKEN;
+    app.thread_dataset_fallback = OCTO_THREAD_DATASET;
+    app.stop = octo_commands::stop_beds;
+    app.config_mode_start = bed_link::start;  // beds work without Matter
+    app.state_json = octo_commands::state_json;
+    mb_core::init(app);
+    octo_commands::register_all();  // also in configuration mode
 
     boot_guard::early();
     program_access::start(recovery);  // the BOOT button, also in configuration mode

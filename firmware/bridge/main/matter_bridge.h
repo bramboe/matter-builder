@@ -33,18 +33,6 @@ void start();
 // Text for the "matter" console command: pairing codes, fabrics, endpoints.
 std::string describe();
 
-// "matter open": let another controller pair for 5 minutes (multi-admin)
-std::string open_commissioning_window();
-
-// "matter fabrics" / "matter remove <index>": the controllers paired with
-// the bridge, e.g. to drop one that was removed without unpairing
-std::string fabrics_text();
-std::string remove_fabric(unsigned index);
-
-// "matter json": pairing codes (with the QR code as an SVG path), the
-// commissioning window, controllers and network, for the settings page
-std::string matter_json();
-
 // The "preset" console command (also used by the settings page):
 //   preset list                        saved presets and positions as JSON
 //   preset <bed> <flat|1|2|3|match>    move to a preset or the other bed

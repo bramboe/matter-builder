@@ -5,7 +5,6 @@
 #include <cstdlib>
 #include <cstring>
 
-#include "bed_link.h"
 #include "boot_guard.h"
 #include "commands.h"
 #include "esp_app_desc.h"
@@ -19,18 +18,14 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "http_api.h"
+#include "mb_core.h"
 #include "mdns.h"
 #include "nvs.h"
 #include "program_access.h"
 #include "sdkconfig.h"
-#include "secrets.h"
 #include "setup_code.h"
 #include "setup_dns.h"
 #include "thread_dataset.h"
-
-#ifndef OCTO_HTTP_TOKEN
-#define OCTO_HTTP_TOKEN ""  // the password is chosen on the settings page
-#endif
 
 namespace config_mode {
 
@@ -38,7 +33,8 @@ namespace {
 
 const char* TAG = "config";
 const char* NVS_NAMESPACE = "cfgmode";
-const char* HOSTNAME = "octo-bridge";
+// The app's name in configuration mode: <hostname>.local
+const char* hostname() { return mb_core::app().hostname; }
 
 constexpr int DEFAULT_MINUTES = 15;
 constexpr int MAX_MINUTES = 60;
@@ -74,8 +70,7 @@ std::string stored_text(const char* key) {
     return value;
 }
 
-// The network from the settings page. OCTO_WIFI_SSID in secrets.h is not used
-// here: without a network from the page, the bridge opens its setup access point
+// The network from the settings page, never from the firmware itself: without a network from the page, the bridge opens its setup access point
 Network stored_network() {
     Network network;
     network.ssid = stored_text("ssid");
@@ -163,7 +158,7 @@ void start_http() {
     if (!http_started) {
         http_started = true;
         start_mdns();
-        http_api::start(OCTO_HTTP_TOKEN);
+        http_api::start(mb_core::app().http_token_fallback);
     }
 }
 
@@ -173,12 +168,12 @@ bool has_thread_network() {
     return thread_dataset::wanted(tlvs, sizeof(tlvs), &source) > 0;
 }
 
-// "Octo-Bridge-" and the last four hex digits of the access point's MAC
+// The app's prefix and the last four hex digits of the access point's MAC
 std::string setup_ap_name() {
     uint8_t mac[6] = {};
     esp_read_mac(mac, ESP_MAC_WIFI_SOFTAP);
-    char name[24];
-    std::snprintf(name, sizeof(name), "Octo-Bridge-%02X%02X", mac[4], mac[5]);
+    char name[33];
+    std::snprintf(name, sizeof(name), "%.27s-%02X%02X", mb_core::app().ap_prefix, mac[4], mac[5]);
     return name;
 }
 
@@ -233,7 +228,7 @@ void start_mdns() {
         ESP_LOGW(TAG, "mDNS unavailable: use the IP address");
         return;
     }
-    mdns_hostname_set(HOSTNAME);
+    mdns_hostname_set(hostname());
     mdns_instance_name_set("Octo bridge (configuration mode)");
     mdns_service_add(nullptr, "_http", "_tcp", 80, nullptr, 0);
 }
@@ -247,7 +242,7 @@ void on_event(void*, esp_event_base_t base, int32_t id, void* data) {
         esp_wifi_connect();
     } else if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
         esp_ip4addr_ntoa(&static_cast<ip_event_got_ip_t*>(data)->ip_info.ip, ip_text, sizeof(ip_text));
-        ESP_LOGI(TAG, "Wi-Fi connected: http://%s.local/ or http://%s/", HOSTNAME, ip_text);
+        ESP_LOGI(TAG, "Wi-Fi connected: http://%s.local/ or http://%s/", hostname(), ip_text);
         if (!http_started) {
             store("result", "");
             start_http();
@@ -270,11 +265,10 @@ std::string home_host() {
     return home;
 }
 
-// The beds' state plus "config_mode": the settings page shows the beds and
-// a configuration banner, and hides what needs Matter
+// The app's state plus "config_mode": the settings page shows what still
+// works and a configuration banner, and hides what needs Matter
 std::string state_json(const Network& network) {
-    std::string beds;
-    bed_link::run_in_host([&] { beds = bed_link::state_json(); });
+    const std::string app_state = mb_core::app().state_json != nullptr ? mb_core::app().state_json() : "{}";
     wifi_ap_record_t ap = {};
     const bool up = !ap_mode && ip_text[0] != '\0' && esp_wifi_sta_get_ap_info(&ap) == ESP_OK;
     const int64_t now = esp_timer_get_time();
@@ -283,12 +277,17 @@ std::string state_json(const Network& network) {
     out += "\"ssid\":" + json_text(ap_mode ? std::string(ap_ssid) : network.ssid);
     out += ",\"ap\":" + std::string(ap_mode ? "true" : "false");
     out += ",\"ip\":" + json_text(ip_text);
-    out += ",\"host\":" + json_text(std::string(HOSTNAME) + ".local");
+    out += ",\"host\":" + json_text(std::string(hostname()) + ".local");
     out += ",\"home\":" + json_text(home_host());
     out += ",\"rssi\":" + std::to_string(up ? ap.rssi : 0);
     out += ",\"remaining\":" + std::to_string(until > now ? (until - now) / 1000000 : 0);
     out += ",\"version\":" + json_text(esp_app_get_description()->version);
-    out += "}," + beds.substr(1);  // beds is "{...}"
+    out += "}";
+    if (app_state.size() > 2) {
+        out += "," + app_state.substr(1);  // app_state is "{...}"
+    } else {
+        out += "}";
+    }
     return out;
 }
 
@@ -326,7 +325,7 @@ std::string command_in_config_mode(const std::vector<std::string>& args) {
                (ip_text[0] ? ip_text : "-") + "\n";
     }
     if (cmd == "wifi" && args.size() == 2 && args[1] == "exit") {
-        bed_link::run_in_host([] { bed_link::stop_all(); });
+        mb_core::stop();
         restart_in_background();
         return "back to normal (Thread)\n";
     }
@@ -390,8 +389,10 @@ void run() {
     ESP_ERROR_CHECK(esp_timer_start_periodic(timer, CHECK_INTERVAL_US));
     set_command_override(command_in_config_mode);
 
-    // The beds stay usable: adding, calibrating and presets need no Matter
-    bed_link::start();
+    // What works without Matter keeps working (the Octo bridge: its beds)
+    if (mb_core::app().config_mode_start != nullptr) {
+        mb_core::app().config_mode_start();
+    }
 
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
@@ -450,7 +451,7 @@ std::string command(const std::vector<std::string>& args) {
                ",\"skipped\":" + (stored_text("skip").empty() ? "false" : "true") +
                ",\"last_result\":" + json_text(stored_text("result")) +
                ",\"minutes\":" + std::to_string(DEFAULT_MINUTES) +
-               ",\"host\":" + json_text(std::string(HOSTNAME) + ".local") + "}";
+               ",\"host\":" + json_text(std::string(hostname()) + ".local") + "}";
     }
     if (args.size() >= 2 && args[1] == "config") {
         int minutes = args.size() == 3 ? std::atoi(args[2].c_str()) : DEFAULT_MINUTES;
@@ -460,14 +461,14 @@ std::string command(const std::vector<std::string>& args) {
         if (!request(minutes)) {
             return "storing failed\n";
         }
-        bed_link::run_in_host([] { bed_link::stop_all(); });
+        mb_core::stop();
         restart_in_background();
         if (network.ssid.empty()) {
             return "restarting in configuration mode on the setup access point '" + setup_ap_name() +
                    "', back after " + std::to_string(minutes) + " idle minutes: http://192.168.4.1/\n";
         }
         return "restarting in configuration mode on Wi-Fi '" + network.ssid + "', back after " +
-               std::to_string(minutes) + " idle minutes: http://" + HOSTNAME + ".local/\n";
+               std::to_string(minutes) + " idle minutes: http://" + hostname() + ".local/\n";
     }
     return "wifi: '" + network.ssid + "' (" + network.source + ")" +
            (network.password.empty() ? ", no password" : ", password set") + "\n";

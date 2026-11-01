@@ -90,7 +90,9 @@ void provision(intptr_t) {
         return;
     }
     chip::Thread::OperationalDataset wanted;
-    wanted.Init(chip::ByteSpan(tlvs, length));
+    if (wanted.Init(chip::ByteSpan(tlvs, length)) != CHIP_NO_ERROR) {
+        return;  // thread_dataset::wanted() only returns valid datasets
+    }
     chip::Thread::OperationalDataset current;
     if (thread.IsThreadProvisioned() && thread.GetThreadProvision(current) == CHIP_NO_ERROR &&
         current.AsByteSpan().data_equal(wanted.AsByteSpan())) {

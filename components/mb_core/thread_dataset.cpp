@@ -124,10 +124,12 @@ std::string command(const std::vector<std::string>& args) {
     uint16_t pan_id = 0;
     if (length > 0) {
         chip::Thread::OperationalDataset dataset;
-        dataset.Init(chip::ByteSpan(tlvs, length));
-        dataset.GetNetworkName(name);
-        dataset.GetChannel(channel);
-        dataset.GetPanId(pan_id);
+        if (dataset.Init(chip::ByteSpan(tlvs, length)) == CHIP_NO_ERROR) {
+            // Missing fields keep their empty defaults
+            (void) dataset.GetNetworkName(name);
+            (void) dataset.GetChannel(channel);
+            (void) dataset.GetPanId(pan_id);
+        }
     }
     if (args.size() == 2 && args[1] == "json") {
         char pan[8];

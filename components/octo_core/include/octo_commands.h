@@ -14,6 +14,9 @@ void register_all();
 // The beds' state for the settings page ("json")
 std::string state_json();
 
+// The Matter endpoints exist: changing the number of beds now restarts
+void matter_started();
+
 // Stop every motor: before a restart or a firmware update
 void stop_beds();
 

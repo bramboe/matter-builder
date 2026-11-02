@@ -124,6 +124,7 @@ extern "C" void app_main() {
     set_openthread_platform_config(&thread_config);
 #endif
     matter_bridge::start();
+    octo_commands::matter_started();
     net::start();
     add_command("preset", "preset list | preset <0|1> <flat|1-3|match> | preset <0|1> save <1-3>\n",
                 matter_bridge::preset_command);

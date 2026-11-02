@@ -242,9 +242,8 @@ const TEXT = {
     discovered: 'Discovered',
     searching: 'Looking for Octo beds… Turn off the OCTO app and other bridges: a bed only shows up while nothing else is connected to it.',
     octoBed: 'Octo bed', name: 'Name', namePlaceholder: 'e.g. Sam', bedPin: 'PIN of the bed',
-    pinStored: 'The PIN is only stored on the ESP.', cancel: 'Cancel', add: 'Add', maxBeds: n => n > 1 ? `At most ${n} beds` : 'Set to 1 bed',
-    maxBedsHelp: n => n > 1 ? `At most ${n} beds: remove one first.` : 'This bridge is set to 1 bed. For a second bed:', secondBed: 'Use 2 beds',
-    secondBedConfirm: 'Restart with room for a second bed? The bed is away from Home Assistant for a moment.', giveName: 'Give the bed a name.', pinDigits: 'The PIN has 4 digits.',
+    pinStored: 'The PIN is only stored on the ESP.', cancel: 'Cancel', add: 'Add', maxBeds: n => `At most ${n} beds`,
+    maxBedsHelp: n => `At most ${n} beds: remove one first.`, giveName: 'Give the bed a name.', pinDigits: 'The PIN has 4 digits.',
     newName: 'New name', confirmRemove: n => `Remove ${n}? The bridge disconnects and forgets the PIN.`,
     configMode: 'Configuration mode', configHelp: 'For a firmware update: the bridge restarts on Wi-Fi for 15 minutes, with Thread, Matter and the beds off. Then it goes back by itself.',
     wifiNetwork: 'Wi-Fi network', wifiPassword: 'Wi-Fi password', wifiPassKeep: 'saved, leave empty to keep', saved: 'Saved',
@@ -295,9 +294,8 @@ const TEXT = {
     discovered: 'Ontdekt',
     searching: 'Zoeken naar Octo-bedden… Zet de OCTO-app en andere bridges uit: een bed is alleen zichtbaar als niets anders ermee verbonden is.',
     octoBed: 'Octo-bed', name: 'Naam', namePlaceholder: 'bijv. Sam', bedPin: 'PIN van het bed',
-    pinStored: 'De PIN wordt alleen op de ESP opgeslagen.', cancel: 'Annuleren', add: 'Toevoegen', maxBeds: n => n > 1 ? `Maximaal ${n} bedden` : 'Ingesteld op 1 bed',
-    maxBedsHelp: n => n > 1 ? `Maximaal ${n} bedden: verwijder er eerst één.` : 'Deze bridge staat op 1 bed. Voor een tweede bed:', secondBed: '2 bedden gebruiken',
-    secondBedConfirm: 'Herstarten met ruimte voor een tweede bed? Het bed is even weg uit Home Assistant.', giveName: 'Geef het bed een naam.', pinDigits: 'De PIN heeft 4 cijfers.',
+    pinStored: 'De PIN wordt alleen op de ESP opgeslagen.', cancel: 'Annuleren', add: 'Toevoegen', maxBeds: n => `Maximaal ${n} bedden`,
+    maxBedsHelp: n => `Maximaal ${n} bedden: verwijder er eerst één.`, giveName: 'Geef het bed een naam.', pinDigits: 'De PIN heeft 4 cijfers.',
     newName: 'Nieuwe naam', confirmRemove: n => `${n} verwijderen? De bridge verbreekt de verbinding en vergeet de PIN.`,
     configMode: 'Configuratiemodus', configHelp: 'Voor een firmware-update: de bridge herstart 15 minuten op Wi-Fi, met Thread, Matter en de bedden uit. Daarna gaat hij vanzelf terug.',
     wifiNetwork: 'Wi-Fi-netwerk', wifiPassword: 'Wi-Fi-wachtwoord', wifiPassKeep: 'opgeslagen, leeg laten om te houden', saved: 'Opgeslagen',
@@ -348,9 +346,8 @@ const TEXT = {
     discovered: 'Entdeckt',
     searching: 'Suche nach Octo-Betten… Schalten Sie die OCTO-App und andere Bridges aus: Ein Bett ist nur sichtbar, solange nichts anderes damit verbunden ist.',
     octoBed: 'Octo-Bett', name: 'Name', namePlaceholder: 'z. B. Sam', bedPin: 'PIN des Bettes',
-    pinStored: 'Die PIN wird nur auf dem ESP gespeichert.', cancel: 'Abbrechen', add: 'Hinzufügen', maxBeds: n => n > 1 ? `Höchstens ${n} Betten` : 'Auf 1 Bett eingestellt',
-    maxBedsHelp: n => n > 1 ? `Höchstens ${n} Betten: entfernen Sie zuerst eins.` : 'Diese Bridge ist auf 1 Bett eingestellt. Für ein zweites Bett:', secondBed: '2 Betten verwenden',
-    secondBedConfirm: 'Mit Platz für ein zweites Bett neu starten? Das Bett ist kurz nicht in Home Assistant.', giveName: 'Geben Sie dem Bett einen Namen.', pinDigits: 'Die PIN hat 4 Ziffern.',
+    pinStored: 'Die PIN wird nur auf dem ESP gespeichert.', cancel: 'Abbrechen', add: 'Hinzufügen', maxBeds: n => `Höchstens ${n} Betten`,
+    maxBedsHelp: n => `Höchstens ${n} Betten: entfernen Sie zuerst eins.`, giveName: 'Geben Sie dem Bett einen Namen.', pinDigits: 'Die PIN hat 4 Ziffern.',
     newName: 'Neuer Name', confirmRemove: n => `${n} entfernen? Die Bridge trennt die Verbindung und vergisst die PIN.`,
     configMode: 'Konfigurationsmodus', configHelp: 'Für ein Firmware-Update: Die Bridge startet für 15 Minuten im WLAN neu, Thread, Matter und die Betten sind dann aus. Danach wechselt sie von selbst zurück.',
     wifiNetwork: 'WLAN-Netz', wifiPassword: 'WLAN-Passwort', wifiPassKeep: 'gespeichert, leer lassen zum Behalten', saved: 'Gespeichert',
@@ -401,9 +398,8 @@ const TEXT = {
     discovered: 'Descubiertas',
     searching: 'Buscando camas Octo… Apague la app OCTO y otros puentes: una cama solo aparece mientras nada más está conectado a ella.',
     octoBed: 'Cama Octo', name: 'Nombre', namePlaceholder: 'p. ej. Sam', bedPin: 'PIN de la cama',
-    pinStored: 'El PIN solo se guarda en el ESP.', cancel: 'Cancelar', add: 'Añadir', maxBeds: n => n > 1 ? `Como máximo ${n} camas` : 'Configurado para 1 cama',
-    maxBedsHelp: n => n > 1 ? `Como máximo ${n} camas: elimine una primero.` : 'Este puente está configurado para 1 cama. Para una segunda cama:', secondBed: 'Usar 2 camas',
-    secondBedConfirm: '¿Reiniciar con espacio para una segunda cama? La cama desaparece un momento de Home Assistant.', giveName: 'Ponga un nombre a la cama.', pinDigits: 'El PIN tiene 4 cifras.',
+    pinStored: 'El PIN solo se guarda en el ESP.', cancel: 'Cancelar', add: 'Añadir', maxBeds: n => `Como máximo ${n} camas`,
+    maxBedsHelp: n => `Como máximo ${n} camas: elimine una primero.`, giveName: 'Ponga un nombre a la cama.', pinDigits: 'El PIN tiene 4 cifras.',
     newName: 'Nuevo nombre', confirmRemove: n => `¿Eliminar ${n}? El puente se desconecta y olvida el PIN.`,
     configMode: 'Modo de configuración', configHelp: 'Para actualizar el firmware: el puente se reinicia 15 minutos en Wi-Fi, con Thread, Matter y las camas apagados. Después vuelve solo.',
     wifiNetwork: 'Red Wi-Fi', wifiPassword: 'Contraseña Wi-Fi', wifiPassKeep: 'guardada, deja vacío para mantenerla', saved: 'Guardado',
@@ -606,11 +602,15 @@ function bedSection(b) {
 // not added yet, each with "Add". A bed takes the first free slot.
 let adding = null;  // address of the bed whose add form is open
 
+// The slot a new bed takes: a free one, or the next one up to two beds (the
+// bridge then serves one more bed)
+const freeSlot = () => state.beds.find(b => !b.configured) || (state.beds.length < 2 ? {index: state.beds.length} : null);
+
 function discoveredSection() {
   const added = state.beds.filter(b => b.configured).map(b => b.mac);
   const found = state.scan.filter(s => (s.octo || s.name === 'RC2') && s.seen < 120 && !added.includes(s.address))
     .sort((a, b) => b.rssi - a.rssi);
-  const free = state.beds.find(b => !b.configured);
+  const free = freeSlot();
   if (!found.length) {
     return added.length ? '' : `<div class="section"><div class="section-head"><h2>${t('discovered')}</h2></div>
       <div class="card"><div class="sub">${t('searching')}</div></div></div>`;
@@ -630,13 +630,12 @@ function discoveredSection() {
       <div class="info"><div class="name">${t('octoBed')}${s.name ? ' (' + esc(s.name) + ')' : ''}</div>
       <div class="state">${s.address} · ${s.rssi} dBm</div></div></div>
       ${s.rssi < -88 ? `<div class="sub" style="margin-top:8px;color:var(--bad)">${t('weakSignal')}</div>` : ''}${form}</div>`;
-  }).join('')}</div>${free ? '' : `<div class="sub" style="margin:8px 4px">${t('maxBedsHelp', state.beds.length)}
-    ${state.beds.length < 2 ? `<button class="text" onclick="if (confirm('${quote(t('secondBedConfirm'))}')) run('settings set beds 2')">${t('secondBed')}</button>` : ''}</div>`}</div>`;
+  }).join('')}</div>${free ? '' : `<div class="sub" style="margin:8px 4px">${t('maxBedsHelp', state.beds.length)}</div>`}</div>`;
 }
 
 async function addBed(mac) {
   const name = $('#addName').value.trim(), pin = $('#addPin').value.trim();
-  const free = state.beds.find(b => !b.configured);
+  const free = freeSlot();
   if (!name) { toast(t('giveName')); return; }
   if (!/^\d{4}$/.test(pin)) { toast(t('pinDigits')); return; }
   if (!free) { toast(t('maxBeds', state.beds.length)); return; }

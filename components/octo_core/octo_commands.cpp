@@ -47,6 +47,25 @@ std::string rest(const Args& args, size_t first) {
     return text;
 }
 
+bool matter_running = false;  // set once the bridge made its Matter endpoints
+
+void restart_soon(void*) {
+    vTaskDelay(pdMS_TO_TICKS(500));  // let the reply go out first
+    esp_restart();
+}
+
+// Store the number of beds. With Matter running its endpoints are made at
+// start, so the bridge restarts; in configuration mode it takes effect now.
+// Returns what to add to the reply: ", restarting" or nothing.
+std::string use_beds(int count) {
+    if (matter_running) {
+        xTaskCreate(restart_soon, "restart", 2048, nullptr, 5, nullptr);
+        return ", restarting";
+    }
+    bed_link::run_in_host([&] { bed_link::set_active_beds(count); });
+    return "";
+}
+
 std::string cmd_bed(const Args& args) {
     int index;
     if (args.size() >= 5 && args[1] == "set" && parse_index(args[2], index)) {
@@ -58,12 +77,16 @@ std::string cmd_bed(const Args& args) {
         if (name.empty()) {
             name = "Bed " + std::to_string(index + 1);
         }
-        if (index >= bed_link::bed_count()) {
-            return "this bridge is set to 1 bed: settings set beds 2 first\n";
-        }
         bool ok = false;
         bed_link::run_in_host([&] { ok = bed_link::configure(index, mac, args[4], name); });
-        return ok ? "stored\n" : "PIN must be 4 digits\n";
+        if (!ok) {
+            return "PIN must be 4 digits\n";
+        }
+        // A bed in the next slot adds it to the beds in use
+        if (index >= bed_link::bed_count() && bed_link::set_bed_count(index + 1)) {
+            return "stored" + use_beds(index + 1) + "\n";
+        }
+        return "stored\n";
     }
     if (args.size() >= 4 && args[1] == "name" && parse_index(args[2], index)) {
         bool ok = false;
@@ -73,6 +96,11 @@ std::string cmd_bed(const Args& args) {
     }
     if (args.size() == 3 && args[1] == "clear" && parse_index(args[2], index)) {
         bed_link::run_in_host([&] { bed_link::clear(index); });
+        // The last slot removed: one bed less in use
+        const int count = bed_link::bed_count();
+        if (index > 0 && index == count - 1 && bed_link::set_bed_count(count - 1)) {
+            return "cleared" + use_beds(count - 1) + "\n";
+        }
         return "cleared\n";
     }
     return "usage: bed set <0|1> <MAC> <PIN> [name] | bed name <0|1> <name> | bed clear <0|1>\n";
@@ -191,11 +219,6 @@ std::string cmd_scan(const Args&) {
 
 std::string cmd_json(const Args&) { return state_json(); }
 
-void restart_soon(void*) {
-    vTaskDelay(pdMS_TO_TICKS(500));  // let the reply go out first
-    esp_restart();
-}
-
 // The bridge's settings, with their schema for the add-on's YAML editor (the
 // same as "settings" in firmware/bridge/package.yaml)
 std::string cmd_settings(const Args& args) {
@@ -210,8 +233,7 @@ std::string cmd_settings(const Args& args) {
         if (args[3].empty() || *end != '\0' || !bed_link::set_bed_count(static_cast<int>(count))) {
             return "error: beds must be 1 or 2\n";
         }
-        xTaskCreate(restart_soon, "restart", 2048, nullptr, 5, nullptr);
-        return "beds " + std::to_string(count) + ", restarting\n";
+        return "beds " + std::to_string(count) + use_beds(static_cast<int>(count)) + "\n";
     }
     return "error: usage: settings json | settings set beds <1|2>\n";
 }
@@ -223,6 +245,8 @@ std::string state_json() {
     bed_link::run_in_host([&] { out = bed_link::state_json(); });
     return out;
 }
+
+void matter_started() { matter_running = true; }
 
 void stop_beds() {
     bed_link::run_in_host([] { bed_link::stop_all(); });
@@ -248,7 +272,7 @@ void register_all() {
     add_command("json", "json                                    state for the settings page\n", cmd_json);
     add_command("settings",
                 "settings json                           settings and their schema\n"
-                "settings set beds <1|2>                 number of beds (restarts)\n",
+                "settings set beds <1|2>                 number of beds (restarts when on Thread)\n",
                 cmd_settings);
 }
 

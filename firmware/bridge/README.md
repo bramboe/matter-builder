@@ -9,9 +9,11 @@ It follows the Home Assistant integration
 [octo-bed](https://github.com/bramboe/octo-bed); the Bluetooth protocol is
 ported from it and kept equal with golden vectors (`test/host`).
 
-One bridge controls one bed, or two with the setting `beds: 2` (in the
-Matter Builder add-on's YAML for the device, *Use 2 beds* on the page, or
-`settings set beds 2`; the bridge restarts). Per bed: head and legs (Window
+One bridge controls one or two beds. It starts with one; adding a second
+bed on the page (or `bed set 1 …`) makes it two, removing it makes it one
+again. The number is also the setting `beds` (the Matter Builder add-on's
+YAML for the device, or `settings set beds <1|2>`). On Thread the bridge
+restarts once for it, since its Matter endpoints are made at start. Per bed: head and legs (Window
 Covering), the light, a stop button and a preset choice (flat, positions 1-3,
 with two beds the same as the other bed, save the current position). Head and legs move together when they
 go the same way, otherwise one after the other. Home Assistant shows the stop

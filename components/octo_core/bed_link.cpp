@@ -252,7 +252,7 @@ void store_save(int index) {
         ESP_LOGE(TAG, "Cannot open NVS");
         return;
     }
-    char key[16];
+    char key[20];
     const Bed& bed = beds[index];
     std::snprintf(key, sizeof(key), "b%dmac", index);
     if (bed.configured) {
@@ -278,14 +278,15 @@ void store_save(int index) {
     nvs_close(nvs);
 }
 
-void store_load() {
+// The stored beds first..last-1
+void store_load(int first, int last) {
     nvs_handle_t nvs;
     if (nvs_open("octo", NVS_READONLY, &nvs) != ESP_OK) {
         return;  // nothing stored yet
     }
-    for (int i = 0; i < active_beds; ++i) {
+    for (int i = first; i < last; ++i) {
         Bed& bed = beds[i];
-        char key[16];
+        char key[20];
         size_t len = sizeof(bed.mac);
         std::snprintf(key, sizeof(key), "b%dmac", i);
         if (nvs_get_blob(nvs, key, bed.mac, &len) != ESP_OK || len != sizeof(bed.mac)) {
@@ -891,9 +892,22 @@ bool set_bed_count(int count) {
     return ok;
 }
 
+void set_active_beds(int count) {
+    count = count < 1 ? 1 : count > MAX_BEDS ? MAX_BEDS : count;
+    for (int i = count; i < active_beds; ++i) {
+        terminate(beds[i], "not in use");  // stays stored
+        beds[i] = Bed{};
+    }
+    const int old = active_beds;
+    active_beds = count;
+    if (count > old) {
+        store_load(old, count);
+    }
+}
+
 void start() {
     active_beds = bed_count();
-    store_load();
+    store_load(0, active_beds);
 #if SOC_BT_CLASSIC_SUPPORTED
     // BLE only: give the classic Bluetooth controller memory back to the heap
     esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);
@@ -966,8 +980,11 @@ Info info(int index) {
 }
 
 bool configure(int index, const uint8_t mac[6], const std::string& pin, const std::string& name) {
-    if (index < 0 || index >= active_beds || !octo::encode_pin(pin)) {
+    if (index < 0 || index >= MAX_BEDS || !octo::encode_pin(pin)) {
         return false;
+    }
+    if (index >= active_beds) {
+        set_active_beds(index + 1);
     }
     Bed& bed = beds[index];
     terminate(bed, "reconfigured");

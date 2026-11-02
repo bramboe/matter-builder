@@ -63,6 +63,11 @@ void on_calibrated(CalibratedCallback callback);
 
 // The functions below must run in the host task (use run_in_host).
 Info info(int index);
+// Beds in use from now on, without a restart (configuration mode, where there
+// are no Matter endpoints yet); bed_count() is not changed
+void set_active_beds(int count);
+// A bed in a slot above the count also raises the beds in use; the caller
+// stores the new count
 bool configure(int index, const uint8_t mac[6], const std::string& pin, const std::string& name);
 // A new name without reconnecting; the PIN stays.
 bool rename(int index, const std::string& name);

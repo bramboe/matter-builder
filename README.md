@@ -86,6 +86,12 @@ before it installs anything.
 | Add-on 0.15.0 | Devices, Catalog and Configs tabs; visual and YAML editor; flashing on the Home Assistant host; adding a device to Home Assistant |
 | Catalog | Built nightly on GitHub Pages from repositories with the topic `matter-builder-package` |
 
+## Support
+
+If this project is useful to you, consider sponsoring my work 💙
+
+[![Sponsor on GitHub](https://img.shields.io/badge/Sponsor-GitHub-EA4AAA?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/bramboe) [![Donate via bunq.me](https://img.shields.io/badge/Donate-bunq.me-2E9AD0)](https://bunq.me/bramboe)
+
 ## License
 
 MIT

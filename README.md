@@ -1,5 +1,7 @@
 # Matter Builder
 
+[![Sponsor on GitHub](https://img.shields.io/badge/Sponsor-GitHub-EA4AAA?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/bramboe?frequency=one-time) [![Donate via bunq.me](https://img.shields.io/badge/Donate-bunq.me-2E9AD0)](https://bunq.me/bramboe)
+
 ESP32 devices as standard **Matter** devices, over Thread or Wi-Fi, set up
 like ESPHome but without a Home Assistant integration of their own: they work
 in Home Assistant, Apple Home and Google Home at the same time, and keep
@@ -85,12 +87,6 @@ before it installs anything.
 | Generic device 0.1.4 (not released) | Tested on an ESP32-C6: pairing over Bluetooth (paired with a phone, then stable with two controllers and Bluetooth presence next to it; 174 KB free with pairing on, 199 KB off), components build |
 | Add-on 0.15.0 | Devices, Catalog and Configs tabs; visual and YAML editor; flashing on the Home Assistant host; adding a device to Home Assistant |
 | Catalog | Built nightly on GitHub Pages from repositories with the topic `matter-builder-package` |
-
-## Support
-
-If this project is useful to you, consider sponsoring my work 💙
-
-[![Sponsor on GitHub](https://img.shields.io/badge/Sponsor-GitHub-EA4AAA?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/bramboe?frequency=one-time) [![Donate via bunq.me](https://img.shields.io/badge/Donate-bunq.me-2E9AD0)](https://bunq.me/bramboe)
 
 ## License
 

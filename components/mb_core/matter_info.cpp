@@ -9,6 +9,8 @@
 #include <setup_payload/OnboardingCodesUtil.h>
 
 #include "esp_app_desc.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 #include "mb_core.h"
 #include "net.h"
 #include "sdkconfig.h"
@@ -79,10 +81,31 @@ std::string fabrics_text() {
     return out.empty() ? "no fabrics\n" : out;
 }
 
+// Deleting a fabric runs every cleanup that listens to it (sessions, access
+// control, subscriptions): too deep for the console or HTTP task's stack, so
+// it runs on the Matter thread and this task waits for it
+struct RemoveRequest {
+    chip::FabricIndex index;
+    CHIP_ERROR err;
+    SemaphoreHandle_t done;
+};
+
 std::string remove_fabric(unsigned index) {
-    chip::DeviceLayer::PlatformMgr().LockChipStack();
-    const CHIP_ERROR err = chip::Server::GetInstance().GetFabricTable().Delete(static_cast<chip::FabricIndex>(index));
-    chip::DeviceLayer::PlatformMgr().UnlockChipStack();
+    RemoveRequest request{static_cast<chip::FabricIndex>(index), CHIP_ERROR_INTERNAL, xSemaphoreCreateBinary()};
+    if (request.done == nullptr) return "could not remove fabric: no memory\n";
+    CHIP_ERROR err = chip::DeviceLayer::PlatformMgr().ScheduleWork(
+        [](intptr_t arg) {
+            auto* r = reinterpret_cast<RemoveRequest*>(arg);
+            r->err = chip::Server::GetInstance().GetFabricTable().Delete(r->index);
+            xSemaphoreGive(r->done);
+        },
+        reinterpret_cast<intptr_t>(&request));
+    if (err == CHIP_NO_ERROR) {
+        // The request lives on this stack: wait for it, however long it takes
+        xSemaphoreTake(request.done, portMAX_DELAY);
+        err = request.err;
+    }
+    vSemaphoreDelete(request.done);
     return err == CHIP_NO_ERROR ? "fabric " + std::to_string(index) + " removed\n"
                                 : std::string("could not remove fabric: ") + err.AsString() + "\n";
 }

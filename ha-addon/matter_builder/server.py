@@ -618,9 +618,13 @@ def add_to_ha(proxy):
     if status != 200:
         return False
     status, text = command(proxy, "matter")
+    # JSON from the generic device, text ("QR code: MT:...") from the bed bridge
     try:
         code = json.loads(text)["qr"]
-    except (ValueError, KeyError):
+    except (ValueError, KeyError, TypeError):
+        match = re.search(r"MT:[0-9A-Z.\-]+", text or "")
+        code = match.group(0) if match else None
+    if not code:
         log("!! The device gave no pairing code")
         return False
     log("== Commissioning over the network (a minute or two on Thread)")

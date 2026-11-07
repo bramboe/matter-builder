@@ -332,7 +332,7 @@ const TEXT = {
   myConfigs: 'My configs', saveConfig: 'Save to My configs', configSaved: n => `Saved as “${n}” in My configs.`,
   readOnlyYaml: 'This firmware has no configurable connections; its own settings are on its page. This is what it reports:',
   settingsHelp: 'The settings of this firmware. Saving restarts the device.', settingsYamlHelp: 'Only the settings: block can change; Wi-Fi, Thread and passwords are never in here.',
-  settingsSaved: 'Saved: the device restarts with the new settings.', settingsUnknown: k => `Unknown setting: ${k}`,
+  settingsSaved: 'Saved: the device restarts with the new settings.', settingsSame: 'Nothing changed: the device keeps these settings.', saving: 'Saving…', settingsUnknown: k => `Unknown setting: ${k}`,
   settingsRange: (k, a, b) => `${k}: a whole number from ${a} to ${b}`, settingsChoice: (k, c) => `${k}: one of ${c.join(', ')}`,
   wConfigure: 'Configure the device', configureHelp: 'Its name and what is connected. Wi-Fi, Thread and passwords are set on the device itself.',
   startEmpty: 'Empty', fromConfigs: 'My configs', fromRecipes: 'Recipes', skip: 'Skip', saveToConfigs: 'Also save to My configs',
@@ -1280,7 +1280,10 @@ class SettingsEditor {
   }
   set(k, v) { this.values[k] = v; this.error = ''; }
   async save() {
+    if (this.busy) return;
     this.error = this.notice = '';
+    this.busy = true;
+    this.render();
     try {
       const values = this.mode === 'yaml' ? this.check(this.fromYaml(this.yaml)) : this.check(this.values);
       const changed = Object.keys(values).filter(k => String(values[k]) !== String(this.saved[k]));
@@ -1289,9 +1292,10 @@ class SettingsEditor {
         if (/^error/i.test(reply)) throw new Error(reply.replace(/^error:\s*/i, ''));
       }
       Object.assign(this.saved, values); Object.assign(this.values, values);
-      this.notice = changed.length ? t('settingsSaved') : '';
+      this.notice = changed.length ? t('settingsSaved') : t('settingsSame');
       this.dirty = false;
     } catch (e) { this.error = e.message; }
+    this.busy = false;
     this.render();
   }
   field(k, f) {
@@ -1314,7 +1318,7 @@ class SettingsEditor {
       ? `<textarea class="yaml" spellcheck="false" style="min-height:160px" oninput="setEditor.yaml = this.value; setEditor.dirty = true">${esc(this.yaml)}</textarea><div class="sub">${t('settingsYamlHelp')}</div>`
       : Object.entries(this.schema).map(([k, f]) => this.field(k, f)).join('');
     this.host.innerHTML = `${head}${body}${this.error ? `<div class="error">${esc(this.error)}</div>` : ''}${this.notice ? `<div class="notice">${esc(this.notice)}</div>` : ''}
-      <div class="actions"><button class="pri" onclick="setEditor.save()">${t('save')}</button></div>`;
+      <div class="actions"><button class="pri" onclick="setEditor.save()" ${this.busy ? 'disabled' : ''}>${this.busy ? t('saving') : t('save')}</button></div>`;
   }
 }
 const setEditor = new SettingsEditor();

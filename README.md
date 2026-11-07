@@ -84,7 +84,7 @@ before it installs anything.
 | Part | State |
 |---|---|
 | Generic device 0.1.3 (released) | Tested on an ESP32-C6: setup access point, linking, connections with trial and rollback, IR send, Bluetooth presence next to Thread |
-| Generic device 0.1.4 (not released) | Tested on an ESP32-C6: pairing over Bluetooth (paired with a phone, then stable with two controllers and Bluetooth presence next to it; 174 KB free with pairing on, 199 KB off), components build |
+| Generic device 0.1.5, Octo bridge 1.0.14 (released) | Tested on an ESP32-C6: pairing over Bluetooth (stable with two controllers and Bluetooth presence next to it; 174 KB free with pairing on, 199 KB off), components build; the bed bridge added to Home Assistant with both beds, its number of beds changed from the add-on |
 | Add-on 0.15.0 | Devices, Catalog and Configs tabs; visual and YAML editor; flashing on the Home Assistant host; adding a device to Home Assistant |
 | Catalog | Built nightly on GitHub Pages from repositories with the topic `matter-builder-package` |
 

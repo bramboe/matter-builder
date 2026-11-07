@@ -187,12 +187,17 @@ password are set on the device's own page.
 
 ## Updating a device
 
-A device on Thread is too slow for a 2 MB upload. The add-on therefore
-switches it to *configuration mode* on Wi-Fi for a moment, uploads the
-firmware in about 20 seconds, and the device returns to Thread. What is
-connected to it is unavailable for a few minutes. If the new
-firmware cannot get online, the device goes back to the previous one by
-itself.
+Thread is slow for a 2 MB upload. The add-on therefore switches the device
+to *configuration mode* on Wi-Fi for a moment, uploads the firmware in about
+20 seconds, and the device returns to Thread. What is connected to it is
+unavailable for a few minutes. If the new firmware cannot get online, the
+device goes back to the previous one by itself.
+
+When Home Assistant cannot see the device on Wi-Fi (it is on another network
+or VLAN, or mDNS does not get across), the add-on waits until the device is
+back on Thread (at most 15 minutes) and sends the firmware over Thread
+instead, which takes several minutes. It remembers this, and later updates
+of that device go over Thread straight away.
 
 ## Network
 

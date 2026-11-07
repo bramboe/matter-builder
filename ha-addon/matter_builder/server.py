@@ -156,6 +156,10 @@ def command(proxy, line, timeout=20):
     return request(resolve(proxy["host"]) or proxy["host"], "/cmd", proxy["token"], line.encode(), timeout=timeout)
 
 
+def command_bytes(proxy, path, body, timeout=20):
+    return request(resolve(proxy["host"]) or proxy["host"], path, proxy["token"], body, timeout=timeout)
+
+
 def proxy_name(host, token):
     """A name from what the proxy knows: its own name, or its beds ("Alex & Sam")."""
     status, text = request(resolve(host) or host, "/cmd", token, b"json")
@@ -342,6 +346,13 @@ def update_proxy(proxy, image):
         return False
     log(text.strip().splitlines()[0])
 
+    if proxy.get("ota_over_thread"):
+        # Learned on an earlier update: Wi-Fi does not reach this device
+        log("== Uploading the firmware over Thread (several minutes)")
+        status, text = command_bytes(proxy, "/ota", image.read_bytes(), timeout=30 * 60)
+        log(text.strip() or f"HTTP {status}")
+        return status == 200 and wait_until_back(proxy)
+
     log("== Configuration mode on Wi-Fi")
     status, text = command(proxy, "wifi config 15")
     log(text.strip() or f"(no answer, HTTP {status}: the proxy may already be restarting)")
@@ -358,19 +369,44 @@ def update_proxy(proxy, image):
     while time.time() < end and not address:
         time.sleep(3)
         address = mdns_resolve(host)
-    if not address:
-        log("!! Not found on Wi-Fi: it returns to Thread by itself within 15 minutes")
-        return False
-    log(f"   found at {address}")
-
-    log("== Uploading the firmware")
-    time.sleep(2)
-    status, text = request(address, "/ota", proxy["token"], image.read_bytes(), timeout=300)
+    if address:
+        log(f"   found at {address}")
+        log("== Uploading the firmware")
+        time.sleep(2)
+        status, text = request(address, "/ota", proxy["token"], image.read_bytes(), timeout=300)
+    else:
+        # Home Assistant cannot see the device on Wi-Fi (another network or
+        # VLAN, or mDNS blocked): it returns to Thread after its idle time,
+        # and the image goes over Thread instead, slower but on the same route
+        log("   not found on Wi-Fi from here (another network?)")
+        log("== Waiting for it to return to Thread (up to 16 minutes)")
+        end = time.time() + 16 * 60
+        back = False
+        while time.time() < end and not back:
+            time.sleep(10)
+            back = command(proxy, "system", timeout=8)[0] == 200
+        if not back:
+            log("!! It did not come back on Thread; try again later")
+            return False
+        log("== Uploading the firmware over Thread (several minutes)")
+        status, text = command_bytes(proxy, "/ota", image.read_bytes(), timeout=30 * 60)
+        if status == 200:
+            remember_ota_over_thread(proxy)
     log(text.strip() or f"HTTP {status}")
-    if status != 200:
-        return False
+    return status == 200 and wait_until_back(proxy)
 
+
+def remember_ota_over_thread(proxy):
+    proxies = load_proxies()
+    for p in proxies:
+        if p["id"] == proxy["id"]:
+            p["ota_over_thread"] = True
+    save_proxies(proxies)
+
+
+def wait_until_back(proxy):
     log("== Waiting for the proxy on its own address")
+    time.sleep(15)  # it answers with the old firmware until it restarts
     end = time.time() + 240
     while time.time() < end:
         time.sleep(5)

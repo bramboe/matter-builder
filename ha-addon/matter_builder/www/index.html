@@ -331,7 +331,7 @@ const TEXT = {
   tabDevices: 'Devices', tabCatalog: 'Catalog', tabConfigs: 'Configs', configuration: 'Configuration', searchDevices: 'Search devices', searchCatalog: 'Search the catalog',
   myConfigs: 'My configs', saveConfig: 'Save to My configs', configSaved: n => `Saved as “${n}” in My configs.`,
   readOnlyYaml: 'This firmware has no configurable connections; its own settings are on its page. This is what it reports:',
-  settingsHelp: 'The settings of this firmware. Saving restarts the device.', settingsYamlHelp: 'Only the settings: block can change; Wi-Fi, Thread and passwords are never in here.',
+  settingsHelp: 'Settings of this device. Saving restarts it; on Thread it is back within a minute.', settingsLabel: 'Settings', bedsLabel: 'Beds', bedN: n => `Bed ${n}`, bedsHelp: 'Beds are paired and named on the device page:', settingsYamlHelp: 'Only the settings: block can change; Wi-Fi, Thread and passwords are never in here.',
   settingsSaved: 'Saved: the device restarts with the new settings.', settingsSame: 'Nothing changed: the device keeps these settings.', saving: 'Saving…', settingsUnknown: k => `Unknown setting: ${k}`,
   settingsRange: (k, a, b) => `${k}: a whole number from ${a} to ${b}`, settingsChoice: (k, c) => `${k}: one of ${c.join(', ')}`,
   wConfigure: 'Configure the device', configureHelp: 'Its name and what is connected. Wi-Fi, Thread and passwords are set on the device itself.',
@@ -456,6 +456,7 @@ function applyTexts() {
 }
 
 const ICON = {
+  bed: 'M19 7h-8v7H3V5H1v15h2v-3h18v3h2v-9a4 4 0 0 0-4-4M7 13a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3',
   chip: 'M6 4h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2m1 3v10h10V7H7m3 3h4v4h-4v-4M8 1h2v2H8V1m3 0h2v2h-2V1m3 0h2v2h-2V1M8 21h2v2H8v-2m3 0h2v2h-2v-2m3 0h2v2h-2v-2M1 8h2v2H1V8m0 3h2v2H1v-2m0 3h2v2H1v-2m20-6h2v2h-2V8m0 3h2v2h-2v-2m0 3h2v2h-2v-2',
   plus: 'M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z',
   close: 'M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z',
@@ -545,13 +546,17 @@ function tooOld(r, rows) {
   return r && r.app === 'mb_generic' && rows.some(x => isIr(x.type) || isBle(x.type)) && newer(MIN_NEW_TYPES, r.version);
 }
 
+// What a device or catalog item is, at a glance
+const appIcon = app => icon(app === 'octo_bridge' ? 'bed' : 'chip');
+const netName = r => r && r.net ? r.net.replace(/:.*$/, '').replace(/^\w/, c => c.toUpperCase()) : '';
+
 function deviceCard(p) {
   const s = statuses[p.id], r = running(s), up = updateFor(p);
   const what = connectedText(s);
   return `<div class="card">
-    <div class="head"><span class="ico">${icon('chip')}</span><div class="info"><h3>${esc(p.name)}</h3><div class="sub mono">${esc(p.host)}</div></div>${statusChip(s)}</div>
+    <div class="head"><span class="ico">${appIcon(r ? r.app : p.app)}</span><div class="info"><h3>${esc(p.name)}</h3>
+      ${r ? `<div class="sub">${esc(appTitle(r.app))} ${esc(r.version)}${netName(r) ? ' · ' + esc(netName(r)) : ''}</div>` : `<div class="sub mono" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(p.host)}">${esc(p.host)}</div>`}</div>${statusChip(s)}</div>
     <div class="meta">
-      ${r ? `<div class="sub">${esc(appTitle(r.app))} ${esc(r.version)}${r.net ? ' · ' + esc(r.net.replace(/:.*$/, '').replace(/^\w/, c => c.toUpperCase())) : ''}</div>` : ''}
       ${s && !s.ok && !s.auth ? `<div class="sub">${t('notReachable')}</div>` : ''}
       ${what ? `<div class="sub">${esc(what)}</div>` : ''}
       ${r ? needChips(needs(s.io ? (s.io.bluetooth === 'on' || s.io.slots.some(c => isBle(c.type)) ? ['bluetooth'] : [])
@@ -573,7 +578,7 @@ function deviceCard(p) {
 
 function renderDevices() {
   const found = state.found;
-  setHtml($('#discovered'), found.map(d => `<div class="banner"><span class="ico" style="width:32px;height:32px">${icon('chip')}</span>
+  setHtml($('#discovered'), found.map(d => `<div class="banner"><span class="ico" style="width:32px;height:32px">${appIcon(d.app)}</span>
       <div class="grow"><b style="font-weight:500">${t('discovered', esc(appTitle(d.app)), esc(d.version || ''))}</b><div class="sub mono">${esc(d.host)}</div></div>
       <button class="pri" onclick="openWizard('link', '${esc(d.address)}')">${t('adopt')}</button></div>`).join(''));
   const q = query.toLowerCase();
@@ -884,7 +889,7 @@ function catalogCard(it, i) {
   const what = it.kind === 'firmware' ? esc(it.description || '')
     : esc(rowsOf(it.connections).map(r => `${r.name} (${TEXT.types[r.type] || r.type})`).join(', '));
   return `<div class="card" style="cursor:pointer" onclick="openItem(${i})">
-    <div class="head"><span class="ico">${icon(it.kind === 'firmware' ? 'chip' : 'recipe')}</span>
+    <div class="head"><span class="ico">${it.kind === 'firmware' ? appIcon(it.app) : icon('recipe')}</span>
       <div class="info"><h3>${esc(it.title)}</h3><div class="sub">${it.kind === 'firmware' ? esc(it.version || '') : t('recipe')} · ${esc(it.maker || (it.source || '').split('/')[0])}</div></div></div>
     <div class="meta"><div class="sub">${what}</div>
       ${needChips(needs(it.kind === 'firmware' ? it.requires : (it.requires || rowsNeed(rowsOf(it.connections))), it.kind === 'firmware' ? (it.network || ['thread']) : null))}</div>
@@ -935,10 +940,12 @@ function renderItem() {
     it.stars !== undefined ? [t('stars'), esc(it.stars)] : null,
     it.downloads !== undefined ? [t('downloads'), esc(it.downloads)] : null,
     it.updated ? [t('updated'), esc(new Date(it.updated).toLocaleDateString('en', {dateStyle: 'medium'}))] : null,
+    it.settings && Object.keys(it.settings).length ? [t('settingsLabel'), esc(Object.entries(it.settings).map(([k, f]) =>
+      `${f.title || k}${f.type === 'int' ? ` (${f.min}–${f.max})` : ''}`).join(', '))] : null,
     it.key_sha256 ? [t('keyFingerprint'), `<span class="mono">${esc(it.key_sha256.slice(0, 16))}…</span>`] : null,
   ].filter(Boolean);
   const canInstall = it.kind === 'firmware' && it.factory;
-  setHtml($('#itemBody'), `<div class="head" style="display:flex;gap:10px;align-items:center"><span class="ico">${icon(it.kind === 'firmware' ? 'chip' : 'recipe')}</span>
+  setHtml($('#itemBody'), `<div class="head" style="display:flex;gap:10px;align-items:center"><span class="ico">${it.kind === 'firmware' ? appIcon(it.app) : icon('recipe')}</span>
       <div style="flex:1"><h2>${esc(it.title)}</h2><div class="sub">${esc(it.maker || '')}</div></div>${badge(it)}</div>
     ${it.description ? `<p>${esc(it.description)}</p>` : ''}
     ${needChips(needs(it.kind === 'firmware' ? it.requires : (it.requires || rowsNeed(rows)), it.kind === 'firmware' ? (it.network || ['thread']) : null))}
@@ -1278,7 +1285,11 @@ class SettingsEditor {
     try { localStorage.setItem('mbEditor', m); } catch (e) {}
     this.render();
   }
-  set(k, v) { this.values[k] = v; this.error = ''; }
+  set(k, v) { this.values[k] = v; this.error = this.notice = ''; this.render(); }
+  changed() {
+    if (this.mode === 'yaml') return !!this.dirty;
+    return Object.keys(this.schema).some(k => String(this.values[k] ?? this.schema[k].default) !== String(this.saved[k] ?? this.schema[k].default));
+  }
   async save() {
     if (this.busy) return;
     this.error = this.notice = '';
@@ -1294,9 +1305,19 @@ class SettingsEditor {
       Object.assign(this.saved, values); Object.assign(this.values, values);
       this.notice = changed.length ? t('settingsSaved') : t('settingsSame');
       this.dirty = false;
+      if (changed.length && this.beds) this.refreshBeds(this.proxy, Date.now() + 120000);
     } catch (e) { this.error = e.message; }
     this.busy = false;
     this.render();
+  }
+  // After a restart: the beds as the device now has them, once it answers
+  async refreshBeds(proxy, until) {
+    await new Promise(r => setTimeout(r, 8000));
+    if (this.proxy !== proxy || Date.now() > until) return;
+    try {
+      this.beds = (JSON.parse(await proxyCommand(proxy, 'json')).beds || []).filter(b => b.configured);
+      if (!this.host.contains(document.activeElement)) this.render();
+    } catch (e) { this.refreshBeds(proxy, until); }
   }
   field(k, f) {
     const v = this.values[k] ?? f.default;
@@ -1311,14 +1332,19 @@ class SettingsEditor {
   }
   render() {
     if (!this.host) return;
-    const head = `<div class="ed-head"><span class="sub">${t('settingsHelp')}</span><span class="grow"></span><div class="seg" style="margin:0">
+    const head = `<div class="ed-head"><span class="grow"></span><div class="seg" style="margin:0">
         <button class="${this.mode === 'visual' ? 'on' : ''}" onclick="setEditor.setMode('visual')">${t('visualEditor')}</button>
         <button class="${this.mode === 'yaml' ? 'on' : ''}" onclick="setEditor.setMode('yaml')">YAML</button></div></div>`;
+    const help = `<div class="sub" style="margin:2px 2px 10px">${t('settingsHelp')}</div>`;
     const body = this.mode === 'yaml'
-      ? `<textarea class="yaml" spellcheck="false" style="min-height:160px" oninput="setEditor.yaml = this.value; setEditor.dirty = true">${esc(this.yaml)}</textarea><div class="sub">${t('settingsYamlHelp')}</div>`
+      ? `<textarea class="yaml" spellcheck="false" style="min-height:160px" oninput="setEditor.yaml = this.value; if (!setEditor.dirty) { setEditor.dirty = true; setEditor.notice = ''; $('#setSave').disabled = false; $('#setSave').classList.add('pri'); }">${esc(this.yaml)}</textarea><div class="sub">${t('settingsYamlHelp')}</div>`
       : Object.entries(this.schema).map(([k, f]) => this.field(k, f)).join('');
-    this.host.innerHTML = `${head}${body}${this.error ? `<div class="error">${esc(this.error)}</div>` : ''}${this.notice ? `<div class="notice">${esc(this.notice)}</div>` : ''}
-      <div class="actions"><button class="pri" onclick="setEditor.save()" ${this.busy ? 'disabled' : ''}>${this.busy ? t('saving') : t('save')}</button></div>`;
+    const beds = (this.beds || []).length ? `<div class="ed-section"><h3>${t('bedsLabel')}</h3></div>
+      ${this.beds.map(b => `<div class="row"><span class="ico">${icon('bed')}</span><div class="label">${esc(b.name || t('bedN', b.index + 1))}
+        <div class="sub">${esc(b.state || '')}${b.rssi ? ` · ${b.rssi} dBm` : ''}</div></div></div>`).join('')}
+      <div class="sub" style="margin:4px 2px 12px">${t('bedsHelp')} <a href="${esc(this.page || '#')}" target="_blank" rel="noopener">${t('openPage')}</a></div>` : '';
+    this.host.innerHTML = `${head}${beds}${help}${body}${this.error ? `<div class="error">${esc(this.error)}</div>` : ''}${this.notice ? `<div class="notice">${esc(this.notice)}</div>` : ''}
+      <div class="actions"><button id="setSave" class="${this.changed() ? 'pri' : ''}" onclick="setEditor.save()" ${this.busy || !this.changed() ? 'disabled' : ''}>${this.busy ? t('saving') : t('save')}</button></div>`;
   }
 }
 const setEditor = new SettingsEditor();
@@ -1345,6 +1371,7 @@ async function openDevice(id, which, recipe) {
       const j = JSON.parse(await proxyCommand(id, 'settings json'));
       if (j.schema && Object.keys(j.schema).length) { managed.settings = j; setEditor.load(j); }
     } catch (e) {}
+    try { setEditor.beds = (JSON.parse(await proxyCommand(id, 'json')).beds || []).filter(b => b.configured); } catch (e) { setEditor.beds = []; }
   }
   if (managed.io) {
     devEditor.mount($('#devEditor'));
@@ -1359,7 +1386,7 @@ async function openDevice(id, which, recipe) {
       $('#recipeNotice').hidden = false;
     }
     showManageState();
-  } else if (!which) setDtab('firmware');
+  } else if (!which && !managed.settings) setDtab('firmware');
   renderDevicePanel();
 }
 function closeDevice() { openId = null; managed = null; $('#deviceDlg').close(); }
@@ -1379,8 +1406,10 @@ function renderDevicePanel() {
   if (!p) return;
   const s = statuses[p.id], r = running(s);
   $('#dName').textContent = p.name;
-  $('#dHost').textContent = p.host;
-  setHtml($('#dIcon'), icon('chip'));
+  // What it runs; the address is on the Info tab
+  $('#dHost').textContent = r ? `${appTitle(r.app)} ${r.version}${netName(r) ? ' · ' + netName(r) : ''}` : p.host;
+  $('#dHost').classList.toggle('mono', !r);
+  setHtml($('#dIcon'), appIcon(r ? r.app : p.app));
   setHtml($('#dChip'), statusChip(s));
   $('#noIo').hidden = !(managed && !managed.io);
   if (managed && managed.io) {
@@ -1396,6 +1425,7 @@ function renderDevicePanel() {
     if (!setEditor.host || !$('#noIo').contains(setEditor.host)) { $('#noIo').innerHTML = '<div></div>'; setEditor.host = $('#noIo').firstChild; }
     setEditor.device = {name: p.name, app: r ? r.app : p.app || '', version: r ? r.version : ''};
     setEditor.proxy = p.id;
+    setEditor.page = pageUrl(p.host);
     if (!setEditor.dirty) setEditor.yaml = setEditor.toYaml();
     if (!setEditor.host.contains(document.activeElement)) setEditor.render();
   } else if (managed && !managed.io) {

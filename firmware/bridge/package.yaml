@@ -5,7 +5,7 @@ app: octo_bridge
 kind: package
 format: 1
 title: Octo bed bridge
-description: One or two Octo beds over Bluetooth as Matter covers and lights; a second bed added on its page is taken on by itself.
+description: One or two Octo beds over Bluetooth, as Matter covers (head, legs) and a light. Add a second bed on its page and it is picked up by itself.
 # The beds take their commands over Bluetooth
 requires: [bluetooth]
 network: [thread]

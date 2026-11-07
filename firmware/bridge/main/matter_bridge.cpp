@@ -655,6 +655,10 @@ endpoint_t* add_bed_device(node_t* node, endpoint_t* aggregator, BedEndpoints& b
     bdbi::create_node_label(info, bed.label, std::strlen(bed.label));
     bdbi::create_vendor_name(info, const_cast<char*>(BED_VENDOR), std::strlen(BED_VENDOR));
     bdbi::create_product_name(info, const_cast<char*>(BED_PRODUCT), std::strlen(BED_PRODUCT));
+    // Home Assistant reads a bed's vendor and product here, not on the root:
+    // only with these does it use the part labels below (head, legs, light)
+    bdbi::create_vendor_id(info, CONFIG_DEVICE_VENDOR_ID);
+    bdbi::create_product_id(info, CONFIG_DEVICE_PRODUCT_ID);
 
     cluster::operational_state::config_t stop_config;
     stop_config.delegate = &bed.stop;

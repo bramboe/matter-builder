@@ -19,6 +19,9 @@ h2{margin:0;font-size:18px;font-weight:500}
 h3{margin:0;font-size:15px;font-weight:500;overflow-wrap:anywhere}
 .sub{color:var(--mute);font-size:13px}
 .mono{font:12px ui-monospace,Menlo,monospace;overflow-wrap:anywhere}
+pre.logview{flex:1;max-height:none;min-height:60vh}
+pre.logview .e{color:var(--bad)}pre.logview .w{color:#b26a00}
+@media (prefers-color-scheme:dark){pre.logview .w{color:#f0a030}}
 pre{font:12px/1.4 ui-monospace,Menlo,monospace;background:var(--fill);border-radius:8px;padding:8px;margin:0;max-height:300px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
 
 /* Top bar with tabs */
@@ -282,6 +285,15 @@ textarea.yaml{width:100%;min-height:280px;font:12px/1.5 ui-monospace,Menlo,monos
 </dialog>
 
 <!-- Settings -->
+<dialog class="side" id="logDlg">
+  <div class="dlg">
+    <div class="dlg-head"><div class="info"><h2 id="logTitle"></h2><div class="sub" id="logState"></div></div>
+      <button class="text" id="logPause"></button>
+      <button class="text" id="logSave"></button>
+      <button class="icon" onclick="$('#logDlg').close()" aria-label="Close" id="lClose"></button></div>
+    <div class="dlg-body" style="display:flex;flex-direction:column"><pre id="logText" class="logview"></pre></div>
+  </div>
+</dialog>
 <dialog id="settingsDlg">
   <div class="dlg">
     <div class="dlg-head"><div class="info"><h2 data-t="settings"></h2></div>
@@ -344,7 +356,7 @@ const TEXT = {
   newDevice: 'New device', newDeviceHelp: 'Install firmware or link one', browseCatalog: 'Browse the catalog',
   discovered: (n, v) => `Discovered: ${n}${v ? ' · ' + v : ''}`, adopt: 'Adopt',
   online: 'Online', offlineFor: d => `Offline ${d}`, notReachable: 'Not reachable on the network', offline: 'Offline', checking: 'Checking', keyRejected: 'Key refused', configMode: 'Configuration mode',
-  updateTo: v => `Update to ${v}`, edit: 'Edit', openPage: 'Open page', openDirect: 'Open on the device', more: 'More', rename: 'Rename', forget: 'Forget', showKey: 'Show key',
+  updateTo: v => `Update to ${v}`, edit: 'Edit', openPage: 'Open page', logs: 'Logs', logsOf: n => `Logs of ${n}`, logLive: 'Live, over the network', logPaused: 'Paused', logPause: 'Pause', logResume: 'Resume', logSave: 'Download', logWaiting: 'Waiting for the device…', logUnsupported: 'This firmware does not keep its log yet: update it to see the log here.', logRestarted: '--- the device restarted ---', logLost: '--- older lines are gone ---', logError: e => `Not reachable: ${e}`, openDirect: 'Open on the device', more: 'More', rename: 'Rename', forget: 'Forget', showKey: 'Show key',
   updateAll: n => `Update all (${n})`, nothingConnected: 'Nothing connected yet', connections: 'Connections', firmware: 'Firmware', info: 'Info',
   noIo: 'This firmware has no configurable connections. Its own settings are on its page.',
   form: 'Form', visualEditor: 'Visual editor', duplicate: 'Duplicate', editInYaml: 'Edit in YAML', cancel: 'Cancel',
@@ -573,6 +585,7 @@ function deviceCard(p) {
       ${up ? `<button class="text" onclick="updateProxy('${p.id}', '${esc(up)}')" ${state.job.running ? 'disabled' : ''}>${t('updateTo', fileVersion(up))}</button>` : ''}
       ${s && s.auth ? `<button class="text" onclick="openWizard('link', '${esc(p.host)}')">${t('linkAgain')}</button>` : ''}
       <button class="plain" onclick="openDevice('${p.id}')">${t('edit')}</button>
+      <button class="plain" onclick="openLogs('${p.id}')">${t('logs')}</button>
       <a class="button plain" href="${esc(portalUrl(p))}">${t('openPage')}</a>
       <span class="grow"></span>
       <details class="more"><summary aria-label="${t('more')}">${icon('dots')}</summary><div class="pop">
@@ -1974,12 +1987,74 @@ $('#sourceForm').onsubmit = e => { e.preventDefault(); const repo = $('#sourceRe
 $('#devMode').onchange = async () => { await api('api/settings', {dev_mode: $('#devMode').checked}); refresh(); };
 $('#toolchainBtn').onclick = async () => { await api('api/toolchain', {}); refresh(); };
 
+// A device's log, like ESPHome's Logs: what it keeps in RAM, then new lines
+// every 2 s while the dialog is open (over Thread too: it is only text)
+const logView = {id: null, from: 0, boot: '', text: '', paused: false, timer: 0, busy: false};
+function openLogs(id) {
+  const p = state.proxies.find(x => x.id === id);
+  Object.assign(logView, {id, from: 0, boot: '', text: '', paused: false});
+  $('#logTitle').textContent = t('logsOf', p ? p.name : id);
+  $('#logText').textContent = t('logWaiting');
+  $('#logPause').hidden = $('#logSave').hidden = false;
+  renderLogHead();
+  $('#logDlg').showModal();
+  pollLog();
+}
+function renderLogHead(error) {
+  $('#logState').textContent = error || (logView.paused ? t('logPaused') : t('logLive'));
+  $('#logPause').textContent = t(logView.paused ? 'logResume' : 'logPause');
+  $('#logSave').textContent = t('logSave');
+}
+function renderLog() {
+  const el = $('#logText'), atEnd = el.scrollTop + el.clientHeight >= el.scrollHeight - 30;
+  el.innerHTML = logView.text.split('\n').map(line => {
+    const cls = /^E \(/.test(line) ? 'e' : /^W \(/.test(line) ? 'w' : '';
+    return cls ? `<span class="${cls}">${esc(line)}</span>` : esc(line);
+  }).join('\n');
+  if (atEnd) el.scrollTop = el.scrollHeight;
+}
+async function pollLog() {
+  clearTimeout(logView.timer);
+  if (!$('#logDlg').open || logView.busy) return;
+  if (!logView.paused) {
+    logView.busy = true;
+    const id = logView.id;
+    try {
+      const r = await api(`api/proxy/${encodeURIComponent(id)}/logs?from=${logView.from}&boot=${logView.boot}`);
+      if (id !== logView.id) return void setTimeout(pollLog, 0);  // another device opened meanwhile
+      if (r.unsupported) { $('#logText').textContent = t('logUnsupported'); $('#logState').textContent = ''; $('#logPause').hidden = $('#logSave').hidden = true; return; }
+      if (r.error) renderLogHead(t('logError', r.error));
+      else {
+        let add = r.text.replace(/\x1b\[[0-9;]*m/g, '');
+        if (r.restarted) add = t('logRestarted') + '\n' + add;
+        else if (r.lost && logView.from) add = t('logLost') + '\n' + add;
+        logView.text = (logView.text + add).slice(-200000);
+        const more = r.next - logView.from >= 4096;  // a full piece: the rest right away
+        Object.assign(logView, {from: r.next, boot: r.boot});
+        renderLog(); renderLogHead();
+        if (more) { logView.busy = false; return pollLog(); }
+      }
+    } catch (e) { renderLogHead(t('logError', e.message)); }
+    finally { logView.busy = false; }
+  }
+  logView.timer = setTimeout(pollLog, 2000);
+}
+$('#logPause').onclick = () => { logView.paused = !logView.paused; renderLogHead(); if (!logView.paused) pollLog(); };
+$('#logSave').onclick = () => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([logView.text], {type: 'text/plain'}));
+  a.download = `${logView.id}-log.txt`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+};
+$('#logDlg').addEventListener('close', () => clearTimeout(logView.timer));
+
 // Close a "more" menu when clicking elsewhere
 document.addEventListener('click', e => {
   $$('details.more[open]').forEach(d => { if (!d.contains(e.target)) d.open = false; });
 });
 
-for (const [sel, ic] of [['#dClose', 'close'], ['#wClose', 'close'], ['#sClose', 'close'], ['#iClose', 'close'], ['#emptyIcon', 'chip']]) $(sel).innerHTML = icon(ic);
+for (const [sel, ic] of [['#lClose', 'close'], ['#dClose', 'close'], ['#wClose', 'close'], ['#sClose', 'close'], ['#iClose', 'close'], ['#emptyIcon', 'chip']]) $(sel).innerHTML = icon(ic);
 // An eye on every password field, also those drawn later: show or hide what
 // is typed. Submitting a form hides them again.
 const EYE = 'M12,9A3,3 0 0,0 9,12A3,3 0 0,0 12,15A3,3 0 0,0 15,12A3,3 0 0,0 12,9M12,17A5,5 0 0,1 7,12A5,5 0 0,1 12,7A5,5 0 0,1 17,12A5,5 0 0,1 12,17M12,4.5C7,4.5 2.73,7.61 1,12C2.73,16.39 7,19.5 12,19.5C17,19.5 21.27,16.39 23,12C21.27,7.61 17,4.5 12,4.5Z';

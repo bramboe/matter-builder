@@ -26,6 +26,12 @@ device's page or in the add-on.
   page's requests to the device unchanged. You sign in with the device's own
   password, as on the device itself. *Open on the device* (the ⋮ menu) opens
   the page directly, at the device's fixed `.local` name.
+- **Logs**: the device's log, live, like ESPHome's Logs but without a USB
+  cable. The device keeps its last 16 KB in RAM (from its boot on), and the
+  dialog adds new lines every 2 seconds; warnings are orange, errors red.
+  *Download* saves what is shown. Chatter (Matter's message-by-message
+  lines, the Bluetooth stack's writes) stays on the serial port only.
+  Firmware from before bridge 1.0.16 and generic 0.1.6 has no log yet.
 - **Configuration**: every device's configuration as a form or as YAML.
   For a generic device you edit its name and connections; changes are saved
   as a draft on the device, *Apply* restarts it with the draft on trial, and

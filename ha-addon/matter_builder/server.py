@@ -24,6 +24,7 @@ import tempfile
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -220,6 +221,28 @@ def checked_status(proxy):
     if good is not None:
         seen = max(seen or 0, good.get("last_seen", 0)) or seen
     return dict(status, last_seen=seen)
+
+
+LOG_HEAD = re.compile(r"log (\d+) ([01]) (\d+)\n")
+
+
+def device_log(proxy, start, boot):
+    """New log lines of a device since byte `start` (its "log" command, 4 KB a
+    time). A different boot id means it restarted: then from the beginning."""
+    status, text = command(proxy, f"log {start}", timeout=20)
+    head = LOG_HEAD.match(text) if status == 200 else None
+    if status == 200 and head is None:
+        return {"unsupported": True}  # firmware from before the log
+    if head is None:
+        return {"error": text.strip() or f"HTTP {status}"}
+    restarted = bool(boot) and head.group(3) != boot
+    if restarted and start:
+        status, text = command(proxy, "log 0", timeout=20)
+        head = LOG_HEAD.match(text) if status == 200 else None
+        if head is None:
+            return {"error": text.strip() or f"HTTP {status}"}
+    return {"next": int(head.group(1)), "lost": head.group(2) == "1", "boot": head.group(3),
+            "restarted": restarted, "text": text[head.end():]}
 
 
 def remember(proxy, **fields):
@@ -1310,6 +1333,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self.reply({"error": "unknown proxy"}, 404)
             if parts[3] == "status":
                 return self.reply(checked_status(proxy))
+            if parts[3] == "logs":
+                query = urllib.parse.parse_qs(self.path.partition("?")[2])
+                return self.reply(device_log(proxy, int((query.get("from") or ["0"])[0] or 0),
+                                             (query.get("boot") or [""])[0]))
             if parts[3] == "token":
                 return self.reply({"token": proxy["token"]})
         if len(parts) == 3 and parts[:2] == ["api", "link"]:

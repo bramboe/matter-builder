@@ -43,6 +43,7 @@ button.warn{background:none;color:var(--bad)}
 button.icon-btn{background:none;width:40px;padding:0;border-radius:50%}
 button:disabled{opacity:.38;cursor:default;filter:none}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
+.netlist{margin-top:-4px}.netlist:empty{display:none}
 .chips button{min-height:32px;border-radius:8px;border:1px solid var(--line);background:none;padding:0 12px}
 .row{display:flex;align-items:center;gap:12px;min-height:56px;padding:4px 0;border-top:1px solid var(--line)}
 .row:first-of-type{border-top:0}
@@ -136,6 +137,7 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
       <div class="sub" data-t="wizHelp"></div>
       <form id="wizForm" class="form" style="grid-template-columns:1fr">
         <label class="field"><span data-t="wifiNetwork"></span><input id="wizSsid" autocomplete="off" maxlength="32"></label>
+        <div class="chips netlist" id="wizSsidNets"></div><button type="button" class="text" data-scan="wizSsid" data-t="scanWifi" style="justify-self:start"></button>
         <label class="field"><span data-t="wifiPassword"></span><input id="wizPass" type="password" autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other" maxlength="64"></label>
         <div class="sub wifiResult" style="color:var(--bad)" hidden></div>
         <div class="features" style="margin-top:0"><button type="button" id="wizSkip" data-t="wizSkip"></button>
@@ -176,6 +178,7 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
       <div class="sub" id="cfgCardHelp" data-t="configHelp"></div>
       <form id="wifiForm" class="form" style="grid-template-columns:1fr">
         <label class="field"><span data-t="wifiNetwork"></span><input id="wifiSsid" autocomplete="off" maxlength="32"></label>
+        <div class="chips netlist" id="wifiSsidNets"></div><button type="button" class="text" data-scan="wifiSsid" data-t="scanWifi" style="justify-self:start"></button>
         <label class="field"><span data-t="wifiPassword"></span><input id="wifiPass" type="password" autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other" maxlength="64"></label>
         <div class="sub wifiResult" style="color:var(--bad)" hidden></div>
         <div class="features" style="margin-top:0"><button type="submit" data-t="save"></button>
@@ -221,7 +224,7 @@ const TEXT = {
     title: 'Octo beds',
     network: 'Network', thread: 'Thread', wifi: 'Wi-Fi',
     pairLater: 'Add a bed first. The pairing code shows up here once a bed is connected, so the beds reach Home Assistant and Apple Home with their names.',
-    loginTitle: 'Sign in', loginHelp: "Enter the password of this bridge. Forgot it? Hold the BOOT button for 5 to 10 seconds and let go: the bridge opens its setup network, where you choose a new one.", password: 'Password', login: 'Sign in', wrongPassword: 'Wrong password.', stateIdle: 'Not connected', stateBusy: 'Connecting…', weakSignal: 'Weak signal: place the bridge closer to the bed.', changePassword: 'Change password', restart: 'Restart', language: 'Language',
+    loginTitle: 'Sign in', loginHelp: "Enter the password of this bridge. Forgot it? Hold the BOOT button for 5 to 10 seconds and let go (or switch its power off and on 6 times, within 10 seconds each): the bridge opens its setup network, where you choose a new one.", password: 'Password', login: 'Sign in', wrongPassword: 'Wrong password.', stateIdle: 'Not connected', stateBusy: 'Connecting…', weakSignal: 'Weak signal: place the bridge closer to the bed.', changePassword: 'Change password', restart: 'Restart', language: 'Language',
     settings: 'Settings', pairingCode: 'Pairing code', openWindow: 'Open pairing window',
     deviceNetwork: 'Device and network', device: 'Device', vidPid: 'Vendor / product ID',
     testIds: 'Test IDs of the Matter standard', system: 'System', freeMemory: 'Free memory', uptime: 'Running',
@@ -246,7 +249,7 @@ const TEXT = {
     maxBedsHelp: n => `At most ${n} beds: remove one first.`, giveName: 'Give the bed a name.', pinDigits: 'The PIN has 4 digits.',
     newName: 'New name', confirmRemove: n => `Remove ${n}? The bridge disconnects and forgets the PIN.`,
     configMode: 'Configuration mode', configHelp: 'For a firmware update: the bridge restarts on Wi-Fi for 15 minutes, with Thread, Matter and the beds off. Then it goes back by itself.',
-    wifiNetwork: 'Wi-Fi network', wifiPassword: 'Wi-Fi password', wifiPassKeep: 'saved, leave empty to keep', saved: 'Saved',
+    scanWifi: 'Look for networks', scanning: 'Looking… (Thread pauses for a few seconds)', noNetworks: 'No Wi-Fi networks found', openNetwork: 'open', wifiNetwork: 'Wi-Fi network', wifiPassword: 'Wi-Fi password', wifiPassKeep: 'saved, leave empty to keep', saved: 'Saved',
     configStart: 'Start configuration mode', configNeedsWifi: 'Enter the Wi-Fi network first.',
     configConfirm: h => `Restart on Wi-Fi? The beds do not work in Home Assistant until the bridge is back (at most 15 minutes). Then open http://${h}/`,
     configStarted: h => `Restarting on Wi-Fi: open http://${h}/ in a minute`,
@@ -273,7 +276,7 @@ const TEXT = {
     title: 'Octo bedden',
     network: 'Netwerk', thread: 'Thread', wifi: 'Wi-Fi',
     pairLater: 'Voeg eerst een bed toe. De koppelcode verschijnt hier zodra een bed verbonden is, zodat de bedden met hun naam in Home Assistant en Apple Home komen.',
-    loginTitle: 'Inloggen', loginHelp: "Vul het wachtwoord van deze bridge in. Vergeten? Houd de BOOT-knop 5 tot 10 seconden ingedrukt en laat los: de bridge opent zijn setup-netwerk, waar je een nieuw wachtwoord kiest.", password: 'Wachtwoord', login: 'Inloggen', wrongPassword: 'Onjuist wachtwoord.', stateIdle: 'Niet verbonden', stateBusy: 'Verbinden…', weakSignal: 'Zwak signaal: zet de bridge dichter bij het bed.', changePassword: 'Wachtwoord wijzigen', restart: 'Herstarten', language: 'Taal',
+    loginTitle: 'Inloggen', loginHelp: "Vul het wachtwoord van deze bridge in. Vergeten? Houd de BOOT-knop 5 tot 10 seconden ingedrukt en laat los (of zet de stroom 6 keer uit en aan, steeds binnen 10 seconden): de bridge opent zijn setup-netwerk, waar je een nieuw wachtwoord kiest.", password: 'Wachtwoord', login: 'Inloggen', wrongPassword: 'Onjuist wachtwoord.', stateIdle: 'Niet verbonden', stateBusy: 'Verbinden…', weakSignal: 'Zwak signaal: zet de bridge dichter bij het bed.', changePassword: 'Wachtwoord wijzigen', restart: 'Herstarten', language: 'Taal',
     settings: 'Instellingen', pairingCode: 'Koppelcode', openWindow: 'Koppelvenster openen',
     deviceNetwork: 'Apparaat en netwerk', device: 'Apparaat', vidPid: 'Vendor-/product-ID',
     testIds: "Test-ID's van de Matter-standaard", system: 'Systeem', freeMemory: 'Vrij geheugen', uptime: 'Actief',
@@ -298,7 +301,7 @@ const TEXT = {
     maxBedsHelp: n => `Maximaal ${n} bedden: verwijder er eerst één.`, giveName: 'Geef het bed een naam.', pinDigits: 'De PIN heeft 4 cijfers.',
     newName: 'Nieuwe naam', confirmRemove: n => `${n} verwijderen? De bridge verbreekt de verbinding en vergeet de PIN.`,
     configMode: 'Configuratiemodus', configHelp: 'Voor een firmware-update: de bridge herstart 15 minuten op Wi-Fi, met Thread, Matter en de bedden uit. Daarna gaat hij vanzelf terug.',
-    wifiNetwork: 'Wi-Fi-netwerk', wifiPassword: 'Wi-Fi-wachtwoord', wifiPassKeep: 'opgeslagen, leeg laten om te houden', saved: 'Opgeslagen',
+    scanWifi: 'Netwerken zoeken', scanning: 'Zoeken… (Thread pauzeert een paar seconden)', noNetworks: 'Geen Wi-Fi-netwerken gevonden', openNetwork: 'open', wifiNetwork: 'Wi-Fi-netwerk', wifiPassword: 'Wi-Fi-wachtwoord', wifiPassKeep: 'opgeslagen, leeg laten om te houden', saved: 'Opgeslagen',
     configStart: 'Configuratiemodus starten', configNeedsWifi: 'Vul eerst het Wi-Fi-netwerk in.',
     configConfirm: h => `Herstarten op Wi-Fi? De bedden werken in Home Assistant niet tot de bridge terug is (hooguit 15 minuten). Open daarna http://${h}/`,
     configStarted: h => `Herstart op Wi-Fi: open over een minuut http://${h}/`,
@@ -325,7 +328,7 @@ const TEXT = {
     title: 'Octo-Betten',
     network: 'Netzwerk', thread: 'Thread', wifi: 'WLAN',
     pairLater: 'Fügen Sie zuerst ein Bett hinzu. Der Kopplungscode erscheint hier, sobald ein Bett verbunden ist, damit die Betten mit ihrem Namen in Home Assistant und Apple Home ankommen.',
-    loginTitle: 'Anmelden', loginHelp: "Geben Sie das Passwort dieser Bridge ein. Vergessen? Halten Sie die BOOT-Taste 5 bis 10 Sekunden gedrückt und lassen Sie los: Die Bridge öffnet ihr Einrichtungsnetz, dort wählen Sie ein neues.", password: 'Passwort', login: 'Anmelden', wrongPassword: 'Falsches Passwort.', stateIdle: 'Nicht verbunden', stateBusy: 'Verbinde…', weakSignal: 'Schwaches Signal: Stellen Sie die Bridge näher ans Bett.', changePassword: 'Passwort ändern', restart: 'Neu starten', language: 'Sprache',
+    loginTitle: 'Anmelden', loginHelp: "Geben Sie das Passwort dieser Bridge ein. Vergessen? Halten Sie die BOOT-Taste 5 bis 10 Sekunden gedrückt und lassen Sie los (oder schalten Sie den Strom 6-mal aus und ein, jeweils innerhalb von 10 Sekunden): Die Bridge öffnet ihr Einrichtungsnetz, dort wählen Sie ein neues.", password: 'Passwort', login: 'Anmelden', wrongPassword: 'Falsches Passwort.', stateIdle: 'Nicht verbunden', stateBusy: 'Verbinde…', weakSignal: 'Schwaches Signal: Stellen Sie die Bridge näher ans Bett.', changePassword: 'Passwort ändern', restart: 'Neu starten', language: 'Sprache',
     settings: 'Einstellungen', pairingCode: 'Kopplungscode', openWindow: 'Kopplungsfenster öffnen',
     deviceNetwork: 'Gerät und Netzwerk', device: 'Gerät', vidPid: 'Hersteller-/Produkt-ID',
     testIds: 'Test-IDs des Matter-Standards', system: 'System', freeMemory: 'Freier Speicher', uptime: 'Laufzeit',
@@ -350,7 +353,7 @@ const TEXT = {
     maxBedsHelp: n => `Höchstens ${n} Betten: entfernen Sie zuerst eins.`, giveName: 'Geben Sie dem Bett einen Namen.', pinDigits: 'Die PIN hat 4 Ziffern.',
     newName: 'Neuer Name', confirmRemove: n => `${n} entfernen? Die Bridge trennt die Verbindung und vergisst die PIN.`,
     configMode: 'Konfigurationsmodus', configHelp: 'Für ein Firmware-Update: Die Bridge startet für 15 Minuten im WLAN neu, Thread, Matter und die Betten sind dann aus. Danach wechselt sie von selbst zurück.',
-    wifiNetwork: 'WLAN-Netz', wifiPassword: 'WLAN-Passwort', wifiPassKeep: 'gespeichert, leer lassen zum Behalten', saved: 'Gespeichert',
+    scanWifi: 'Netze suchen', scanning: 'Suche… (Thread pausiert einige Sekunden)', noNetworks: 'Keine WLAN-Netze gefunden', openNetwork: 'offen', wifiNetwork: 'WLAN-Netz', wifiPassword: 'WLAN-Passwort', wifiPassKeep: 'gespeichert, leer lassen zum Behalten', saved: 'Gespeichert',
     configStart: 'Konfigurationsmodus starten', configNeedsWifi: 'Geben Sie zuerst das WLAN-Netz ein.',
     configConfirm: h => `Im WLAN neu starten? Die Betten funktionieren in Home Assistant erst wieder, wenn die Bridge zurück ist (höchstens 15 Minuten). Öffnen Sie dann http://${h}/`,
     configStarted: h => `Neustart im WLAN: Öffnen Sie in einer Minute http://${h}/`,
@@ -377,7 +380,7 @@ const TEXT = {
     title: 'Camas Octo',
     network: 'Red', thread: 'Thread', wifi: 'Wi-Fi',
     pairLater: 'Añada primero una cama. El código de vinculación aparece aquí cuando una cama esté conectada, para que las camas lleguen a Home Assistant y Apple Home con su nombre.',
-    loginTitle: 'Iniciar sesión', loginHelp: "Introduzca la contraseña de este puente. ¿La olvidó? Mantenga pulsado el botón BOOT de 5 a 10 segundos y suéltelo: el puente abre su red de configuración, donde elige una nueva.", password: 'Contraseña', login: 'Entrar', wrongPassword: 'Contraseña incorrecta.', stateIdle: 'No conectada', stateBusy: 'Conectando…', weakSignal: 'Señal débil: acerque el puente a la cama.', changePassword: 'Cambiar contraseña', restart: 'Reiniciar', language: 'Idioma',
+    loginTitle: 'Iniciar sesión', loginHelp: "Introduzca la contraseña de este puente. ¿La olvidó? Mantenga pulsado el botón BOOT de 5 a 10 segundos y suéltelo (o corte y dé la corriente 6 veces, cada vez en menos de 10 segundos): el puente abre su red de configuración, donde elige una nueva.", password: 'Contraseña', login: 'Entrar', wrongPassword: 'Contraseña incorrecta.', stateIdle: 'No conectada', stateBusy: 'Conectando…', weakSignal: 'Señal débil: acerque el puente a la cama.', changePassword: 'Cambiar contraseña', restart: 'Reiniciar', language: 'Idioma',
     settings: 'Ajustes', pairingCode: 'Código de vinculación', openWindow: 'Abrir ventana de vinculación',
     deviceNetwork: 'Dispositivo y red', device: 'Dispositivo', vidPid: 'ID de fabricante / producto',
     testIds: 'IDs de prueba del estándar Matter', system: 'Sistema', freeMemory: 'Memoria libre', uptime: 'Activo',
@@ -402,7 +405,7 @@ const TEXT = {
     maxBedsHelp: n => `Como máximo ${n} camas: elimine una primero.`, giveName: 'Ponga un nombre a la cama.', pinDigits: 'El PIN tiene 4 cifras.',
     newName: 'Nuevo nombre', confirmRemove: n => `¿Eliminar ${n}? El puente se desconecta y olvida el PIN.`,
     configMode: 'Modo de configuración', configHelp: 'Para actualizar el firmware: el puente se reinicia 15 minutos en Wi-Fi, con Thread, Matter y las camas apagados. Después vuelve solo.',
-    wifiNetwork: 'Red Wi-Fi', wifiPassword: 'Contraseña Wi-Fi', wifiPassKeep: 'guardada, deja vacío para mantenerla', saved: 'Guardado',
+    scanWifi: 'Buscar redes', scanning: 'Buscando… (Thread se pausa unos segundos)', noNetworks: 'No se encontraron redes Wi-Fi', openNetwork: 'abierta', wifiNetwork: 'Red Wi-Fi', wifiPassword: 'Contraseña Wi-Fi', wifiPassKeep: 'guardada, deja vacío para mantenerla', saved: 'Guardado',
     configStart: 'Iniciar modo de configuración', configNeedsWifi: 'Introduce primero la red Wi-Fi.',
     configConfirm: h => `¿Reiniciar en Wi-Fi? Las camas no funcionan en Home Assistant hasta que vuelva el puente (15 minutos como máximo). Después abre http://${h}/`,
     configStarted: h => `Reiniciando en Wi-Fi: abre http://${h}/ en un minuto`,
@@ -854,6 +857,28 @@ $('#threadForm').onsubmit = async e => {
   } catch (err) { toast(t('error') + ': ' + err.message); }
 };
 let wifiHost = 'octo-bridge.local';
+
+// The Wi-Fi networks in range, to tap instead of typing the name
+for (const b of document.querySelectorAll('[data-scan]')) b.onclick = () => scanWifi(b.dataset.scan, b);
+async function scanWifi(id, button) {
+  const list = $('#' + id + 'Nets');
+  button.disabled = true;
+  button.textContent = t('scanning');
+  try {
+    const reply = await cmd('wifi scan');
+    if (!reply.trim().startsWith('{')) throw new Error(reply.replace(/^error: /, '').trim());
+    const nets = JSON.parse(reply).networks;
+    list.innerHTML = nets.length ? nets.slice(0, 10).map(n => `<button type="button" data-ssid="${esc(n.ssid)}">${esc(n.ssid)}<span class="sub"> · ${n.rssi} dBm${n.open ? ' · ' + t('openNetwork') : ''}</span></button>`).join('')
+      : `<span class="sub">${t('noNetworks')}</span>`;
+    for (const b of list.querySelectorAll('button')) b.onclick = () => {
+      $('#' + id).value = b.dataset.ssid;
+      list.innerHTML = '';
+      const pass = $('#' + id.replace('Ssid', 'Pass'));
+      if (pass) pass.focus();
+    };
+  } catch (e) { toast(t('error') + ': ' + e.message); }
+  finally { button.disabled = false; button.textContent = t('scanWifi'); }
+}
 
 async function saveWifi(ssidEl = $('#wifiSsid'), passEl = $('#wifiPass')) {
   const ssid = ssidEl.value.trim(), pass = passEl.value;

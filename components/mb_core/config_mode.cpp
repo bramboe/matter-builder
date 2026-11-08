@@ -381,6 +381,10 @@ std::string command_in_config_mode(const std::vector<std::string>& args) {
 
 }  // namespace
 
+bool running = false;  // run() was entered
+
+bool active() { return running; }
+
 bool requested() {
     nvs_handle_t handle;
     if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &handle) != ESP_OK) {
@@ -402,6 +406,7 @@ bool requested() {
 }
 
 void run() {
+    running = true;
     const Network network = stored_network();
     ESP_LOGW(TAG, "Configuration mode on Wi-Fi '%s', back to normal after %lld idle minutes", network.ssid.c_str(),
              idle_limit_us / MINUTE_US);

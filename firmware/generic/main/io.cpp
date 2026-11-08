@@ -19,6 +19,9 @@
 #include "io.h"
 #include "ir.h"
 #include "rules.h"
+#if CONFIG_OPENTHREAD_ENABLED
+#include "config_mode.h"
+#endif
 
 namespace io {
 
@@ -927,8 +930,15 @@ void start() {
     }
     const uint8_t boots = trial_boots();
     if (boots > 0 && boots < MAX_TRIAL_BOOTS) {
-        // A trial: the draft runs; without "io confirm" it ends in 2 minutes
+        // A trial: the draft runs; without "io confirm" it ends in 2 minutes.
+        // A start counts towards giving up on it, except the restart into
+        // configuration mode (a device without Thread makes that one by
+        // itself right after starting, so every try counted twice)
+#if CONFIG_OPENTHREAD_ENABLED
+        if (!config_mode::active()) set_trial_boots(boots + 1);
+#else
         set_trial_boots(boots + 1);
+#endif
         std::memcpy(running, draft, sizeof(running));
         in_trial = true;
         trial_end_us = esp_timer_get_time() + TRIAL_US;

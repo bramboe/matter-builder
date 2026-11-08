@@ -26,6 +26,9 @@ namespace config_mode {
 // call run() instead of starting the bridge.
 bool requested();
 
+// This boot runs in configuration mode (run() was entered)
+bool active();
+
 // Wi-Fi, HTTP API and console only. Never returns.
 [[noreturn]] void run();
 

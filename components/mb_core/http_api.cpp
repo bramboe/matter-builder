@@ -275,13 +275,18 @@ void restart_task(void*) {
     esp_restart();
 }
 
-esp_err_t ota_fail(httpd_req_t* req, esp_ota_handle_t handle, const char* why) {
+// `stopped`: the app was stopped for the upload (mb_core::stop); a restart
+// brings it back as it was, instead of leaving it half stopped
+esp_err_t ota_fail(httpd_req_t* req, esp_ota_handle_t handle, const char* why, bool stopped = false) {
     if (handle != 0) {
         esp_ota_abort(handle);
     }
     ESP_LOGE(TAG, "OTA failed: %s", why);
     httpd_resp_set_status(req, "500 Internal Server Error");
     httpd_resp_sendstr(req, why);
+    if (stopped) {
+        xTaskCreate(restart_task, "restart", 2048, nullptr, 5, nullptr);
+    }
     return ESP_OK;
 }
 
@@ -302,32 +307,39 @@ esp_err_t handle_ota(httpd_req_t* req) {
     std::unique_ptr<char[]> buf(new char[OTA_CHUNK]);
     esp_ota_handle_t handle = 0;
     size_t received = 0;
+    int silent = 0;  // receive timeouts in a row (15 s each)
     while (received < req->content_len) {
         int r = httpd_req_recv(req, buf.get(), OTA_CHUNK);
         if (r == HTTPD_SOCK_ERR_TIMEOUT) {
+            // A sender that went away without closing would keep this
+            // waiting for ever: two minutes of silence ends the upload
+            if (++silent >= 8) {
+                return ota_fail(req, handle, "upload stalled: nothing for two minutes\n", true);
+            }
             continue;
         }
+        silent = 0;
         if (r <= 0) {
-            return ota_fail(req, handle, "upload interrupted\n");
+            return ota_fail(req, handle, "upload interrupted\n", true);
         }
         if (received == 0) {
             if (static_cast<uint8_t>(buf[0]) != 0xE9) {
-                return ota_fail(req, 0, "not an ESP32 app image (use the OTA/app .bin, not a factory image)\n");
+                return ota_fail(req, 0, "not an ESP32 app image (use the OTA/app .bin, not a factory image)\n", true);
             }
             if (esp_ota_begin(target, OTA_WITH_SEQUENTIAL_WRITES, &handle) != ESP_OK) {
-                return ota_fail(req, 0, "cannot start writing the firmware slot\n");
+                return ota_fail(req, 0, "cannot start writing the firmware slot\n", true);
             }
         }
         if (esp_ota_write(handle, buf.get(), r) != ESP_OK) {
-            return ota_fail(req, handle, "writing flash failed\n");
+            return ota_fail(req, handle, "writing flash failed\n", true);
         }
         received += r;
     }
     if (esp_ota_end(handle) != ESP_OK) {
-        return ota_fail(req, 0, "image did not validate\n");
+        return ota_fail(req, 0, "image did not validate\n", true);
     }
     if (esp_ota_set_boot_partition(target) != ESP_OK) {
-        return ota_fail(req, 0, "cannot select the new image\n");
+        return ota_fail(req, 0, "cannot select the new image\n", true);
     }
     httpd_resp_sendstr(req, "OK, rebooting into the new firmware\n");
     xTaskCreate(restart_task, "restart", 2048, nullptr, 5, nullptr);

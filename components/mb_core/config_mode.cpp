@@ -147,6 +147,26 @@ bool force_ap = false;  // recovery: the setup access point even with a Wi-Fi ne
 char ap_ssid[33] = "";
 int last_reason = 0;  // wifi_err_reason_t of the last disconnect
 
+// What works without Matter (the app's config_mode_start: beds, connections).
+// Started once Wi-Fi is up, not before: Wi-Fi and Bluetooth share the radio,
+// and two bed links next to the join made the WPA handshake time out
+// (reason 15), which looked like a wrong password
+bool app_started = false;
+
+void start_app_task(void*) {
+    if (mb_core::app().config_mode_start != nullptr) {
+        mb_core::app().config_mode_start();
+    }
+    vTaskDelete(nullptr);
+}
+
+void start_app_once() {
+    if (!app_started) {
+        app_started = true;
+        xTaskCreate(start_app_task, "cfg_app", 6144, nullptr, 5, nullptr);
+    }
+}
+
 // Why the last configuration mode ended early, for the settings page
 void store_result(const char* why) {
     store("result", std::string(why) + " " + std::to_string(last_reason));
@@ -197,6 +217,7 @@ void start_ap() {
     setup_dns::start(esp_ip4addr_aton(ip_text));
     start_http();
     http_api::redirect_unknown_to("http://192.168.4.1/");
+    start_app_once();  // an open network: no handshake for Bluetooth to disturb
     ESP_LOGW(TAG, "Setup access point '%s': join it and open http://192.168.4.1/", ap_ssid);
 }
 
@@ -249,6 +270,7 @@ void on_event(void*, esp_event_base_t base, int32_t id, void* data) {
             store("result", "");
             start_http();
         }
+        start_app_once();
     }
 }
 
@@ -391,10 +413,7 @@ void run() {
     ESP_ERROR_CHECK(esp_timer_start_periodic(timer, CHECK_INTERVAL_US));
     set_command_override(command_in_config_mode);
 
-    // What works without Matter keeps working (the app's config_mode_start)
-    if (mb_core::app().config_mode_start != nullptr) {
-        mb_core::app().config_mode_start();
-    }
+    // What works without Matter starts once Wi-Fi is up (start_app_once)
 
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
@@ -417,6 +436,10 @@ void run() {
     wifi_config_t config = {};
     std::strncpy(reinterpret_cast<char*>(config.sta.ssid), network.ssid.c_str(), sizeof(config.sta.ssid));
     std::strncpy(reinterpret_cast<char*>(config.sta.password), network.password.c_str(), sizeof(config.sta.password));
+    // With several access points under one name, the first one found may be
+    // a far one where the handshake times out (reason 15): take the strongest
+    config.sta.scan_method = WIFI_ALL_CHANNEL_SCAN;
+    config.sta.sort_method = WIFI_CONNECT_AP_BY_SIGNAL;
     ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));  // keep NVS as it is
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &config));
@@ -428,7 +451,45 @@ void run() {
     }
 }
 
+// Text from hex: the page sends Wi-Fi names and passwords this way, so
+// spaces, quotes and other characters arrive exactly as typed (a command
+// line is split into words, which loses repeated or trailing spaces)
+bool from_hex(const std::string& hex, std::string& out) {
+    if (hex.size() % 2 != 0) {
+        return false;
+    }
+    out.clear();
+    for (size_t i = 0; i < hex.size(); i += 2) {
+        char* end = nullptr;
+        const std::string pair = hex.substr(i, 2);
+        const long byte = std::strtol(pair.c_str(), &end, 16);
+        if (end != pair.c_str() + 2) {
+            return false;
+        }
+        out += static_cast<char>(byte);
+    }
+    return true;
+}
+
 std::string command(const std::vector<std::string>& args) {
+    std::string value;
+    if (args.size() == 3 && args[1] == "ssid-hex") {
+        if (!from_hex(args[2], value) || value.empty() || value.size() > 32) {
+            return "error: the network name must be 1 to 32 bytes\n";
+        }
+        return store("ssid", value) ? "ok\n" : "storing failed\n";
+    }
+    if (args.size() == 3 && args[1] == "password-hex") {
+        if (!from_hex(args[2], value) || value.size() < 8 || value.size() > 64) {
+            return "error: a Wi-Fi password is 8 to 64 characters\n";
+        }
+        return store("pass", value) ? "ok\n" : "storing failed\n";
+    }
+    // An empty value used to erase the stored one (an empty password field
+    // then forgot the network's password); forgetting is "wifi clear" only
+    if (args.size() >= 2 && (args[1] == "ssid" || args[1] == "password") && args.size() == 2) {
+        return "error: no value given (wifi clear forgets the network)\n";
+    }
     if (args.size() >= 2 && args[1] == "ssid") {
         return store("ssid", rest(args, 2)) ? "ok\n" : "storing failed\n";
     }

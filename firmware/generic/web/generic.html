@@ -135,7 +135,7 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
       <div class="sub" data-t="wizHelp"></div>
       <form id="wizForm" class="form" style="grid-template-columns:1fr">
         <label class="field"><span data-t="wifiNetwork"></span><input id="wizSsid" autocomplete="off" maxlength="32"></label>
-        <label class="field"><span data-t="wifiPassword"></span><input id="wizPass" type="password" autocomplete="new-password" maxlength="64"></label>
+        <label class="field"><span data-t="wifiPassword"></span><input id="wizPass" type="password" autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other" maxlength="64"></label>
         <div class="sub wifiResult" style="color:var(--bad)" hidden></div>
         <div class="features" style="margin-top:0"><button type="button" id="wizSkip" data-t="wizSkip"></button>
           <button class="pri" type="submit" data-t="wizGo"></button></div>
@@ -209,7 +209,7 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
       <div class="sub" id="cfgCardHelp" data-t="configHelp"></div>
       <form id="wifiForm" class="form" style="grid-template-columns:1fr">
         <label class="field"><span data-t="wifiNetwork"></span><input id="wifiSsid" autocomplete="off" maxlength="32"></label>
-        <label class="field"><span data-t="wifiPassword"></span><input id="wifiPass" type="password" autocomplete="new-password" maxlength="64"></label>
+        <label class="field"><span data-t="wifiPassword"></span><input id="wifiPass" type="password" autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other" maxlength="64"></label>
         <div class="sub wifiResult" style="color:var(--bad)" hidden></div>
         <div class="features" style="margin-top:0"><button type="submit" data-t="save"></button>
           <button type="button" class="pri" id="cfgStart" data-t="configStart"></button></div>
@@ -350,6 +350,9 @@ function applyTexts() {
 }
 
 const $ = s => document.querySelector(s);
+// Where the device is: this page's address, or the one the add-on gives when it serves the page
+const deviceHome = window.mbHome || location.host;
+const hex = text => Array.from(new TextEncoder().encode(text), b => b.toString(16).padStart(2, '0')).join('');
 const icon = n => `<svg><use href="#i-${n}"/></svg>`;
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const quote = s => esc(s).replace(/'/g, '');
@@ -405,7 +408,7 @@ function signedInOk() {
 }
 
 async function cmd(line) {
-  const r = await fetch('/cmd', {method: 'POST', headers: {'X-Octo-Token': token}, body: line});
+  const r = await fetch('cmd', {method: 'POST', headers: {'X-Octo-Token': token}, body: line});
   const text = await r.text();
   if (r.status === 401) { showLogin(!text.startsWith('no password') && !!token, text.startsWith('no password') ? 'setup' : 'login'); throw new Error(t('passwordRefused')); }
   signedInOk();
@@ -654,7 +657,7 @@ async function loadMatter() {
   const role = (net.match(/role (\w+)/) || [])[1], rssi = (net.match(/rssi (-?\d+)/) || [])[1];
   $('#netKind').textContent = net.startsWith('thread') ? t('thread') + (role ? ' · ' + role : '')
     : net.startsWith('wifi') ? t('wifi') + (rssi ? ` · ${rssi} dBm` : '') : '–';
-  $('#pageUrl').textContent = location.host;
+  $('#pageUrl').textContent = deviceHome;
 }
 
 // Programs with a token of their own (the Home Assistant add-on, scripts)
@@ -775,8 +778,11 @@ let wifiHost = 'matter-builder.local';
 async function saveWifi(ssidEl = $('#wifiSsid'), passEl = $('#wifiPass')) {
   const ssid = ssidEl.value.trim(), pass = passEl.value;
   if (!ssid) { toast(t('configNeedsWifi')); return false; }
-  await cmd('wifi ssid ' + ssid);
-  if (pass) await cmd('wifi password ' + pass);
+  // As hex, so spaces and other characters arrive exactly as typed
+  for (const line of ['wifi ssid-hex ' + hex(ssid)].concat(pass ? ['wifi password-hex ' + hex(pass)] : [])) {
+    const reply = await cmd(line);
+    if (reply.startsWith('error')) throw new Error(reply.replace(/^error: /, '').trim());
+  }
   passEl.value = '';
   await loadWifi();
   return true;
@@ -799,7 +805,7 @@ $('#cfgStart').onclick = async () => {
   } catch (err) { toast(t('error') + ': ' + err.message); }
 };
 async function startConfigMode(minutes, textEl) {
-  await cmd('wifi home ' + location.host);
+  await cmd('wifi home ' + deviceHome);
   await cmd('wifi config ' + minutes);
   textEl.textContent = t('configStarted', wifiHost);
   moveTo(`http://${wifiHost}/`, textEl);
@@ -836,7 +842,7 @@ $('#otaForm').onsubmit = e => {
   if (!file) { toast(t('chooseFile')); return; }
   // XMLHttpRequest: fetch cannot report upload progress
   const xhr = new XMLHttpRequest();
-  xhr.open('POST', '/ota');
+  xhr.open('POST', 'ota');
   xhr.setRequestHeader('X-Octo-Token', token);
   xhr.upload.onprogress = ev => { if (ev.lengthComputable) $('#otaProgress').textContent = t('uploading', Math.round(100 * ev.loaded / ev.total)); };
   xhr.onload = () => { $('#otaProgress').textContent = xhr.status === 200 ? t('uploadDone') : xhr.responseText; };
@@ -886,7 +892,7 @@ async function choosePassword(value) {
   if (value.length < 8) { $('#loginError').textContent = t('passwordShort'); return; }
   if (value !== $('#password2').value.trim()) { $('#loginError').textContent = t('passwordMismatch'); return; }
   try {
-    const r = await fetch('/auth', {method: 'POST', headers: {'X-Octo-Token': token}, body: value});
+    const r = await fetch('auth', {method: 'POST', headers: {'X-Octo-Token': token}, body: value});
     if (r.status === 401) { showLogin(true); return; }
     if (!r.ok) { $('#loginError').textContent = (await r.text()).trim(); return; }
   } catch (err) { $('#loginError').textContent = t('noConnection'); return; }
@@ -907,7 +913,7 @@ $('#loginForm').onsubmit = e => {
 // A device without a password asks for one first; older firmware has no /auth
 (async () => {
   try {
-    const r = await fetch('/auth');
+    const r = await fetch('auth');
     if (r.ok && !(await r.json()).password) { showLogin(false, 'setup'); return; }
   } catch (e) {}
   if (!token) showLogin(false);

@@ -198,6 +198,30 @@ def proxy_status(proxy):
     return {"ok": True, "system": system, "beds": beds, "io": state.get("io")}
 
 
+# One missed answer over Thread is common; "offline" only after two in a row,
+# and then with since when (like ESPHome's "Offline 2d")
+last_status = {}  # id -> (last good status, misses since)
+
+
+def checked_status(proxy):
+    status = proxy_status(proxy)
+    good, misses = last_status.get(proxy["id"], (None, 0))
+    now = int(time.time())
+    if status["ok"]:
+        status = dict(status, last_seen=now)
+        last_status[proxy["id"]] = (status, 0)
+        if now - (proxy.get("last_seen") or 0) > 600:  # on disk now and then, not every poll
+            remember(proxy, last_seen=now)
+        return status
+    last_status[proxy["id"]] = (good, misses + 1)
+    if good is not None and misses == 0 and not status.get("auth"):
+        return dict(good, stale=True)
+    seen = proxy.get("last_seen")
+    if good is not None:
+        seen = max(seen or 0, good.get("last_seen", 0)) or seen
+    return dict(status, last_seen=seen)
+
+
 def remember(proxy, **fields):
     proxies = load_proxies()
     for p in proxies:
@@ -1285,7 +1309,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if not proxy:
                 return self.reply({"error": "unknown proxy"}, 404)
             if parts[3] == "status":
-                return self.reply(proxy_status(proxy))
+                return self.reply(checked_status(proxy))
             if parts[3] == "token":
                 return self.reply({"token": proxy["token"]})
         if len(parts) == 3 and parts[:2] == ["api", "link"]:

@@ -343,7 +343,7 @@ const TEXT = {
   emptyText: 'Matter Builder turns an ESP32-C6 into a standard Matter device for Home Assistant, Apple Home and Google Home. Every device keeps working without Home Assistant and has a settings page of its own.',
   newDevice: 'New device', newDeviceHelp: 'Install firmware or link one', browseCatalog: 'Browse the catalog',
   discovered: (n, v) => `Discovered: ${n}${v ? ' · ' + v : ''}`, adopt: 'Adopt',
-  online: 'Online', notReachable: 'Not reachable on the network', offline: 'Offline', checking: 'Checking', keyRejected: 'Key refused', configMode: 'Configuration mode',
+  online: 'Online', offlineFor: d => `Offline ${d}`, notReachable: 'Not reachable on the network', offline: 'Offline', checking: 'Checking', keyRejected: 'Key refused', configMode: 'Configuration mode',
   updateTo: v => `Update to ${v}`, edit: 'Edit', openPage: 'Open page', openDirect: 'Open on the device', more: 'More', rename: 'Rename', forget: 'Forget', showKey: 'Show key',
   updateAll: n => `Update all (${n})`, nothingConnected: 'Nothing connected yet', connections: 'Connections', firmware: 'Firmware', info: 'Info',
   noIo: 'This firmware has no configurable connections. Its own settings are on its page.',
@@ -502,10 +502,15 @@ function running(s) {
   return {app, version, net, config: /^configuration mode/.test(net)};
 }
 
+// "5 min", "3 h", "2 d": how long ago, as short as ESPHome shows it
+function ago(when) {
+  const sec = Math.max(0, Date.now() / 1000 - when);
+  return sec < 3600 ? `${Math.max(1, Math.round(sec / 60))} min` : sec < 172800 ? `${Math.round(sec / 3600)} h` : `${Math.round(sec / 86400)} d`;
+}
 function statusChip(s) {
   if (!s) return `<span class="chip">${t('checking')}</span>`;
   if (!s.ok && s.auth) return `<span class="chip warn">${t('keyRejected')}</span>`;
-  if (!s.ok) return `<span class="chip">${t('offline')}</span>`;
+  if (!s.ok) return `<span class="chip" ${s.last_seen ? `title="${esc(date(s.last_seen))}"` : ''}>${s.last_seen ? t('offlineFor', ago(s.last_seen)) : t('offline')}</span>`;
   return running(s).config ? `<span class="chip warn">${t('configMode')}</span>` : `<span class="chip ok">${t('online')}</span>`;
 }
 

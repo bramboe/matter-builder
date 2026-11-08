@@ -509,7 +509,7 @@ async function run(line) {
 }
 
 // Shown the Home Assistant way: 0 % flat, 100 % fully raised
-const pos = v => v === undefined ? '' : v === 0 ? t('flat') : v >= 100 ? t('fullyRaised') : t('raised', v);
+const pos = v => typeof v !== 'number' ? '' : v === 0 ? t('flat') : v >= 100 ? t('fullyRaised') : t('raised', v);
 
 function motorTile(b, part, label, value) {
   const i = b.index, dis = b.state === 'ready' ? '' : 'disabled';
@@ -674,7 +674,8 @@ async function refresh() {
     state = JSON.parse(await cmd('json'));
     showConfigMode(state.config_mode);
     if (state.config_mode) presets = null;
-    else try { presets = JSON.parse(await cmd('preset list')); } catch (e) { presets = null; }
+    // A request that fails now and then (Thread) keeps the positions it had
+    else try { presets = JSON.parse(await cmd('preset list')); } catch (e) {}
     const ready = state.beds.filter(b => b.state === 'ready').length;
     const configured = state.beds.filter(b => b.configured).length;
     $('#sys').textContent = configured ? t('bedsConnected', ready, configured) : t('noBeds');

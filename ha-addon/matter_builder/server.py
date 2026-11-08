@@ -534,14 +534,120 @@ def builds():
     return out
 
 
+# ---------------------------------------------------------------- updates fetched over Wi-Fi
+# The device downloads the image itself, on Wi-Fi, from Home Assistant's own
+# address: that works across subnets and VLANs, where finding the device in
+# configuration mode needs mDNS (one subnet). A token per update, valid a
+# quarter of an hour, is the only way to the file; the device checks the
+# SHA-256 the add-on sends it over Thread.
+FETCH_PORT = int(os.environ.get("MB_FETCH_PORT", "8098"))
+fetch_tokens = {}  # token -> (path, valid until)
+
+
+def lan_ip():
+    """This machine's address on the home network (the add-on uses the host network)."""
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+        s.connect(("192.0.2.1", 80))  # no packet is sent: only the route is looked up
+        return s.getsockname()[0]
+
+
+class FetchHandler(http.server.BaseHTTPRequestHandler):
+    def log_message(self, fmt, *args):
+        pass
+
+    def do_GET(self):
+        token = self.path.removeprefix("/fw/")
+        path, until = fetch_tokens.get(token, (None, 0))
+        if path is None or time.time() > until or not Path(path).is_file():
+            self.send_error(404)
+            return
+        body = Path(path).read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/octet-stream")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+
+def running_line(text):
+    return (text.strip().splitlines() or [""])[0]
+
+
+def fetch_over_wifi(proxy, image):
+    """True when the device fetched and booted the image; False to go over Thread."""
+    data = image.read_bytes()
+    sha = hashlib.sha256(data).hexdigest()
+    token = secrets.token_urlsafe(18)
+    fetch_tokens[token] = (str(image), time.time() + 900)
+    try:
+        url = f"http://{lan_ip()}:{FETCH_PORT}/fw/{token}"
+    except OSError as err:
+        log(f"   no address for Home Assistant on the home network ({err})")
+        return False
+    # A release image also has its download on GitHub: the device tries that
+    # when its Wi-Fi cannot reach Home Assistant (an IoT network often cannot)
+    release = next((i for i in release_state["images"] if i["file"] == image.name and i.get("sha256") == sha), None)
+    second = f" {release['url']}" if release and str(release.get("url", "")).startswith("https://") else ""
+    _, before = command(proxy, "system", timeout=10)
+    log("== Fetching over Wi-Fi: the device downloads the firmware itself (a minute or so)")
+    status, text = command(proxy, f"wifi fetch {url} {sha}{second}")
+    if status == 200 and not text.startswith("restarting"):
+        log(f"   {text.strip()}")
+        return False
+    log("   " + (text.strip() or "(it restarts on Wi-Fi)"))
+    time.sleep(20)
+    back, now = False, ""
+    end = time.time() + 300  # Wi-Fi join, download, restart, back on Thread
+    while time.time() < end:
+        status, now = command(proxy, "system", timeout=10)
+        if status == 200:
+            back = True
+            break
+        time.sleep(5)
+    fetch_tokens.pop(token, None)
+    if not back:
+        log("!! The device did not come back on Thread yet; boot_guard returns to the previous firmware if it cannot get online")
+        return False
+    _, wifi = command(proxy, "wifi json", timeout=10)
+    try:
+        result = json.loads(wifi).get("last_result", "")
+    except ValueError:
+        result = ""
+    switched = running_line(now).split(":")[1:2] != running_line(before).split(":")[1:2]  # "running: app1 ..." slot
+    if result.startswith("fetch ok") and switched:
+        if "internet" in result:
+            log("   fetched from GitHub: this Wi-Fi does not reach Home Assistant")
+        log(running_line(now))
+        log("== Done")
+        return True
+    why = {"password": "Wi-Fi refused the password", "notfound": "Wi-Fi network not found",
+           "noconnect": "no Wi-Fi connection"}.get(result.split(" ")[0], result or "no result")
+    log(f"   over Wi-Fi it did not work: {why}")
+    return False
+
+
 def update_proxy(proxy, image):
-    """Configuration mode on Wi-Fi (fast upload), the image, then back."""
+    """The image over Wi-Fi: the device fetching it (fast), else the device in
+    configuration mode reached by the add-on, else over Thread (slow)."""
     log(f"== Update {proxy['name']} with {image.name}")
     status, text = command(proxy, "system")
     if status != 200:
         log(f"!! Proxy not reachable: {text.strip()}")
         return False
     log(text.strip().splitlines()[0])
+
+    status, wifi = command(proxy, "wifi json")
+    try:
+        can_fetch = status == 200 and json.loads(wifi).get("fetch") is True
+    except ValueError:
+        can_fetch = False
+    if can_fetch:
+        if fetch_over_wifi(proxy, image):
+            return True
+        log("== Over Thread instead (slow, about half an hour)")
+        status, text = upload_over_thread(proxy, image)
+        log(text.strip() or f"HTTP {status}")
+        return status == 200 and wait_until_back(proxy)
 
     if proxy.get("ota_over_thread"):
         # Learned on an earlier update: Wi-Fi does not reach this device
@@ -1540,5 +1646,7 @@ if __name__ == "__main__":
     DATA.mkdir(parents=True, exist_ok=True)
     discovery.start()
     threading.Thread(target=releases_loop, daemon=True).start()
-    print(f"Matter Builder on port {PORT}", flush=True)
+    fetch_server = Server(("::", FETCH_PORT), FetchHandler)
+    threading.Thread(target=fetch_server.serve_forever, daemon=True).start()
+    print(f"Matter Builder on port {PORT}, updates fetched from port {FETCH_PORT}", flush=True)
     Server(("::", PORT), Handler).serve_forever()

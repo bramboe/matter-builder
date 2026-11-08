@@ -261,20 +261,24 @@ password are set on the device's own page.
 
 ## Updating a device
 
-Thread is slow for a 2 MB upload. The add-on therefore switches the device
-to *configuration mode* on Wi-Fi for a moment, uploads the firmware in about
-20 seconds, and the device returns to Thread. What is connected to it is
-unavailable for a few minutes. If the new firmware cannot get online, the
-device goes back to the previous one by itself.
+**Over Wi-Fi, by the device itself** (generic 0.1.8 and bed bridge 1.0.17
+on): the add-on asks the device over Thread to fetch the firmware. The
+device restarts on its Wi-Fi network for that moment, downloads the image
+from Home Assistant (port 8098 of its address, with a one-time link), or,
+when that Wi-Fi cannot reach Home Assistant (an IoT network often cannot),
+the same release straight from GitHub. It checks the image against the
+SHA-256 the add-on sends it (from the signed release), installs it and goes
+back to Thread with it: about a minute. What is connected to it is
+unavailable meanwhile. If the new firmware cannot get online, the device
+goes back to the previous one by itself.
 
-When Home Assistant cannot see the device on Wi-Fi (it is on another network
-or VLAN, or mDNS does not get across), the add-on waits until the device is
-back on Thread (at most 15 minutes) and sends the firmware over Thread
-instead. Over Thread that is slow, roughly 1 KB per second: about half an
-hour for a 2 MB image, with the progress shown in the task bar. The device
-keeps working meanwhile. The add-on remembers this, and later updates of that
-device go over Thread straight away. Putting Home Assistant and the device's
-Wi-Fi on the same network makes updates take seconds instead.
+Your own builds (developer mode) are not on GitHub: for those the device's
+Wi-Fi must reach Home Assistant, or the update goes over Thread.
+
+**Over Thread** when Wi-Fi does not work (no Wi-Fi network set on the
+device, or it cannot connect) or for older firmware: roughly 1 KB per
+second, about half an hour for a 2 MB image, with the progress shown in the
+task bar. The device keeps working meanwhile.
 
 ## Network
 

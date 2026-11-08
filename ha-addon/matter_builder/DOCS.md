@@ -16,7 +16,8 @@ device's page or in the add-on.
   Devices found on the network but not linked yet show up with *Adopt*.
 - **New device**: a wizard that installs firmware on a new ESP32 and links it.
 - **Linking**: give the address and password of a device's page, then press
-  its BOOT button briefly (or switch its power off and on three times). The
+  its BOOT button briefly (or switch its power off and on three times; six
+  times is recovery, like holding BOOT, for a device in a wall box). The
   add-on gets a key of its own; it never stores the password. The device's
   page lists the add-on under *Programs with access*, where you can revoke it.
 - **Open page**: the device's own settings page, opened through the add-on.
@@ -104,8 +105,10 @@ connections:
   - slot: 0
     type: relay        # relay, led, button, contact, motion, sht4x
     pin: 4             # 0-7, 10, 11, 18-23
+    power: last        # at power-on: off (default), on, last (as it was), toggle
+    off_after: 600     # seconds until it switches itself off (0: never)
     name: Pump
-  - { slot: 1, type: contact, pin: 5, name: Door }
+  - { slot: 1, type: contact, pin: 5, controls: 0, name: Door }
   - slot: 2
     type: sht4x
     pin: 6             # SDA
@@ -127,7 +130,18 @@ connections:
   fixed address for presence (seen in the last minute). It starts only when a
   connection needs it.
 
+- **On the device itself**, also when Home Assistant is off: `power` (what
+  an output does after a power cut), `off_after` (it switches itself off),
+  and `controls` on a button, contact, motion or presence connection: a
+  button toggles that output, the others switch it with them. With
+  `off_after` on the output, it goes off that long after the input went
+  inactive (a light that stays on while there is motion). Matter hears of
+  every change, so controllers show it. The catalog has two recipes with
+  these: *Light switch* and *Motion light*.
+
 Wi-Fi, Thread and passwords never go in: they are set on the device itself.
+A device's page can look for Wi-Fi networks (*Look for networks*) instead of
+typing the name; on Thread the radio pauses for those few seconds.
 
 ## Pairing over Bluetooth
 

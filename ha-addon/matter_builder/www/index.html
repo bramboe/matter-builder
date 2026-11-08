@@ -362,6 +362,10 @@ const TEXT = {
   form: 'Form', visualEditor: 'Visual editor', duplicate: 'Duplicate', editInYaml: 'Edit in YAML', cancel: 'Cancel',
   ofEight: n => `${n} of 8`, allUsed: 'All 8 connections are in use', invertedShort: 'inverted',
   invertedHelp: 'Inverted: a relay that switches on with a low pin, or an input the other way round',
+  powerOn: 'At power-on', power_off: 'Off', power_on: 'On', power_last: 'As it was', power_toggle: 'The other way round',
+  offAfter: 'Off by itself after (s)', controls: 'Switches', controlsNone: 'Nothing',
+  optionsHelp: 'These work on the device itself, also when Home Assistant is off.',
+  cardPower: m => `at power-on ${m}`, cardOffAfter: n => `off after ${n} s`, cardControls: n => `switches ${n}`,
   yamlHelp: 'The whole configuration. Pins: 0–7, 10, 11, 18–23. Wi-Fi, Thread and passwords are never in here.',
   oneConnection: 'one connection here', pinTaken: n => `that pin is used by ${n}`, sda: 'SDA',
   liveOn: 'on', liveOff: 'off', liveTurnOn: 'Turn on', liveTurnOff: 'Turn off', liveClosed: 'closed', liveOpen: 'open',
@@ -634,6 +638,11 @@ const TYPE_ICON = {
 const MATTER_ICON = {on_off: 'relay', dimmable: 'led', button: 'button', contact: 'contact', occupancy: 'motion', climate: 'sht4x'};
 const typeIcon = (type, driver) => `<svg viewBox="0 0 24 24"><path d="${TYPE_ICON[type] || (driver && TYPE_ICON[MATTER_ICON[driver.matter]]) || ICON.chip}"/></svg>`;
 const isOutputType = type => type === 'relay' || type === 'led';
+// The on-device options (power-on, off after, what an input switches): built-in
+// types here, component types by what they are in Matter
+const optOutput = (type, d) => isOutputType(type) || (d && ['on_off', 'dimmable'].includes(d.matter));
+const optControl = (type, d) => ['button', 'contact', 'motion', 'ble_presence'].includes(type) || (d && ['button', 'contact', 'occupancy'].includes(d.matter));
+const ROW_OPTIONS = {power: 'off', off_after: 0, controls: null};
 const EDITORS = {};
 let editorPref = 'visual';
 try { editorPref = localStorage.getItem('mbEditor') === 'yaml' ? 'yaml' : 'visual'; } catch (e) {}
@@ -709,6 +718,15 @@ class ConfigEditor {
   }
   freePin(slot, not) { return this.pins.find(p => p !== not && !this.usedBy(p, slot)); }
   row(slot) { return this.rows.find(r => r.slot === slot); }
+  // " · at power-on as it was · off after 60 s · switches Lamp"
+  optionsText(r) {
+    const d = this.driver(r.type), parts = [];
+    if (optOutput(r.type, d) && r.power && r.power !== 'off') parts.push(t('cardPower', t('power_' + r.power).toLowerCase()));
+    if (optOutput(r.type, d) && r.off_after) parts.push(t('cardOffAfter', r.off_after));
+    const target = r.controls !== null && r.controls !== undefined && optControl(r.type, d) ? this.row(r.controls) : null;
+    if (target) parts.push(t('cardControls', target.name || this.title(target.type)));
+    return parts.map(p => ' · ' + p).join('');
+  }
 
   set(slot, key, value) {
     const r = this.row(slot);
@@ -718,6 +736,8 @@ class ConfigEditor {
       else if (this.usedBy(r.pin, slot) || !this.pins.includes(r.pin) || r.pin === 0 && this.usedBy(0, slot)) r.pin = this.freePin(slot);
       if (value === 'sht4x' && (r.pin2 === r.pin || this.usedBy(r.pin2, slot) || !this.pins.includes(r.pin2))) r.pin2 = this.freePin(slot, r.pin);
       if (value === 'sht4x' || isIr(value) || isBle(value)) r.inverted = false;
+      if (!optOutput(value, this.driver(value))) { r.power = 'off'; r.off_after = 0; }
+      if (!optControl(value, this.driver(value))) r.controls = null;
     }
     this.changed();
   }
@@ -730,7 +750,7 @@ class ConfigEditor {
     const slot = [0, 1, 2, 3, 4, 5, 6, 7].find(s => !this.row(s));
     if (slot === undefined) return;
     const pin = this.freePin(slot);
-    const r = {slot, type, pin, pin2: 0, inverted: false, name: '', code: '', mac: '', number: 0};
+    const r = {slot, type, pin, pin2: 0, inverted: false, name: '', code: '', mac: '', number: 0, ...ROW_OPTIONS};
     this.rows.push(r);
     // A second IR code of the same kind starts on the first one's LED or receiver
     const same = isIr(type) && this.rows.find(x => x.slot !== slot && x.type === type);
@@ -753,7 +773,12 @@ class ConfigEditor {
     this.open.add(to);
     this.changed();
   }
-  remove(slot) { this.rows = this.rows.filter(r => r.slot !== slot); this.open.delete(slot); this.changed(); }
+  remove(slot) {
+    this.rows = this.rows.filter(r => r.slot !== slot);
+    for (const r of this.rows) if (r.controls === slot) r.controls = null;  // nothing left to switch
+    this.open.delete(slot);
+    this.changed();
+  }
 
   // One card in YAML, like "Edit in YAML" on a Home Assistant trigger
   editCardYaml(slot) {
@@ -815,7 +840,14 @@ class ConfigEditor {
           ${this.driver(r.type) && this.driver(r.type).number ? `<label class="field"><span>${esc(this.driver(r.type).number)}</span><input type="number" min="0" max="65535" value="${r.number || 0}" oninput="${ref}.setQuiet(${r.slot}, 'number', +this.value)"></label>` : ''}
           ${isIr(r.type) ? `<label class="field"><span>${t('irCode')}</span><input value="${esc(r.code)}" placeholder="${t('irCodeHint')}" maxlength="13" spellcheck="false" oninput="${ref}.setQuiet(${r.slot}, 'code', this.value)"></label>` : ''}
           <label class="field"><span>${t('name')}</span><input maxlength="23" value="${esc(r.name)}" placeholder="${esc(this.title(r.type))}" oninput="${ref}.setQuiet(${r.slot}, 'name', this.value)"></label>
+          ${optOutput(r.type, this.driver(r.type)) ? `<label class="field"><span>${t('powerOn')}</span><select onchange="${ref}.set(${r.slot}, 'power', this.value)">
+            ${['off', 'on', 'last', 'toggle'].map(m => `<option value="${m}" ${m === (r.power || 'off') ? 'selected' : ''}>${t('power_' + m)}</option>`).join('')}</select></label>
+          <label class="field"><span>${t('offAfter')}</span><input type="number" min="0" max="65535" value="${r.off_after || 0}" oninput="${ref}.setQuiet(${r.slot}, 'off_after', Math.max(0, Math.min(65535, Math.round(+this.value || 0))))"></label>` : ''}
+          ${optControl(r.type, this.driver(r.type)) ? `<label class="field"><span>${t('controls')}</span><select onchange="${ref}.set(${r.slot}, 'controls', this.value === '' ? null : +this.value)">
+            <option value="">${t('controlsNone')}</option>
+            ${this.rows.filter(x => x.slot !== r.slot && (optOutput(x.type, this.driver(x.type)) || x.type === 'ir_send')).map(x => `<option value="${x.slot}" ${x.slot === r.controls ? 'selected' : ''}>${esc(x.name || this.title(x.type))}</option>`).join('')}</select></label>` : ''}
         </div>
+        ${optOutput(r.type, this.driver(r.type)) || optControl(r.type, this.driver(r.type)) ? `<div class="sub" style="margin-top:6px">${t('optionsHelp')}</div>` : ''}
         <div class="sub" style="margin-top:8px">${esc(this.help(r.type))}</div>
         ${isIr(r.type) && this.irLast !== undefined ? (this.irLast ? `<div class="actions" style="margin-top:6px"><button class="text" onclick="${ref}.set(${r.slot}, 'code', '${esc(this.irLast)}')">${esc(t('useLastCode', this.irLast))}</button></div>`
           : `<div class="sub" style="margin-top:6px">${t('noLastCode')}</div>`) : ''}
@@ -823,7 +855,7 @@ class ConfigEditor {
     return `<div class="ed-item ${open ? 'open' : ''}">
       <div class="ed-item-head" onclick="if (!event.target.closest('details,button')) ${ref}.toggle(${r.slot})">
         <span class="ico">${typeIcon(r.type, this.driver(r.type))}</span>
-        <div class="info"><b>${esc(r.name || this.title(r.type))}</b><div class="sub">${esc(this.title(r.type))} · ${pins}${r.inverted ? ' · ' + t('invertedShort') : ''}</div></div>
+        <div class="info"><b>${esc(r.name || this.title(r.type))}</b><div class="sub">${esc(this.title(r.type))} · ${pins}${r.inverted ? ' · ' + t('invertedShort') : ''}${esc(this.optionsText(r))}</div></div>
         ${live ? `<span class="chip">${esc(live)}</span>` : ''}
         ${canTest ? (r.type === 'ir_send' ? `<button class="plain" onclick="${ref}.tester(${r.slot}, true)">${t('liveSend')}</button>`
           : `<button class="plain" onclick="${ref}.tester(${r.slot}, ${!l.on})">${l.on ? t('liveTurnOff') : t('liveTurnOn')}</button>`) : ''}
@@ -874,7 +906,8 @@ class ConfigEditor {
 // added, with its key pinned; a recipe is only connections, no code.
 let catalogData = null, catalogError = null, catalogLoading = false, sourceFilter = 'any';
 const rowsOf = conns => (conns || []).map(x => ({slot: x.slot, type: x.type, pin: x.pin, pin2: x.scl, inverted: x.inverted, name: x.name,
-  code: x.code || '', mac: x.mac || '', number: x.number || 0}));
+  code: x.code || '', mac: x.mac || '', number: x.number || 0, power: x.power || 'off', off_after: x.off_after || 0,
+  controls: x.controls === undefined ? null : x.controls}));
 
 function localCatalog() {
   const items = [];
@@ -1108,7 +1141,7 @@ function specMessage(error, notice) {
 }
 function newSpec() {
   specEditor.mount($('#specEditorHost'));
-  specEditor.load('My device', [{slot: 0, type: 'relay', pin: 4, pin2: 0, inverted: false, name: 'Lamp'}], SAFE_PINS);
+  specEditor.load('My device', [{slot: 0, type: 'relay', pin: 4, pin2: 0, inverted: false, name: 'Lamp', ...ROW_OPTIONS}], SAFE_PINS);
   specMessage();
   $('#specEditor').hidden = false;
   $('#specEditor').scrollIntoView({behavior: 'smooth', block: 'center'});
@@ -1514,7 +1547,8 @@ async function copyToken(id) {
 function rowsFromIo(io) {
   return io.draft.filter(d => d.type !== 'none')
     .map(d => ({slot: d.index, type: d.type, pin: isBle(d.type) ? 0 : d.pin, pin2: d.pin2, inverted: d.inverted, name: d.name,
-      code: d.code || '', mac: d.mac || '', number: d.number || 0}));
+      code: d.code || '', mac: d.mac || '', number: d.number || 0, power: d.power || 'off', off_after: d.off_after || 0,
+      controls: d.controls === undefined ? null : d.controls}));
 }
 
 // One YAML format everywhere (device, config, recipe, wizard): the spec of
@@ -1530,6 +1564,9 @@ function specYaml(name, rows, components = [], drivers = []) {
     if (d && d.number) lines.push(`    number: ${r.number || 0}`);
     if (isIr(r.type)) lines.push(`    code: ${r.code}`);
     if (r.inverted) lines.push('    inverted: true');
+    if (optOutput(r.type, d) && r.power && r.power !== 'off') lines.push(`    power: ${r.power}`);
+    if (optOutput(r.type, d) && r.off_after) lines.push(`    off_after: ${r.off_after}`);
+    if (optControl(r.type, d) && r.controls !== null && r.controls !== undefined) lines.push(`    controls: ${r.controls}`);
     lines.push(`    name: ${r.name || (d ? d.title : TEXT.types[r.type])}`);
   }
   if (components.length) lines.push('', 'components:', ...components.map(c => `  - source: ${c.source}`));
@@ -1554,7 +1591,10 @@ function diffLines(io, rows, name, drivers = []) {
     const d = drivers.find(x => x.type === r.type);
     const where = d ? [d.pins > 0 ? r.pin : null, d.pins > 1 ? r.pin2 : null, d.number ? `n=${r.number || 0}` : null].filter(x => x !== null).join(' ')
       : isBle(r.type) ? r.mac : r.type === 'sht4x' ? `${r.pin} ${r.pin2}` : isIr(r.type) ? `${r.pin} ${r.code}` : `${r.pin}`;
-    lines.push(`io set ${r.slot} ${r.type} ${where}${r.inverted && !isIr(r.type) && !isBle(r.type) ? ' inverted' : ''} ${(r.name || TEXT.types[r.type]).trim().replace(/\s+/g, ' ')}`);
+    const options = [optOutput(r.type, d) && r.power && r.power !== 'off' ? `power=${r.power}` : null,
+      optOutput(r.type, d) && r.off_after ? `off_after=${r.off_after}` : null,
+      optControl(r.type, d) && r.controls !== null && r.controls !== undefined ? `controls=${r.controls}` : null].filter(Boolean);
+    lines.push(`io set ${r.slot} ${r.type} ${where}${r.inverted && !isIr(r.type) && !isBle(r.type) ? ' inverted' : ''}${options.map(o => ' ' + o).join('')} ${(r.name || TEXT.types[r.type]).trim().replace(/\s+/g, ' ')}`);
   }
   for (const slot of before.keys()) lines.push(`io clear ${slot}`);
   if (name && name !== io.name) lines.push(`name ${name}`);
@@ -1572,6 +1612,7 @@ function showManageState() {
   $('#mApply').hidden = !io.changed || io.trial > 0;
   $('#mConfirm').hidden = !(io.trial > 0);
   if (io.trial > 0) note(t('trialLeft', io.trial));
+  else if (io.problem) note(io.problem);  // what the device could not use at start
 }
 function note(text) { $('#mNotice').textContent = text; $('#mNotice').hidden = false; }
 
@@ -1759,7 +1800,7 @@ function renderWizard() {
       wiz.editorReady = true;
       wizEditor.host = null;
       if (wiz.configText) wizEditor.loadText(wiz.configText);
-      else wizEditor.load('My device', [{slot: 0, type: 'relay', pin: 4, pin2: 0, inverted: false, name: 'Lamp'}], SAFE_PINS);
+      else wizEditor.load('My device', [{slot: 0, type: 'relay', pin: 4, pin2: 0, inverted: false, name: 'Lamp', ...ROW_OPTIONS}], SAFE_PINS);
     }
     wizEditor.mount($('#wizEditor'));
   }

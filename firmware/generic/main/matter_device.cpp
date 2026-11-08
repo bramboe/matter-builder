@@ -4,7 +4,11 @@
 #include <cstring>
 #include <string>
 
+#include <app/clusters/boolean-state-server/BooleanStateCluster.h>
 #include <app/clusters/occupancy-sensor-server/OccupancySensingCluster.h>
+#include <app/clusters/relative-humidity-measurement-server/CodegenIntegration.h>
+#include <app/clusters/switch-server/CodegenIntegration.h>
+#include <app/clusters/temperature-measurement-server/TemperatureMeasurementCluster.h>
 #include <app/server/Server.h>
 #include <data_model_provider/esp_matter_data_model_provider.h>
 #include <esp_matter.h>
@@ -130,6 +134,23 @@ void set_occupancy(uint16_t ep, bool occupied) {
     if (cluster != nullptr) static_cast<chip::app::Clusters::OccupancySensingCluster*>(cluster)->SetOccupancy(occupied);
 }
 
+// The same for these: in esp-matter 1.6 they are code-driven clusters, an
+// attribute write gets err 262 and controllers never see the value
+// (esp-matter does not build every cluster's lookup: the registry finds them all)
+template <typename T>
+T* cluster_on(uint16_t ep, chip::ClusterId id) {
+    return static_cast<T*>(esp_matter::data_model::provider::get_instance().registry().Get(chip::app::ConcreteClusterPath(ep, id)));
+}
+
+void set_contact(uint16_t ep, bool closed) {
+    auto* cluster = cluster_on<BooleanStateCluster>(ep, BooleanState::Id);
+    if (cluster == nullptr) {
+        ESP_LOGW(TAG, "Contact on endpoint %u: no Boolean State cluster", ep);
+        return;
+    }
+    (void) cluster->SetStateValue(closed);
+}
+
 void on_input(int index, bool active) {
     (void) chip::DeviceLayer::PlatformMgr().ScheduleWork([](intptr_t arg) {
         const int i = static_cast<int>(arg >> 1);
@@ -137,8 +158,7 @@ void on_input(int index, bool active) {
         const uint16_t ep = endpoint_of[i];
         if (ep == 0) return;
         if (io::matter_of(i) == 3) {
-            esp_matter_attr_val_t value = esp_matter_bool(on);
-            attribute::update(ep, BooleanState::Id, BooleanState::Attributes::StateValue::Id, &value);
+            set_contact(ep, on);
         } else {
             set_occupancy(ep, on);
         }
@@ -154,8 +174,7 @@ void on_button(int index, io::Press press, uint8_t count) {
         if (ep == 0) return;
         namespace ev = cluster::switch_cluster::event;
         const bool down = press == io::Press::initial || press == io::Press::long_press;
-        esp_matter_attr_val_t position = esp_matter_uint8(down ? 1 : 0);
-        attribute::update(ep, Switch::Id, Switch::Attributes::CurrentPosition::Id, &position);
+        if (auto* cluster = Switch::FindClusterOnEndpoint(ep)) (void) cluster->SetCurrentPosition(down ? 1 : 0);
         switch (press) {
             case io::Press::initial: ev::send_initial_press(ep, 1); break;
             case io::Press::long_press: ev::send_long_press(ep, 1); break;
@@ -180,12 +199,12 @@ void update_climate(int i) {
     int16_t centi_celsius = 0;
     uint16_t centi_percent = 0;
     if (endpoint_of[i] == 0 || !io::climate(i, centi_celsius, centi_percent)) return;
-    esp_matter_attr_val_t temperature = esp_matter_nullable_int16(centi_celsius);
-    attribute::update(endpoint_of[i], TemperatureMeasurement::Id,
-                      TemperatureMeasurement::Attributes::MeasuredValue::Id, &temperature);
-    esp_matter_attr_val_t humidity = esp_matter_nullable_uint16(centi_percent);
-    attribute::update(endpoint_of[i], RelativeHumidityMeasurement::Id,
-                      RelativeHumidityMeasurement::Attributes::MeasuredValue::Id, &humidity);
+    if (auto* t = cluster_on<TemperatureMeasurementCluster>(endpoint_of[i], TemperatureMeasurement::Id)) {
+        (void) t->SetMeasuredValue(chip::app::DataModel::MakeNullable(centi_celsius));
+    }
+    if (auto* h = RelativeHumidityMeasurement::FindClusterOnEndpoint(endpoint_of[i])) {
+        (void) h->SetMeasuredValue(chip::app::DataModel::MakeNullable(centi_percent));
+    }
 }
 
 void on_climate(int index, int16_t, uint16_t) {
@@ -362,8 +381,7 @@ void after_start() {
             }
             // Inputs may have changed before Matter listened (Bluetooth starts first)
             if (kind == 3) {
-                esp_matter_attr_val_t value = esp_matter_bool(io::input_active(i));
-                attribute::update(endpoint_of[i], BooleanState::Id, BooleanState::Attributes::StateValue::Id, &value);
+                set_contact(endpoint_of[i], io::input_active(i));
             } else if (kind == 4) {
                 set_occupancy(endpoint_of[i], io::input_active(i));
             }

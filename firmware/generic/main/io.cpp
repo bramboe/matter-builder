@@ -67,6 +67,7 @@ struct Live {
     int8_t battery = -1;
     int64_t seen_us = 0;
     int64_t next_report = 0;
+    int64_t simulated_until = 0;  // io simulate: the pin is not read until then
 };
 
 // Before version 0.1.3 a slot had no data; stored connections are converted
@@ -489,6 +490,7 @@ void poll_task(void*) {
             if (!is_input(s.type)) {
                 continue;
             }
+            if (now < l.simulated_until) continue;  // a simulated state holds for a minute
             // Debounced: the same reading twice in a row
             const bool sample = input_level_active(s);
             const bool stable = sample == l.raw;
@@ -1103,6 +1105,7 @@ std::string command(const std::vector<std::string>& args) {
         }
         if (what == "active" || what == "inactive") {
             const bool active = what == "active";
+            live[index].simulated_until = esp_timer_get_time() + 60 * 1000 * MS;  // the pin would undo it at once
             if (live[index].active != active) {
                 live[index].active = active;
                 emit_input(index, active);

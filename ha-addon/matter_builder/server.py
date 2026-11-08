@@ -8,6 +8,7 @@ Only the standard library: the image is Espressif's ESP-IDF image.
 
 import base64
 import hashlib
+import http.client
 import http.server
 import ipaddress
 import json
@@ -154,10 +155,6 @@ def request(host, path, token, body=None, headers=None, timeout=20):
 
 def command(proxy, line, timeout=20):
     return request(resolve(proxy["host"]) or proxy["host"], "/cmd", proxy["token"], line.encode(), timeout=timeout)
-
-
-def command_bytes(proxy, path, body, timeout=20):
-    return request(resolve(proxy["host"]) or proxy["host"], path, proxy["token"], body, timeout=timeout)
 
 
 def proxy_name(host, token):
@@ -348,8 +345,7 @@ def update_proxy(proxy, image):
 
     if proxy.get("ota_over_thread"):
         # Learned on an earlier update: Wi-Fi does not reach this device
-        log("== Uploading the firmware over Thread (several minutes)")
-        status, text = command_bytes(proxy, "/ota", image.read_bytes(), timeout=30 * 60)
+        status, text = upload_over_thread(proxy, image)
         log(text.strip() or f"HTTP {status}")
         return status == 200 and wait_until_back(proxy)
 
@@ -379,6 +375,7 @@ def update_proxy(proxy, image):
         # VLAN, or mDNS blocked): it returns to Thread after its idle time,
         # and the image goes over Thread instead, slower but on the same route
         log("   not found on Wi-Fi from here (another network?)")
+        remember_ota_over_thread(proxy)  # next time straight over Thread
         log("== Waiting for it to return to Thread (up to 16 minutes)")
         end = time.time() + 16 * 60
         back = False
@@ -388,12 +385,39 @@ def update_proxy(proxy, image):
         if not back:
             log("!! It did not come back on Thread; try again later")
             return False
-        log("== Uploading the firmware over Thread (several minutes)")
-        status, text = command_bytes(proxy, "/ota", image.read_bytes(), timeout=30 * 60)
-        if status == 200:
-            remember_ota_over_thread(proxy)
+        status, text = upload_over_thread(proxy, image)
     log(text.strip() or f"HTTP {status}")
     return status == 200 and wait_until_back(proxy)
+
+
+THREAD_RATE = 1200  # bytes per second, measured: Thread is slow for a whole image
+
+
+def upload_over_thread(proxy, image):
+    """The image in pieces, with progress; a timeout per piece, not for the whole."""
+    data = image.read_bytes()
+    minutes = max(1, round(len(data) / THREAD_RATE / 60))
+    log(f"== Uploading the firmware over Thread (about {minutes} minutes for {len(data) // 1024} KB)")
+    host = resolve(proxy["host"]) or proxy["host"]
+    conn = http.client.HTTPConnection(url_host(host), timeout=120)  # brackets: http.client strips them
+    try:
+        conn.putrequest("POST", "/ota")
+        conn.putheader("X-Octo-Token", proxy["token"])
+        conn.putheader("Content-Length", str(len(data)))
+        conn.endheaders()
+        step, shown = 4096, -1
+        for start in range(0, len(data), step):
+            conn.send(data[start:start + step])
+            percent = 100 * (start + step) // len(data) if start + step < len(data) else 100
+            if percent // 5 != shown // 5:
+                shown = percent
+                log(f"   {min(start + step, len(data)) // 1024} of {len(data) // 1024} KB ({percent} %)")
+        reply = conn.getresponse()
+        return reply.status, reply.read().decode(errors="replace")
+    except (OSError, http.client.HTTPException) as err:
+        return 0, f"upload stopped: {err}"
+    finally:
+        conn.close()
 
 
 def remember_ota_over_thread(proxy):

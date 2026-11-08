@@ -196,8 +196,11 @@ device goes back to the previous one by itself.
 When Home Assistant cannot see the device on Wi-Fi (it is on another network
 or VLAN, or mDNS does not get across), the add-on waits until the device is
 back on Thread (at most 15 minutes) and sends the firmware over Thread
-instead, which takes several minutes. It remembers this, and later updates
-of that device go over Thread straight away.
+instead. Over Thread that is slow, roughly 1 KB per second: about half an
+hour for a 2 MB image, with the progress shown in the task bar. The device
+keeps working meanwhile. The add-on remembers this, and later updates of that
+device go over Thread straight away. Putting Home Assistant and the device's
+Wi-Fi on the same network makes updates take seconds instead.
 
 ## Network
 

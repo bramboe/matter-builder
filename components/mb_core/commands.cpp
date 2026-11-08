@@ -12,6 +12,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "http_api.h"
+#include "log_buffer.h"
 #include "mb_core.h"
 #include "net.h"
 #include "nvs.h"
@@ -23,7 +24,8 @@ using Args = std::vector<std::string>;
 const char* HELP =
     "system                                  firmware slots, reset reason, network\n"
     "revert                                  boot the other firmware slot\n"
-    "reboot                                  restart\n";
+    "reboot                                  restart\n"
+    "log [from]                              the log kept in RAM, from byte <from> on (4 KB at a time)\n";
 
 struct ExtraCommand {
     const char* name;
@@ -95,6 +97,7 @@ std::string run_command(const std::string& line) {
     const std::string& cmd = args[0];
     if (cmd == "system") return boot_guard::describe() + nvs_text() + net::describe();
     if (cmd == "revert") return cmd_revert();
+    if (cmd == "log") return log_buffer::read(args.size() > 1 ? std::strtoul(args[1].c_str(), nullptr, 10) : 0, 4096);
     if (cmd == "reboot") {
         mb_core::stop();
         xTaskCreate(restart_soon, "restart", 2048, nullptr, 5, nullptr);

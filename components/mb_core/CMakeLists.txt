@@ -2,7 +2,7 @@
 # program tokens, boot guard, console, pairing code, and on Thread chips the
 # network with configuration mode and the setup access point (mb_core.h).
 set(srcs "mb_core.cpp" "boot_guard.cpp" "commands.cpp" "http_api.cpp" "program_access.cpp" "setup_code.cpp"
-    "matter_info.cpp")
+    "matter_info.cpp" "log_buffer.cpp")
 set(requires nvs_flash console esp_timer app_update esp_app_format esp_http_server esp_driver_gpio mbedtls
     esp_matter esp_netif esp_event)
 if(CONFIG_OPENTHREAD_ENABLED)

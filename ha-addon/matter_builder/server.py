@@ -46,6 +46,7 @@ PROXIES = DATA / "proxies.json"
 SETTINGS = DATA / "settings.json"
 NOTIFIED = DATA / "notified.json"
 RELEASES = DATA / "releases"
+RELEASE_CACHE = RELEASES / "verified.json"  # the merged, signature-checked list
 SPECS = DATA / "specs"
 SRC = Path(os.environ.get("MB_SRC", "/opt/octo-matter"))
 RELEASE_KEY = HERE / "release-key.pem"
@@ -531,8 +532,27 @@ def check_releases():
         for pkg in res["data"].get("packages", []):
             merged["packages"].append(dict(pkg, source=res["repo"], official=res["official"]))
     own = results[0]
+    sources_state = [{k: r[k] for k in ("repo", "official", "release", "error")} for r in results]
+    if not merged["images"] and not merged["factory"] and release_state["images"] + release_state["factory"]:
+        # GitHub out of reach: keep what was verified before, so images on disk stay usable
+        release_state.update(error=own["error"], sources=sources_state)
+        return
     release_state.update(release=own["release"], error=own["error"], checked=int(time.time()),
-                         sources=[{k: r[k] for k in ("repo", "official", "release", "error")} for r in results], **merged)
+                         sources=sources_state, **merged)
+    if merged["images"] or merged["factory"]:
+        try:
+            RELEASES.mkdir(parents=True, exist_ok=True)
+            RELEASE_CACHE.write_text(json.dumps(release_state))
+        except OSError:
+            pass
+
+
+def load_release_cache():
+    """The last verified release list, for a start while GitHub is out of reach."""
+    try:
+        release_state.update(json.loads(RELEASE_CACHE.read_text()))
+    except (OSError, ValueError):
+        pass
 
 
 def preview_source(repo):
@@ -571,6 +591,7 @@ def catalog():
 
 
 def releases_loop():
+    load_release_cache()
     while True:
         check_releases()
         time.sleep(6 * 3600)

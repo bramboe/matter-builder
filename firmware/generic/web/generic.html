@@ -43,6 +43,7 @@ button.warn{background:none;color:var(--bad)}
 button.icon-btn{background:none;width:40px;padding:0;border-radius:50%}
 button:disabled{opacity:.38;cursor:default;filter:none}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
+.netlist{margin-top:-4px}.netlist:empty{display:none}
 .chips button{min-height:32px;border-radius:8px;border:1px solid var(--line);background:none;padding:0 12px}
 .row{display:flex;align-items:center;gap:12px;min-height:56px;padding:4px 0;border-top:1px solid var(--line)}
 .row:first-of-type{border-top:0}
@@ -135,6 +136,7 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
       <div class="sub" data-t="wizHelp"></div>
       <form id="wizForm" class="form" style="grid-template-columns:1fr">
         <label class="field"><span data-t="wifiNetwork"></span><input id="wizSsid" autocomplete="off" maxlength="32"></label>
+        <div class="chips netlist" id="wizSsidNets"></div><button type="button" class="text" data-scan="wizSsid" data-t="scanWifi" style="justify-self:start"></button>
         <label class="field"><span data-t="wifiPassword"></span><input id="wizPass" type="password" autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other" maxlength="64"></label>
         <div class="sub wifiResult" style="color:var(--bad)" hidden></div>
         <div class="features" style="margin-top:0"><button type="button" id="wizSkip" data-t="wizSkip"></button>
@@ -149,6 +151,7 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
 </div>
 <div class="section" id="ioSection">
   <div class="section-head"><h2 data-t="connections"></h2></div>
+  <div class="card" id="ioProblem" hidden style="margin-bottom:8px;color:var(--bad)"></div>
   <div class="card" id="ioTrial" hidden style="margin-bottom:8px">
     <div id="ioTrialText"></div>
     <div class="features"><button class="pri" type="button" id="ioConfirm" data-t="keep"></button>
@@ -172,6 +175,11 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
         <label class="field" id="ioNumberField"><span id="ioNumberLabel"></span><input id="ioNumber" type="number" min="0" max="65535" value="0"></label>
         <label class="field" id="ioCodeField"><span data-t="irCode"></span><input id="ioCode" maxlength="13" placeholder="nec:00FF:A25D" autocomplete="off" spellcheck="false"></label>
         <button type="button" class="text" id="ioUseLast" hidden></button>
+        <label class="field" id="ioPowerField"><span data-t="powerOn"></span><select id="ioPower">
+          <option value="off"></option><option value="on"></option><option value="last"></option><option value="toggle"></option></select></label>
+        <label class="field" id="ioOffAfterField"><span data-t="offAfter"></span><input id="ioOffAfter" type="number" min="0" max="65535" value="0"></label>
+        <label class="field" id="ioControlsField"><span data-t="controls"></span><select id="ioControls"></select></label>
+        <div class="sub" id="ioOptionsHelp" data-t="optionsHelp"></div>
         <label class="row" id="ioInvertedRow" style="min-height:40px;border:0"><input type="checkbox" id="ioInverted"><span class="label" data-t="inverted"></span></label>
         <label class="field"><span data-t="name"></span><input id="ioName" maxlength="23" autocomplete="off"></label>
         <div class="features" style="margin-top:0"><button class="pri" type="submit" data-t="save"></button>
@@ -209,6 +217,7 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
       <div class="sub" id="cfgCardHelp" data-t="configHelp"></div>
       <form id="wifiForm" class="form" style="grid-template-columns:1fr">
         <label class="field"><span data-t="wifiNetwork"></span><input id="wifiSsid" autocomplete="off" maxlength="32"></label>
+        <div class="chips netlist" id="wifiSsidNets"></div><button type="button" class="text" data-scan="wifiSsid" data-t="scanWifi" style="justify-self:start"></button>
         <label class="field"><span data-t="wifiPassword"></span><input id="wifiPass" type="password" autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other" maxlength="64"></label>
         <div class="sub wifiResult" style="color:var(--bad)" hidden></div>
         <div class="features" style="margin-top:0"><button type="submit" data-t="save"></button>
@@ -270,7 +279,7 @@ const TEXT = {
   threadBad: 'This is not a Thread dataset. Copy the whole hex text from Home Assistant.',
   network: 'Network', thread: 'Thread', wifi: 'Wi-Fi',
   loginTitle: 'Sign in',
-  loginHelp: 'Enter the password of this device. Forgot it? Hold the BOOT button for 5 to 10 seconds and let go: the device opens its setup network, where you choose a new one.',
+  loginHelp: 'Enter the password of this device. Forgot it? Hold the BOOT button for 5 to 10 seconds and let go (or switch its power off and on 6 times, within 10 seconds each): the device opens its setup network, where you choose a new one.',
   password: 'Password', login: 'Sign in', wrongPassword: 'Wrong password.', changePassword: 'Change password', restart: 'Restart',
   settings: 'Settings', pairingCode: 'Pairing code', openWindow: 'Open pairing window',
   deviceNetwork: 'Device and network', device: 'Device', vidPid: 'Vendor / product ID',
@@ -282,7 +291,7 @@ const TEXT = {
   passwordRefused: 'password refused', error: 'Error', cancel: 'Cancel',
   configMode: 'Configuration mode',
   configHelp: 'For a firmware update: the device restarts on Wi-Fi for 15 minutes, with Thread and Matter off. Then it returns by itself.',
-  wifiNetwork: 'Wi-Fi network', wifiPassword: 'Wi-Fi password', wifiPassKeep: 'saved, leave empty to keep', saved: 'Saved',
+  scanWifi: 'Look for networks', scanning: 'Looking… (Thread pauses for a few seconds)', noNetworks: 'No Wi-Fi networks found', openNetwork: 'open', wifiNetwork: 'Wi-Fi network', wifiPassword: 'Wi-Fi password', wifiPassKeep: 'saved, leave empty to keep', saved: 'Saved',
   configStart: 'Start configuration mode', configNeedsWifi: 'Enter the Wi-Fi network first.',
   configConfirm: h => `Restart on Wi-Fi? The device does not work in Home Assistant until it is back (at most 15 minutes). Then open http://${h}/`,
   configStarted: h => `Restarting on Wi-Fi: open http://${h}/ in a minute`,
@@ -329,6 +338,10 @@ const TEXT = {
   contactHelp: 'An input to ground: closed is “contact”. Appears as a contact sensor.',
   motionHelp: 'An input from a PIR sensor that drives the pin high. Appears as an occupancy sensor.',
   sht4xHelp: 'An I²C sensor (address 0x44) on two pins: SDA and SCL.',
+  powerOn: 'At power-on', power_off: 'Off', power_on: 'On', power_last: 'As it was', power_toggle: 'The other way round',
+  offAfter: 'Off by itself after (seconds)', controls: 'Switches', controlsNone: 'Nothing',
+  optionsHelp: 'These work on the device itself, also when Home Assistant is off.',
+  cardPower: m => `at power-on ${m}`, cardOffAfter: n => `off after ${n} s`, cardControls: n => `switches ${n}`,
   pin: 'Pin', pinSda: 'SDA', inverted: 'Inverted (active low relay, or input the other way round)', name: 'Name',
   addConnection: 'Add a connection', editConnection: n => `Edit “${n}”`, edit: 'Edit', remove: 'Remove',
   confirmRemove: n => `Remove “${n}”?`, testOn: 'On', testOff: 'Off',
@@ -426,7 +439,9 @@ const closeMenus = () => document.querySelectorAll('.menu.open').forEach(m => m.
 // Connections: the draft (what is being set up) next to what runs now
 let editing = null;  // index of the connection in the form, null: a new one
 const TYPES = ['relay', 'led', 'button', 'contact', 'motion', 'sht4x', 'ir_send', 'ir_receive', 'ble_sensor', 'ble_presence'];
-const isOutput = type => type === 'relay' || type === 'led';
+const isOutput = type => type === 'relay' || type === 'led' || (driverOf(type) && ['on_off', 'dimmable'].includes(driverOf(type).matter));
+// Inputs that can switch an output on the device itself (controls=)
+const canControl = type => ['button', 'contact', 'motion', 'ble_presence'].includes(type) || (driverOf(type) && ['button', 'contact', 'occupancy'].includes(driverOf(type).matter));
 const isIr = type => type === 'ir_send' || type === 'ir_receive';
 const isBle = type => type === 'ble_sensor' || type === 'ble_presence';
 
@@ -444,12 +459,24 @@ function liveText(d, r) {
   return r.on ? t('testOn') : t('testOff');
 }
 
+// The options of a connection, short: "at power-on as it was · off after 60 s"
+function optionsText(d) {
+  const parts = [];
+  if (d.power && d.power !== 'off') parts.push(t('cardPower', t('power_' + d.power).toLowerCase()));
+  if (d.off_after) parts.push(t('cardOffAfter', d.off_after));
+  if (d.controls !== null && d.controls !== undefined) {
+    const target = state.io.draft[d.controls];
+    parts.push(t('cardControls', target && target.type !== 'none' ? target.name : '#' + d.controls));
+  }
+  return parts.map(p => ' · ' + esc(p)).join('');
+}
+
 function ioCard(d) {
   const r = state.io.slots[d.index];
   const running = r && r.type === d.type && (isBle(d.type) || r.pin === d.pin);
   const pins = isBle(d.type) ? d.mac : d.type === 'sht4x' ? `SDA ${d.pin} · SCL ${d.pin2}` : `${t('pin')} ${d.pin}`;
   return `<div class="card"><div class="tile"><div class="icon">${icon(isOutput(d.type) ? 'light' : 'bt')}</div>
-      <div class="info"><div class="name">${esc(d.name)}</div><div class="state">${driverOf(d.type) ? esc(driverOf(d.type).title) : t(d.type)} · ${pins}${d.inverted ? ' · ⇅' : ''}</div></div>
+      <div class="info"><div class="name">${esc(d.name)}</div><div class="state">${driverOf(d.type) ? esc(driverOf(d.type).title) : t(d.type)} · ${pins}${d.inverted ? ' · ⇅' : ''}${optionsText(d)}</div></div>
       <div class="sub">${esc(liveText(d, r))}</div></div>
     <div class="features">
       ${isOutput(d.type) && running ? `<button onclick="ioTest(${d.index}, ${!r.on})">${r.on ? t('testOff') : t('testOn')}</button>` : ''}
@@ -507,6 +534,16 @@ function updateIoForm() {
   $('#ioMacField').hidden = !isBle(type);
   $('#ioCodeField').hidden = !isIr(type);
   $('#ioInvertedRow').hidden = type === 'sht4x' || isIr(type) || isBle(type);
+  $('#ioPowerField').hidden = $('#ioOffAfterField').hidden = !isOutput(type);
+  $('#ioControlsField').hidden = !canControl(type);
+  $('#ioOptionsHelp').hidden = !isOutput(type) && !canControl(type);
+  for (const o of $('#ioPower').options) o.textContent = t('power_' + o.value);
+  // What it can switch: the other outputs and IR codes of the draft
+  const keep = $('#ioControls').value;
+  const targets = state && state.io ? state.io.draft.filter(x => x.index !== editing && (isOutput(x.type) || x.type === 'ir_send')) : [];
+  $('#ioControls').innerHTML = `<option value="">${esc(t('controlsNone'))}</option>` +
+    targets.map(x => `<option value="${x.index}">${esc(x.name)}</option>`).join('');
+  $('#ioControls').value = targets.some(x => String(x.index) === keep) ? keep : '';
   const last = state && state.io && state.io.ir_last;
   $('#ioUseLast').hidden = !isIr(type) || !last;
   if (last) $('#ioUseLast').textContent = t('useLast', last);
@@ -516,6 +553,8 @@ function renderIo() {
   renderBluetooth();
   const io = state.io;
   $('#ioTrial').hidden = !io.trial;
+  $('#ioProblem').hidden = !io.problem;
+  $('#ioProblem').textContent = io.problem || '';
   if (io.trial) $('#ioTrialText').textContent = t('trialText', io.trial);
   $('#ioChanged').hidden = !io.changed || !!io.trial;
   // Keep the form as it is while it is being filled in
@@ -538,7 +577,11 @@ function ioEdit(index) {
   $('#ioMac').value = d.mac || '';
   $('#ioNumber').value = d.number || 0;
   $('#ioCode').value = d.code || '';
+  $('#ioPower').value = d.power || 'off';
+  $('#ioOffAfter').value = d.off_after || 0;
   fillPins(false);
+  updateIoForm();
+  $('#ioControls').value = d.controls === null || d.controls === undefined ? '' : String(d.controls);
   $('#ioPin').value = d.pin;
   if (d.type === 'sht4x') $('#ioPin2').value = d.pin2;
   updateIoForm();
@@ -578,11 +621,20 @@ $('#ioForm').onsubmit = async e => {
     : isBle(type) ? $('#ioMac').value.trim() : type === 'sht4x' ? `${$('#ioPin').value} ${$('#ioPin2').value}`
     : isIr(type) ? `${$('#ioPin').value} ${$('#ioCode').value.trim()}` : $('#ioPin').value;
   const inverted = $('#ioInverted').checked && !$('#ioInvertedRow').hidden;
-  const reply = await cmd(`io set ${index} ${type} ${pins}${inverted ? ' inverted' : ''} ${name}`);
+  const options = [];
+  if (isOutput(type)) {
+    if ($('#ioPower').value !== 'off') options.push('power=' + $('#ioPower').value);
+    if (+$('#ioOffAfter').value > 0) options.push('off_after=' + Math.min(65535, Math.round(+$('#ioOffAfter').value)));
+  }
+  if (canControl(type) && $('#ioControls').value !== '') options.push('controls=' + $('#ioControls').value);
+  const reply = await cmd(`io set ${index} ${type} ${pins}${inverted ? ' inverted' : ''}${options.map(o => ' ' + o).join('')} ${name}`);
   if (!reply.startsWith('ok')) { toast(reply.trim()); return; }
   editing = null;
   $('#ioName').value = '';
   $('#ioInverted').checked = false;
+  $('#ioPower').value = 'off';
+  $('#ioOffAfter').value = 0;
+  $('#ioControls').value = '';
   document.activeElement.blur();
   refresh();
 };
@@ -774,6 +826,28 @@ $('#threadForm').onsubmit = async e => {
   } catch (err) { toast(t('error') + ': ' + err.message); }
 };
 let wifiHost = 'matter-builder.local';
+
+// The Wi-Fi networks in range, to tap instead of typing the name
+for (const b of document.querySelectorAll('[data-scan]')) b.onclick = () => scanWifi(b.dataset.scan, b);
+async function scanWifi(id, button) {
+  const list = $('#' + id + 'Nets');
+  button.disabled = true;
+  button.textContent = t('scanning');
+  try {
+    const reply = await cmd('wifi scan');
+    if (!reply.trim().startsWith('{')) throw new Error(reply.replace(/^error: /, '').trim());
+    const nets = JSON.parse(reply).networks;
+    list.innerHTML = nets.length ? nets.slice(0, 10).map(n => `<button type="button" data-ssid="${esc(n.ssid)}">${esc(n.ssid)}<span class="sub"> · ${n.rssi} dBm${n.open ? ' · ' + t('openNetwork') : ''}</span></button>`).join('')
+      : `<span class="sub">${t('noNetworks')}</span>`;
+    for (const b of list.querySelectorAll('button')) b.onclick = () => {
+      $('#' + id).value = b.dataset.ssid;
+      list.innerHTML = '';
+      const pass = $('#' + id.replace('Ssid', 'Pass'));
+      if (pass) pass.focus();
+    };
+  } catch (e) { toast(t('error') + ': ' + e.message); }
+  finally { button.disabled = false; button.textContent = t('scanWifi'); }
+}
 
 async function saveWifi(ssidEl = $('#wifiSsid'), passEl = $('#wifiPass')) {
   const ssid = ssidEl.value.trim(), pass = passEl.value;

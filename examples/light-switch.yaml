@@ -1,0 +1,13 @@
+# A light behind a relay with a wall button next to it. The button switches
+# the light on the device itself, so it keeps working when Home Assistant is
+# off; after a power cut the light comes back as it was. Change the pins on
+# the device's page to how you wired it.
+device:
+  name: Light switch
+  app: generic
+  board: esp32-c6
+  version: 0.1.0
+
+connections:
+  - { slot: 0, type: relay, pin: 4, power: last, name: Light }
+  - { slot: 1, type: button, pin: 5, controls: 0, name: Wall button }

@@ -66,6 +66,12 @@ def requirements(connections):
 TYPES = {"relay", "led", "button", "contact", "motion", "sht4x", "ir_send", "ir_receive", "ble_sensor", "ble_presence"}
 IR_TYPES = {"ir_send", "ir_receive"}
 BLE_TYPES = {"ble_sensor", "ble_presence"}
+# Options that work on the device itself (io.cpp): what an output does at
+# power-on and after how many seconds it switches off; the output an input
+# switches (a button toggles it, a contact, motion or presence sets it)
+POWER_MODES = ["off", "on", "last", "toggle"]
+OUTPUT_TYPES = {"relay", "led"}
+CONTROL_TYPES = {"button", "contact", "motion", "ble_presence"}
 IR_CODE = re.compile(r"^nec:[0-9A-Fa-f]{1,4}:[0-9A-Fa-f]{1,4}$")
 MAC = re.compile(r"^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$")
 SAFE_PINS = {0, 1, 2, 3, 4, 5, 6, 7, 10, 11, 18, 19, 20, 21, 22, 23}  # see firmware/generic/main/io.cpp
@@ -221,7 +227,8 @@ def check(spec):
     for c in connections:
         if not isinstance(c, dict):
             raise SpecError("connections: each one is a mapping")
-        unknown = set(c) - {"slot", "type", "pin", "scl", "pin2", "name", "inverted", "code", "mac", "number"}
+        unknown = set(c) - {"slot", "type", "pin", "scl", "pin2", "name", "inverted", "code", "mac", "number",
+                            "power", "off_after", "controls"}
         if unknown:
             raise SpecError(f"connections: unknown “{sorted(unknown)[0]}”")
         slot, kind = c.get("slot"), c.get("type")
@@ -265,6 +272,30 @@ def check(spec):
             raise SpecError(f"connection {slot}: at most 2 pins for {kind}")
         if kind == "sht4x" and any(x.get("type") == "sht4x" for x in clean):
             raise SpecError("only one SHT4x")
+        is_output = kind in OUTPUT_TYPES or (driver is not None and driver["matter"] in ("on_off", "dimmable"))
+        can_control = kind in CONTROL_TYPES or (driver is not None and driver["matter"] in ("button", "contact", "occupancy"))
+        options = {}
+        if "power" in c or "off_after" in c:
+            if not is_output:
+                raise SpecError(f"connection {slot}: power and off_after are for outputs")
+            power = c.get("power", "off")
+            power = {True: "on", False: "off"}.get(power, power) if isinstance(power, bool) else str(power).lower()  # YAML reads on/off as true/false
+            if power not in POWER_MODES:
+                raise SpecError(f"connection {slot}: power one of {', '.join(POWER_MODES)}")
+            off_after = c.get("off_after", 0)
+            if not isinstance(off_after, int) or not 0 <= off_after <= 65535:
+                raise SpecError(f"connection {slot}: off_after in seconds, 0-65535")
+            if power != "off":
+                options["power"] = power
+            if off_after:
+                options["off_after"] = off_after
+        if "controls" in c and c["controls"] is not None:
+            target = c["controls"]
+            if not can_control:
+                raise SpecError(f"connection {slot}: controls is for buttons, contacts, motion and presence")
+            if not isinstance(target, int) or not 0 <= target <= 7 or target == slot:
+                raise SpecError(f"connection {slot}: controls another connection 0-7")
+            options["controls"] = target
         label = str(c.get("name") or kind).strip()[:23]
         if '"' in label or "\\" in label:
             raise SpecError(f"connection {slot}: no quotes in the name")
@@ -273,7 +304,12 @@ def check(spec):
         clean.append({"slot": slot, "type": kind, "pin": c.get("pin", 0) if used else 0,
                       "scl": second, "inverted": bool(c.get("inverted", False)), "name": label,
                       **({"code": code} if code else {}), **({"mac": mac} if mac else {}),
-                      **({"number": number} if driver is not None and driver.get("number") else {})})
+                      **({"number": number} if driver is not None and driver.get("number") else {}), **options})
+    for c in clean:
+        target = next((x for x in clean if x["slot"] == c.get("controls")), None) if "controls" in c else None
+        if "controls" in c and (target is None or not (target["type"] in OUTPUT_TYPES | {"ir_send"} or
+                                                    (target["type"] in drivers and drivers[target["type"]]["matter"] in ("on_off", "dimmable")))):
+            raise SpecError(f"connection {c['slot']}: controls must name an output or IR code in this config")
     if '"' in name or "\\" in name:
         raise SpecError("device.name: no quotes")
     requires = sorted(set(requirements(clean)) | set(APP_REQUIRES.get(app, [])) |
@@ -368,7 +404,8 @@ def spec_header(spec):
     rows = []
     for c in spec["connections"]:
         rows.append(f'    {{{c["slot"]}, "{c["type"]}", {c["pin"]}, {c["scl"]}, {"true" if c["inverted"] else "false"}, '
-                    f'"{c["name"]}", "{c.get("code", "")}", "{c.get("mac", "")}", {c.get("number", 0)}}},')
+                    f'"{c["name"]}", "{c.get("code", "")}", "{c.get("mac", "")}", {c.get("number", 0)}, '
+                    f'{POWER_MODES.index(c.get("power", "off"))}, {c.get("off_after", 0)}, {c.get("controls", -1)}}},')
     return "\n".join([
         "// Generated by tools/mb_generate.py from main/spec.yaml: do not edit.",
         "#pragma once",
@@ -387,11 +424,14 @@ def spec_header(spec):
         "    const char* code;  // IR: nec:<address>:<command>",
         "    const char* mac;   // Bluetooth",
         "    int number;        // the setting of a component type",
+        "    int power;         // at power-on: 0 off, 1 on, 2 as it was, 3 the other way round",
+        "    int off_after;     // seconds until an output switches itself off (0: never)",
+        "    int controls;      // the output this input switches (-1: none)",
         "};",
         "",
         f"constexpr int SPEC_CONNECTION_COUNT = {len(spec['connections'])};",
         f"constexpr SpecConnection SPEC_CONNECTIONS[{max(len(spec['connections']), 1)}] = {{",
-        *(rows or ['    {-1, "", 0, 0, false, "", "", "", 0},']),
+        *(rows or ['    {-1, "", 0, 0, false, "", "", "", 0, 0, 0, -1},']),
         "};",
         "",
     ])

@@ -65,6 +65,7 @@ bool climate(int index, int16_t& centi_celsius, uint16_t& centi_percent);
 // Outputs: on/off, and the level (1-254) of an LED; "on" of an IR code sends it
 void set_output(int index, bool on, uint8_t level);
 bool is_momentary(int index);  // an IR code to send: "on" only for a moment
+bool output_on(int index);     // the state an output is in (after power-on: as set for it)
 
 // Every output off, before a restart
 void stop_outputs();
@@ -81,9 +82,14 @@ Type type_named(const char* name);
 // The device's name, shown by controllers and on the page
 std::string name();
 
-// The "io" command: json | set <n> <type> <pin> [<pin2>] [inverted] <name> |
+// The "io" command: json | set <n> <type> <pin> [<pin2>] [inverted] [options] <name> |
 // set <n> ir_send|ir_receive <pin> <code> <name> | set <n> ble_sensor|ble_presence <mac> <name> |
 // clear <n> | test <n> on|off | apply | confirm | revert | cancel
+// Options: power=off|on|last|toggle and off_after=<seconds> for outputs;
+// controls=<n> for a button (toggles output n), contact, motion or presence
+// (output n follows it; with off_after on the output it goes off that long
+// after the input went inactive). They work on the device itself, without a
+// controller.
 std::string command(const std::vector<std::string>& args);
 
 // The "name" command

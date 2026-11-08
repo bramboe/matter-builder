@@ -114,6 +114,13 @@ void load_spec_factory() {
         s.pin = static_cast<uint8_t>(c.pin);
         s.pin2 = static_cast<uint8_t>(c.scl);
         s.flags = c.inverted ? io::INVERTED : 0;
+        // The options' bytes (io.cpp): power-on, off after, the output it switches
+        if (c.power > 0) s.data[4] = static_cast<uint8_t>(c.power);
+        if (c.off_after > 0) {
+            s.data[5] = c.off_after & 0xFF;
+            s.data[6] = (c.off_after >> 8) & 0xFF;
+        }
+        if (c.controls >= 0) s.data[7] = static_cast<uint8_t>(c.controls + 1);
         std::strncpy(s.name, c.name, sizeof(s.name) - 1);
     }
     io::set_factory(slots, SPEC_NAME);

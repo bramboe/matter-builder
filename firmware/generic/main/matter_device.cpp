@@ -293,6 +293,12 @@ void after_start() {
                               BridgedDeviceBasicInformation::Attributes::NodeLabel::Id, &device_name);
             const int kind = io::matter_of(i);
             if (kind == 5) update_climate(i);
+            // The output as it really is after power-on (Matter keeps its own
+            // stored value, which may differ): off, on, or as set for it
+            if ((kind == 0 || kind == 1) && !io::is_momentary(i)) {
+                esp_matter_attr_val_t on = esp_matter_bool(io::output_on(i));
+                attribute::update(endpoint_of[i], OnOff::Id, OnOff::Attributes::OnOff::Id, &on);
+            }
             // Inputs may have changed before Matter listened (Bluetooth starts first)
             if (kind == 3) {
                 esp_matter_attr_val_t value = esp_matter_bool(io::input_active(i));

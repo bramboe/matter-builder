@@ -29,7 +29,8 @@ constexpr size_t NAME_LEN = 24;
 constexpr size_t TOKEN_BYTES = 24;  // 48 hex characters
 constexpr int64_t SECOND_US = 1000000;
 constexpr int64_t WINDOW_US = 120 * SECOND_US;
-constexpr int POWER_ONS = 3;
+constexpr int POWER_ONS = 3;            // a press of the BOOT button (linking a program)
+constexpr int RECOVERY_POWER_ONS = 6;   // BOOT held 5-10 s: recovery, for a device out of reach (in a wall box)
 constexpr int64_t POWER_ON_LIMIT_US = 10 * SECOND_US;
 
 #if CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S3
@@ -189,7 +190,9 @@ void store_power_ons(uint8_t count) {
 
 void on_power_on_limit(void*) { store_power_ons(0); }
 
-// Three power-ons in a row, each cut within 10 s, count as a button press
+// Power-ons in a row, each cut within 10 s: three count as a press of the
+// BOOT button, six as holding it (recovery). A brownout or a normal start
+// resets the count, so power cuts do not add up to it.
 void count_power_ons() {
     uint8_t count = 0;
     nvs_handle_t nvs;
@@ -203,9 +206,17 @@ void count_power_ons() {
         }
         return;
     }
-    if (++count >= POWER_ONS) {
-        count = 0;
+    ++count;
+    if (count == POWER_ONS) {
         presence("power switched on 3 times");
+    }
+    if (count >= RECOVERY_POWER_ONS) {
+        store_power_ons(0);
+        ESP_LOGW(TAG, "Power switched on %d times: recovery", RECOVERY_POWER_ONS);
+        if (on_recovery != nullptr) {
+            on_recovery();  // restarts on the setup access point
+        }
+        return;
     }
     store_power_ons(count);
     if (count == 0) {

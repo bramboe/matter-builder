@@ -91,14 +91,20 @@ bool bluetooth = false;   // a connection listens to Bluetooth
 bool ble_pairing = false;
 Slot factory[SLOTS] = {};
 const char* factory_name = nullptr;
+uint8_t last_on = 0;  // bit n: output n was on (for power-on "last" and "toggle")
+// What went wrong with the stored connections at start, for the page ("" when nothing)
+std::string problem;
+esp_timer_handle_t off_timers[SLOTS] = {};
 
-bool load(const char* key, Slot* slots) {
+// `broken` is set when the key is there but cannot be used (not when it is missing)
+bool load(const char* key, Slot* slots, bool* broken = nullptr) {
     nvs_handle_t nvs;
     if (nvs_open(NVS_NAMESPACE, NVS_READONLY, &nvs) != ESP_OK) {
         return false;
     }
     size_t size = 0;
     bool ok = nvs_get_blob(nvs, key, nullptr, &size) == ESP_OK;
+    if (broken != nullptr) *broken = ok && size != sizeof(Slot) * SLOTS && size != sizeof(SlotV1) * SLOTS;
     if (ok && size == sizeof(Slot) * SLOTS) {
         ok = nvs_get_blob(nvs, key, slots, &size) == ESP_OK;
     } else if (ok && size == sizeof(SlotV1) * SLOTS) {
@@ -200,6 +206,27 @@ bool is_ble(Type type) { return type == Type::ble_sensor || type == Type::ble_pr
 uint16_t code_address(const Slot& s) { return static_cast<uint16_t>(s.data[1] | (s.data[2] << 8)); }
 uint16_t code_command(const Slot& s) { return static_cast<uint16_t>(s.data[3] | (s.data[4] << 8)); }
 
+// Options in a slot's spare data bytes, so the stored format stays as it is.
+// Outputs: data[4] what it does at power-on, data[5..6] seconds after which
+// it switches itself off. Inputs: data[7] the output it controls, plus one.
+// (IR codes use data[0..4], a Bluetooth address data[0..5], a component's
+// number data[0..1]: none of these overlap the bytes an option uses.)
+const char* POWER_NAMES[] = {"off", "on", "last", "toggle"};
+constexpr uint8_t POWER_OFF = 0, POWER_ON = 1, POWER_LAST = 2, POWER_TOGGLE = 3;
+bool can_control(Type type) {
+    if (const Driver* d = driver_of(type)) {
+        return d->matter == Matter::button || d->matter == Matter::contact || d->matter == Matter::occupancy;
+    }
+    return is_input(type) || type == Type::ble_presence;
+}
+uint8_t power_of(const Slot& s) { return is_output(s.type) && s.data[4] <= POWER_TOGGLE ? s.data[4] : POWER_OFF; }
+uint16_t off_after_of(const Slot& s) {
+    return is_output(s.type) ? static_cast<uint16_t>(s.data[5] | (s.data[6] << 8)) : 0;
+}
+int controls_of(const Slot& s) {
+    return can_control(s.type) && s.data[7] >= 1 && s.data[7] <= SLOTS ? s.data[7] - 1 : -1;
+}
+
 void restart_task(void*) {
     vTaskDelay(pdMS_TO_TICKS(500));  // let the reply go out first
     esp_restart();
@@ -218,6 +245,8 @@ void on_trial_timeout(void*) {
 }
 
 // ---------------------------------------------------------------- pins
+
+void act(int source, int how);  // below: an input switching the output it controls
 
 void write_output(int i) {
     const Slot& s = running[i];
@@ -280,6 +309,7 @@ void on_ble_advert(const ble_scan::Advert& a) {
             }
         }
         if (arrived && listener.input) listener.input(i, true);
+        if (arrived) act(i, 1);
         if (report && listener.climate) listener.climate(i, a.centi_celsius, a.centi_percent);
     }
 }
@@ -416,6 +446,7 @@ void button_step(int i, bool active, int64_t now) {
             ++l.presses;
             l.last_release = now;
             if (listener.button) listener.button(i, Press::short_release, 0);
+            act(i, -1);  // a press toggles the output it controls
         }
     } else if (!active && l.presses > 0 && now - l.last_release > MULTI_PRESS_US) {
         if (listener.button) listener.button(i, Press::multi_complete, l.presses);
@@ -441,6 +472,7 @@ void poll_task(void*) {
             if (s.type == Type::ble_presence && l.active && now - l.seen_us > PRESENCE_US) {
                 l.active = false;
                 if (listener.input) listener.input(i, false);
+                act(i, 0);
             }
             if (!is_input(s.type)) {
                 continue;
@@ -454,6 +486,7 @@ void poll_task(void*) {
             } else if (stable && sample != l.active) {
                 l.active = sample;
                 if (listener.input) listener.input(i, sample);
+                act(i, sample ? 1 : 0);  // the output it controls follows
             }
         }
     }
@@ -478,6 +511,14 @@ std::string slot_json(const Slot& s, int i, bool with_state) {
     if (is_ble(s.type)) out += ",\"mac\":\"" + mac_text(s.data) + "\"";
     if (const Driver* d = driver_of(s.type); d != nullptr && d->number_label) {
         out += ",\"number\":" + std::to_string(number_of(s));
+    }
+    if (is_output(s.type)) {
+        out += std::string(",\"power\":\"") + POWER_NAMES[power_of(s)] + "\",\"off_after\":" +
+               std::to_string(off_after_of(s));
+    }
+    if (can_control(s.type)) {
+        const int target = controls_of(s);
+        out += ",\"controls\":" + (target >= 0 ? std::to_string(target) : std::string("null"));
     }
     if (with_state) {
         const Live& l = live[i];
@@ -535,7 +576,39 @@ int pins_of(Type type, int index, int pin) {
     return count;
 }
 
-// io set <n> <component type> [<pin> [<pin2>]] [n=<number>] [inverted] <name...>
+// "inverted" and the options (power=, off_after=, controls=) in any order,
+// before the name; "" when they are fine, else what is wrong
+std::string parse_options(const std::vector<std::string>& args, size_t& next, Slot& s, int index) {
+    for (; next < args.size(); ++next) {
+        const std::string& word = args[next];
+        char* end = nullptr;
+        if (word == "inverted") {
+            s.flags |= INVERTED;
+        } else if (word.rfind("power=", 0) == 0) {
+            if (!is_output(s.type)) return "power= is for outputs\n";
+            int mode = -1;
+            for (int m = 0; m < 4; ++m) mode = word.substr(6) == POWER_NAMES[m] ? m : mode;
+            if (mode < 0) return "power=off|on|last|toggle\n";
+            s.data[4] = static_cast<uint8_t>(mode);
+        } else if (word.rfind("off_after=", 0) == 0) {
+            const long value = std::strtol(word.c_str() + 10, &end, 10);
+            if (!is_output(s.type)) return "off_after= is for outputs\n";
+            if (*end != '\0' || value < 0 || value > 65535) return "off_after=<seconds>, 0-65535\n";
+            s.data[5] = value & 0xFF;
+            s.data[6] = value >> 8;
+        } else if (word.rfind("controls=", 0) == 0) {
+            const long value = std::strtol(word.c_str() + 9, &end, 10);
+            if (!can_control(s.type)) return "controls= is for buttons, contacts, motion and presence\n";
+            if (*end != '\0' || value < 0 || value >= SLOTS || value == index) return "controls=<another connection 0-7>\n";
+            s.data[7] = static_cast<uint8_t>(value + 1);
+        } else {
+            break;
+        }
+    }
+    return "";
+}
+
+// io set <n> <component type> [<pin> [<pin2>]] [n=<number>] [inverted] [options] <name...>
 std::string set_component(const std::vector<std::string>& args, int index, Type type) {
     const Driver* d = driver_of(type);
     size_t next = 4;
@@ -555,10 +628,7 @@ std::string set_component(const std::vector<std::string>& args, int index, Type 
         s.data[0] = value & 0xFF;
         s.data[1] = value >> 8;
     }
-    if (next < args.size() && args[next] == "inverted") {
-        s.flags |= INVERTED;
-        ++next;
-    }
+    if (std::string why = parse_options(args, next, s, index); !why.empty()) return why;
     std::string label;
     for (; next < args.size(); ++next) label += (label.empty() ? "" : " ") + args[next];
     if (label.empty()) label = d->title;
@@ -628,10 +698,7 @@ std::string cmd_set(const std::vector<std::string>& args) {
     s.pin = static_cast<uint8_t>(pin);
     s.pin2 = static_cast<uint8_t>(pin2);
     std::memcpy(s.data, data, sizeof(s.data));
-    if (next < args.size() && args[next] == "inverted") {
-        s.flags |= INVERTED;
-        ++next;
-    }
+    if (std::string why = parse_options(args, next, s, index); !why.empty()) return why;
     std::string label;
     for (; next < args.size(); ++next) {
         label += (label.empty() ? "" : " ") + args[next];
@@ -640,6 +707,73 @@ std::string cmd_set(const std::vector<std::string>& args) {
     std::strncpy(s.name, label.c_str(), sizeof(s.name) - 1);
     draft[index] = s;
     return store("draft", draft) ? "ok: 'io apply' to use it\n" : "storing failed\n";
+}
+
+void store_last(uint8_t bits) {
+    nvs_handle_t nvs;
+    if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs) == ESP_OK) {
+        nvs_set_u8(nvs, "last", bits);
+        nvs_commit(nvs);
+        nvs_close(nvs);
+    }
+}
+
+void on_off_timer(void* arg) {
+    const int i = static_cast<int>(reinterpret_cast<intptr_t>(arg));
+    ESP_LOGI(TAG, "Connection %d: off after %u s", i, off_after_of(running[i]));
+    set_output(i, false, 0);
+    if (listener.output) listener.output(i, false);
+}
+
+// What follows a change of an output: its timer to switch off, and its state
+// for the next power-on when that should come back
+void after_output(int i) {
+    const Slot& s = running[i];
+    if (const uint16_t seconds = off_after_of(s)) {
+        if (off_timers[i] == nullptr) {
+            esp_timer_create_args_t args = {};
+            args.callback = on_off_timer;
+            args.arg = reinterpret_cast<void*>(static_cast<intptr_t>(i));
+            args.name = "io_off";
+            esp_timer_create(&args, &off_timers[i]);
+        }
+        esp_timer_stop(off_timers[i]);
+        if (live[i].on) esp_timer_start_once(off_timers[i], static_cast<uint64_t>(seconds) * 1000000);
+    }
+    const uint8_t power = power_of(s);
+    if (power == POWER_LAST || power == POWER_TOGGLE) {
+        const uint8_t bits = live[i].on ? (last_on | (1 << i)) : (last_on & ~(1 << i));
+        if (bits != last_on) {
+            last_on = bits;
+            store_last(bits);
+        }
+    }
+}
+
+// An input switches the output it controls: how -1 toggles (a button),
+// 1 on and 0 off (a contact, motion or presence).
+// Matter hears of it, so controllers show the new state.
+void act(int source, int how) {
+    const int target = controls_of(running[source]);
+    if (target < 0) return;
+    if (is_momentary(target)) {
+        if (how != 0) set_output(target, true, 0);  // an IR code: sent on press or arrival
+        return;
+    }
+    if (!is_output(running[target].type)) return;
+    // With an off-after time the output's own timer switches it off, counted
+    // from when the input went inactive (the last motion), not at once
+    const uint16_t delay = off_after_of(running[target]);
+    if (how == 0 && delay > 0) {
+        if (live[target].on) after_output(target);  // restarts the timer from now
+        return;
+    }
+    const bool on = how < 0 ? !live[target].on : how == 1;
+    set_output(target, on, 0);
+    if (listener.output) listener.output(target, on);
+    if (how == 1 && delay > 0 && off_timers[target] != nullptr) {
+        esp_timer_stop(off_timers[target]);  // stays on while the input is active
+    }
 }
 
 }  // namespace
@@ -661,9 +795,11 @@ void report_input(int slot, bool active) {
     if (slot < 0 || slot >= SLOTS || live[slot].active == active) return;
     live[slot].active = active;
     if (listener.input) listener.input(slot, active);
+    act(slot, active ? 1 : 0);
 }
 
 void report_press(int slot) {
+    if (slot >= 0 && slot < SLOTS) act(slot, -1);
     if (!listener.button) return;
     listener.button(slot, Press::initial, 0);
     listener.button(slot, Press::short_release, 0);
@@ -760,10 +896,17 @@ void start() {
     if (nvs_open(NVS_NAMESPACE, NVS_READONLY, &nvs) == ESP_OK) {
         size_t size = sizeof(device_name);
         if (nvs_get_str(nvs, "name", device_name, &size) != ESP_OK) device_name[0] = '\0';
+        nvs_get_u8(nvs, "last", &last_on);
         nvs_close(nvs);
     }
-    if (!load("active", running)) {
+    bool broken = false;
+    if (!load("active", running, &broken)) {
         std::memcpy(running, factory, sizeof(running));  // nothing set on the page yet
+        if (broken) {
+            problem = "The stored connections could not be read: the device started with its factory setting. "
+                      "Set the connections again.";
+            ESP_LOGE(TAG, "Stored connections unreadable: factory setting");
+        }
     }
     if (!load("draft", draft)) {
         std::memcpy(draft, running, sizeof(draft));
@@ -790,10 +933,13 @@ void start() {
         const Type t = running[i].type;
         if (t != Type::none && static_cast<int>(t) >= TYPE_COUNT && driver_of(t) == nullptr) {
             running[i].type = Type::none;  // a component this firmware does not have
-        }
-        if (t != Type::none && pin_count(t) > 0 &&
-            (!safe_pin(running[i].pin) || (pin_count(t) == 2 && !safe_pin(running[i].pin2)))) {
+            problem += (problem.empty() ? "" : " ") + std::string("Connection ") + std::to_string(i) + " (" +
+                       running[i].name + ") is left out: this firmware does not have its type.";
+        } else if (t != Type::none && pin_count(t) > 0 &&
+                   (!safe_pin(running[i].pin) || (pin_count(t) == 2 && !safe_pin(running[i].pin2)))) {
             running[i].type = Type::none;  // never drive a pin that is not safe
+            problem += (problem.empty() ? "" : " ") + std::string("Connection ") + std::to_string(i) + " (" +
+                       running[i].name + ") is left out: its pin is not safe to use.";
         }
         bluetooth = bluetooth || is_ble(running[i].type);
     }
@@ -801,6 +947,15 @@ void start() {
     for (int i = 0; i < SLOTS; ++i) {
         if (is_input(running[i].type)) {
             live[i].raw = live[i].active = input_level_active(running[i]);
+        }
+        // What an output does at power-on (off unless set otherwise)
+        const uint8_t power = power_of(running[i]);
+        const bool was_on = (last_on >> i) & 1;
+        if (is_output(running[i].type) && (power == POWER_ON || (power == POWER_LAST && was_on) ||
+                                           (power == POWER_TOGGLE && !was_on))) {
+            set_output(i, true, 0);
+        } else if (power == POWER_TOGGLE && was_on) {
+            after_output(i);  // stored as off now, so the next power-on toggles back
         }
     }
     xTaskCreate(poll_task, "io", 3072, nullptr, 5, nullptr);
@@ -835,14 +990,6 @@ void set_output(int index, bool on, uint8_t level) {
         }
         return;
     }
-    if (index >= 0 && index < SLOTS) {
-        if (const Driver* d = driver_of(running[index].type)) {
-            live[index].on = on;
-            if (level > 0) live[index].level = level;
-            if (d->output) d->output(index, running[index], on, live[index].level);
-            return;
-        }
-    }
     if (index < 0 || index >= SLOTS || !is_output(running[index].type)) {
         return;
     }
@@ -850,8 +997,15 @@ void set_output(int index, bool on, uint8_t level) {
     if (level > 0) {
         live[index].level = level;
     }
-    write_output(index);
+    if (const Driver* d = driver_of(running[index].type)) {
+        if (d->output) d->output(index, running[index], on, live[index].level);
+    } else {
+        write_output(index);
+    }
+    after_output(index);
 }
+
+bool output_on(int index) { return index >= 0 && index < SLOTS && is_output(running[index].type) && live[index].on; }
 
 void stop_outputs() {
     for (int i = 0; i < SLOTS; ++i) {
@@ -933,7 +1087,7 @@ std::string state_json() {
                       ",\"heap\":" + std::to_string(esp_get_free_heap_size()) +
                       ",\"io\":{\"name\":" + json_text(name().c_str()) + ",\"trial\":";
     const int64_t left = in_trial ? (trial_end_us - esp_timer_get_time()) / 1000000 : 0;
-    out += std::to_string(left > 0 ? left : 0) + ",\"changed\":";
+    out += std::to_string(left > 0 ? left : 0) + ",\"problem\":" + json_text(problem.c_str()) + ",\"changed\":";
     out += std::memcmp(draft, running, sizeof(draft)) != 0 ? "true" : "false";
     {
         std::lock_guard<std::mutex> guard(lock);

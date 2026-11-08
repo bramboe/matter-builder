@@ -1,0 +1,12 @@
+# A light that a motion sensor switches on by itself and that switches off
+# again two minutes after the last motion, without Home Assistant. Both still
+# show up in Matter, so automations can use them too.
+device:
+  name: Motion light
+  app: generic
+  board: esp32-c6
+  version: 0.1.0
+
+connections:
+  - { slot: 0, type: led, pin: 6, off_after: 120, name: Light }
+  - { slot: 1, type: motion, pin: 7, controls: 0, name: Motion }

@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <vector>
 
 #include "boot_guard.h"
 #include "commands.h"
@@ -210,7 +211,7 @@ void start_ap() {
     config.ap.authmode = WIFI_AUTH_OPEN;
     config.ap.max_connection = 3;
     config.ap.channel = 6;
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));  // the station side only scans (wifi scan)
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &config));
     ESP_ERROR_CHECK(esp_wifi_start());
     std::strcpy(ip_text, "192.168.4.1");
@@ -257,7 +258,7 @@ void start_mdns() {
 }
 
 void on_event(void*, esp_event_base_t base, int32_t id, void* data) {
-    if (base == WIFI_EVENT && id == WIFI_EVENT_STA_START) {
+    if (base == WIFI_EVENT && id == WIFI_EVENT_STA_START && !ap_mode) {
         esp_wifi_connect();
     } else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED && !ap_mode) {
         ip_text[0] = '\0';
@@ -451,6 +452,61 @@ void run() {
     }
 }
 
+// The Wi-Fi networks in range, strongest first, each name once, as JSON for
+// the page: choosing one is better than typing it. In configuration mode
+// Wi-Fi is up already; on Thread it is started for the scan and stopped
+// again (the radio is shared, so Thread pauses for those seconds).
+std::string scan_networks() {
+    wifi_mode_t mode = WIFI_MODE_NULL;
+    const bool temporary = esp_wifi_get_mode(&mode) == ESP_ERR_WIFI_NOT_INIT;
+    if (temporary) {
+        if (esp_get_free_heap_size() < 90 * 1024) {
+            return "error: not enough memory to look for Wi-Fi networks now\n";
+        }
+        wifi_init_config_t init = WIFI_INIT_CONFIG_DEFAULT();
+        if (esp_wifi_init(&init) != ESP_OK) {
+            return "error: Wi-Fi is not available\n";
+        }
+        esp_wifi_set_storage(WIFI_STORAGE_RAM);
+        esp_wifi_set_mode(WIFI_MODE_STA);
+        if (esp_wifi_start() != ESP_OK) {
+            esp_wifi_deinit();
+            return "error: Wi-Fi did not start\n";
+        }
+    }
+    wifi_scan_config_t config = {};
+    config.scan_type = WIFI_SCAN_TYPE_ACTIVE;
+    config.scan_time.active.min = 50;
+    config.scan_time.active.max = 120;
+    const esp_err_t err = esp_wifi_scan_start(&config, true);
+    uint16_t count = 24;
+    std::vector<wifi_ap_record_t> found(count);
+    if (err == ESP_OK) {
+        esp_wifi_scan_get_ap_records(&count, found.data());
+    }
+    found.resize(err == ESP_OK ? count : 0);
+    if (temporary) {
+        esp_wifi_stop();
+        esp_wifi_deinit();
+    }
+    if (err != ESP_OK) {
+        return std::string("error: scanning failed (") + esp_err_to_name(err) + ")\n";
+    }
+    std::sort(found.begin(), found.end(), [](const wifi_ap_record_t& a, const wifi_ap_record_t& b) { return a.rssi > b.rssi; });
+    std::string out = "{\"networks\":[";
+    std::vector<std::string> seen;
+    for (const wifi_ap_record_t& ap : found) {
+        const std::string ssid(reinterpret_cast<const char*>(ap.ssid));
+        if (ssid.empty() || std::find(seen.begin(), seen.end(), ssid) != seen.end()) {
+            continue;  // hidden, or the same network from another access point
+        }
+        seen.push_back(ssid);
+        out += (seen.size() > 1 ? "," : "") + std::string("{\"ssid\":") + json_text(ssid) +
+               ",\"rssi\":" + std::to_string(ap.rssi) + ",\"open\":" + (ap.authmode == WIFI_AUTH_OPEN ? "true" : "false") + "}";
+    }
+    return out + "]}\n";
+}
+
 // Text from hex: the page sends Wi-Fi names and passwords this way, so
 // spaces, quotes and other characters arrive exactly as typed (a command
 // line is split into words, which loses repeated or trailing spaces)
@@ -473,6 +529,9 @@ bool from_hex(const std::string& hex, std::string& out) {
 
 std::string command(const std::vector<std::string>& args) {
     std::string value;
+    if (args.size() == 2 && args[1] == "scan") {
+        return scan_networks();
+    }
     if (args.size() == 3 && args[1] == "ssid-hex") {
         if (!from_hex(args[2], value) || value.empty() || value.size() > 32) {
             return "error: the network name must be 1 to 32 bytes\n";

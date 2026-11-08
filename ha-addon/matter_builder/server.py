@@ -7,6 +7,7 @@ Only the standard library: the image is Espressif's ESP-IDF image.
 """
 
 import base64
+import gzip
 import hashlib
 import http.client
 import http.server
@@ -43,6 +44,7 @@ CONFIG_HOST = "octo-bridge.local"  # configuration mode of firmware that does no
 PROGRAM_NAME = "Home Assistant"
 
 PROXIES = DATA / "proxies.json"
+PAGES = DATA / "pages"  # each device's own settings page, kept with its ETag
 SETTINGS = DATA / "settings.json"
 NOTIFIED = DATA / "notified.json"
 RELEASES = DATA / "releases"
@@ -188,7 +190,112 @@ def proxy_status(proxy):
     running_app = system.split("\n")[0].split(": ")[-1].split(" ")[0]
     if not proxy.get("device_id") or proxy.get("app") != running_app:
         remember_device_id(proxy)
+    name = re.search(r"settings page: http://([A-Za-z0-9-]+\.local)/", system)
+    if name and proxy.get("local") != name.group(1):
+        remember(proxy, local=name.group(1))
+    if not (PAGES / f"{proxy['id']}.html").exists():
+        prefetch_page(proxy)  # so the first opening is quick as well
     return {"ok": True, "system": system, "beds": beds, "io": state.get("io")}
+
+
+def remember(proxy, **fields):
+    proxies = load_proxies()
+    for p in proxies:
+        if p["id"] == proxy["id"]:
+            p.update(fields)
+    save_proxies(proxies)
+    proxy.update(fields)
+
+
+# ---------------------------------------------------------------- the device's page, served here
+
+# Over Thread the page itself (20-70 KB) takes half a minute; what it asks
+# the device afterwards is small. So the page comes from here, fetched once
+# per firmware (ETag), and its requests go through unchanged: the device
+# password stays the user's, the add-on adds no key of its own.
+RELAY_GET = {"auth", "info", "spec", "link"}
+RELAY_POST = {"cmd", "auth", "ota", "link"}
+page_fetching = set()
+
+
+def device_request(host, method, path, body=None, headers=None, timeout=60):
+    """(status, headers, body) from the device. The body goes in pieces: a
+    timeout per piece, since a whole image over Thread takes half an hour."""
+    conn = http.client.HTTPConnection(url_host(host), timeout=timeout)
+    try:
+        conn.putrequest(method, path, skip_accept_encoding=True)
+        for key, value in (headers or {}).items():
+            conn.putheader(key, value)
+        if body is not None:
+            conn.putheader("Content-Length", str(len(body)))
+        conn.endheaders()
+        for start in range(0, len(body or b""), 4096):
+            conn.send(body[start:start + 4096])
+        reply = conn.getresponse()
+        return reply.status, dict(reply.getheaders()), reply.read()
+    finally:
+        conn.close()
+
+
+def device_page(proxy):
+    """The device's page as it serves it, or None. Asked with the kept ETag:
+    while the firmware is the same the device answers 304 in about a second."""
+    html, tag = PAGES / f"{proxy['id']}.html", PAGES / f"{proxy['id']}.etag"
+    headers = {"Accept-Encoding": "gzip"}
+    if html.exists() and tag.exists():
+        headers["If-None-Match"] = tag.read_text()
+    try:
+        status, reply_headers, body = device_request(resolve(proxy["host"]) or proxy["host"], "GET", "/", None, headers)
+    except (OSError, http.client.HTTPException):
+        return html.read_bytes() if html.exists() else None  # its requests will say it is away
+    if status == 304 and html.exists():
+        return html.read_bytes()
+    if status != 200:
+        return None
+    if {k.lower(): v for k, v in reply_headers.items()}.get("content-encoding") == "gzip":
+        body = gzip.decompress(body)
+    PAGES.mkdir(parents=True, exist_ok=True)
+    html.write_bytes(body)
+    etag = {k.lower(): v for k, v in reply_headers.items()}.get("etag")
+    if etag:
+        tag.write_text(etag)
+    elif tag.exists():
+        tag.unlink()
+    return body
+
+
+def prefetch_page(proxy):
+    if proxy["id"] in page_fetching:
+        return
+    page_fetching.add(proxy["id"])
+
+    def fetch():
+        try:
+            device_page(proxy)
+        finally:
+            page_fetching.discard(proxy["id"])
+    threading.Thread(target=fetch, daemon=True).start()
+
+
+def portal_page(html, proxy):
+    """The page with relative request paths (older firmware asks '/cmd'), its
+    password kept per device, the device's own address for Wi-Fi, and a way back."""
+    text = html.decode(errors="replace")
+    for old, new in (("fetch('/cmd'", "fetch('cmd'"), ("fetch('/auth'", "fetch('auth'"),
+                     ("'POST', '/ota'", "'POST', 'ota'")):
+        text = text.replace(old, new)
+    home = json.dumps(proxy.get("local") or proxy["host"])
+    shim = ("<script>window.mbHome=" + home + ";(function(){var id=" + json.dumps(proxy["id"]) +
+            ",P=Storage.prototype,g=P.getItem,s=P.setItem,r=P.removeItem,"
+            "k=function(n){return /Token$/.test(n)?n+':'+id:n};"
+            "P.getItem=function(n){return g.call(this,k(n))};"
+            "P.setItem=function(n,v){return s.call(this,k(n),v)};"
+            "P.removeItem=function(n){return r.call(this,k(n))}})();</script>")
+    back = ('<a href="../../" style="display:block;padding:10px 16px;font:500 14px system-ui,sans-serif;'
+            'color:#009ac7;text-decoration:none">&larr; Matter Builder</a>')
+    text = re.sub(r"<head[^>]*>", lambda m: m.group(0) + shim, text, count=1)
+    text = re.sub(r"<body[^>]*>", lambda m: m.group(0) + back, text, count=1)
+    return text.encode()
 
 
 def remember_device_id(proxy):
@@ -942,7 +1049,18 @@ def examples():
 # and Wi-Fi, its Matter pairing (the code, and a window for one more
 # controller such as Home Assistant) and the settings its firmware declares;
 # nothing that changes access or the firmware
-ALLOWED_COMMANDS = ("io ", "name ", "wifi ssid ", "wifi password ")
+ALLOWED_COMMANDS = ("io ", "name ", "wifi ssid ", "wifi password ", "wifi ssid-hex ", "wifi password-hex ")
+HEX_WIFI = re.compile(r"wifi (ssid|password)-hex ([0-9a-f]+)")
+
+
+def send_line(proxy, line):
+    """A command; firmware from before the hex Wi-Fi commands gets the plain one."""
+    status, text = command(proxy, line)
+    match = HEX_WIFI.fullmatch(line)
+    if match and status == 200 and not text.startswith(("ok", "error")):
+        plain = bytes.fromhex(match.group(2)).decode(errors="replace")
+        status, text = command(proxy, f"wifi {match.group(1)} {plain}")
+    return status, text
 SETTING_SET = re.compile(r"settings set [a-z_][a-z0-9_]{0,31} [A-Za-z0-9_.:-]{1,64}")
 
 
@@ -1059,11 +1177,44 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.allowed():
-            self.guarded(self.get)
+            self.guarded(lambda: self.portal("GET") if self.path.startswith("/portal/") else self.get())
 
     def do_POST(self):
         if self.allowed():
-            self.guarded(self.post)
+            self.guarded(lambda: self.portal("POST") if self.path.startswith("/portal/") else self.post())
+
+    def portal(self, method):
+        """/portal/<id>/: the device's page from here; its requests to the device."""
+        parts = self.path.split("?")[0].split("/")  # "", "portal", id, [name]
+        proxy = find_proxy(parts[2]) if len(parts) > 2 else None
+        if not proxy:
+            return self.reply(b"unknown device\n", 404, "text/plain")
+        if len(parts) == 3:  # without the slash, relative paths would miss the id
+            self.send_response(301)
+            self.send_header("Location", parts[2] + "/")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        name = "/".join(parts[3:])
+        if name == "" and method == "GET":
+            html = device_page(proxy)
+            if html is None:
+                return self.reply(b"The device is not reachable on the network right now.\n", 502, "text/plain")
+            return self.reply(portal_page(html, proxy), ctype="text/html; charset=utf-8")
+        if name not in (RELAY_GET if method == "GET" else RELAY_POST):
+            return self.reply(b"not found\n", 404, "text/plain")
+        length = int(self.headers.get("Content-Length", 0) or 0)
+        body = self.rfile.read(length) if method == "POST" else None
+        headers = {key: self.headers[key] for key in ("X-Octo-Token", "X-Octo-Link", "Content-Type")
+                   if self.headers.get(key)}
+        try:
+            status, reply_headers, data = device_request(resolve(proxy["host"]) or proxy["host"], method,
+                                                         "/" + name, body, headers,
+                                                         timeout=120 if name == "ota" else 60)
+        except (OSError, http.client.HTTPException) as err:
+            return self.reply(f"device not reachable: {err}\n".encode(), 502, "text/plain")
+        ctype = {k.lower(): v for k, v in reply_headers.items()}.get("content-type", "text/plain")
+        return self.reply(data, status, ctype)
 
     def guarded(self, handler):
         try:
@@ -1085,7 +1236,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path == "/api/state":
             with lock:
                 current = dict(job)
-            proxies = [{k: p.get(k) for k in ("id", "name", "host", "added", "app")} for p in load_proxies()]
+            proxies = [{k: p.get(k) for k in ("id", "name", "host", "added", "app", "local")} for p in load_proxies()]
             return self.reply({"proxies": proxies, "found": found_unlinked(), "toolchain": toolchain_ready(),
                                "builds": builds(), "job": current,
                                "releases": [{k: i[k] for k in ("file", "app", "version", "source", "official")}
@@ -1177,8 +1328,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self.reply({"error": "nothing allowed to send"}, 400)
             results = []
             for proxy in load_proxies():
-                answers = [command(proxy, line) for line in lines]
-                ok = all(status == 200 for status, _ in answers)
+                answers = [send_line(proxy, line) for line in lines]
+                ok = all(status == 200 and not text.startswith("error") for status, text in answers)
                 results.append({"id": proxy["id"], "name": proxy["name"], "ok": ok,
                                 "text": " ".join(text.strip() for _, text in answers)})
             return self.reply({"results": results})

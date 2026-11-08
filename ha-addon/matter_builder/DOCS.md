@@ -19,6 +19,13 @@ device's page or in the add-on.
   its BOOT button briefly (or switch its power off and on three times). The
   add-on gets a key of its own; it never stores the password. The device's
   page lists the add-on under *Programs with access*, where you can revoke it.
+- **Open page**: the device's own settings page, opened through the add-on.
+  Over Thread a page takes half a minute to load, while what it asks the
+  device afterwards takes about a second; so the add-on keeps the page (it
+  fetches it once per firmware version, in the background) and passes the
+  page's requests to the device unchanged. You sign in with the device's own
+  password, as on the device itself. *Open on the device* (the ⋮ menu) opens
+  the page directly, at the device's fixed `.local` name.
 - **Configuration**: every device's configuration as a form or as YAML.
   For a generic device you edit its name and connections; changes are saved
   as a draft on the device, *Apply* restarts it with the draft on trial, and
@@ -33,7 +40,8 @@ device's page or in the add-on.
   the device is linked.
 - **Catalog**: firmware and recipes from the official source and from
   community sources, with a page per item.
-- **Settings**: the Wi-Fi network for configuration mode of every device,
+- **Settings**: the Wi-Fi network for configuration mode of every device
+  (leave the password empty to keep each device's own),
   package sources, developer mode. *Update all* (top bar) updates every device
   to the newest firmware of its own kind, one after the other.
 

@@ -1,8 +1,8 @@
 idf_component_register(
-    SRCS "app_main.cpp" "io.cpp" "matter_device.cpp" "ir.cpp" "ble_scan.cpp" "components_registry.cpp"
+    SRCS "app_main.cpp" "io.cpp" "matter_device.cpp" "ir.cpp" "ble_scan.cpp" "components_registry.cpp" "rules.cpp"
     INCLUDE_DIRS "."
     REQUIRES mb_core mb_driver esp_matter nvs_flash esp_driver_gpio esp_driver_ledc esp_driver_i2c esp_driver_rmt
-             esp_timer openthread bt
+             esp_timer openthread bt esp_netif lwip
 )
 target_compile_options(${COMPONENT_LIB} PRIVATE "-DCHIP_HAVE_CONFIG_H")
 

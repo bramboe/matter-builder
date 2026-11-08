@@ -15,6 +15,7 @@
 
 #include "esp_log.h"
 #include "io.h"
+#include "rules.h"
 #include "mb_core.h"
 #include "setup_code.h"
 
@@ -30,6 +31,14 @@ constexpr char HARDWARE[] = "ESP32-C6";
 
 node_t* node = nullptr;
 uint16_t endpoint_of[io::SLOTS] = {};  // 0: none
+uint16_t rule_endpoint_of[rules::RULES] = {};  // 0: not a switch in Matter
+
+int rule_of(uint16_t endpoint_id) {
+    for (int i = 0; i < rules::RULES; ++i) {
+        if (rule_endpoint_of[i] != 0 && rule_endpoint_of[i] == endpoint_id) return i;
+    }
+    return -1;
+}
 
 int slot_of(uint16_t endpoint_id) {
     for (int i = 0; i < io::SLOTS; ++i) {
@@ -75,7 +84,15 @@ bool started = false;
 esp_err_t on_attribute(attribute::callback_type_t type, uint16_t endpoint_id, uint32_t cluster_id,
                        uint32_t attribute_id, esp_matter_attr_val_t* val, void*) {
     const int index = slot_of(endpoint_id);
-    if (type != attribute::PRE_UPDATE || index < 0 || !started) {
+    if (type != attribute::PRE_UPDATE || !started) {
+        return ESP_OK;
+    }
+    // A rule's switch: the controller turns the rule on or off
+    if (const int rule = rule_of(endpoint_id); rule >= 0) {
+        if (cluster_id == OnOff::Id && attribute_id == OnOff::Attributes::OnOff::Id) rules::set_enabled(rule, val->val.b);
+        return ESP_OK;
+    }
+    if (index < 0) {
         return ESP_OK;
     }
     if (cluster_id == OnOff::Id && attribute_id == OnOff::Attributes::OnOff::Id) {
@@ -249,6 +266,9 @@ void add_device_type(endpoint_t* ep, int i) {
 // connection n is always endpoint n + 2; unused ones are disabled once Matter
 // runs, so controllers never see them.
 endpoint_t* slot_endpoint[io::SLOTS] = {};
+// After them one endpoint per rule, the same way: a rule shown in Matter is
+// a switch that turns the rule on and off, at a fixed endpoint
+endpoint_t* rule_endpoint[rules::RULES] = {};
 
 void create_endpoints() {
     endpoint::aggregator::config_t aggregator_config;
@@ -277,12 +297,47 @@ void create_endpoints() {
         endpoint_of[i] = endpoint::get_id(ep);
         ESP_LOGI(TAG, "Connection %d '%s' on endpoint %u", i, s.name, endpoint_of[i]);
     }
+    for (int i = 0; i < rules::RULES; ++i) {
+        endpoint::bridged_node::config_t config;
+        config.bridged_device_basic_information.reachable = true;
+        endpoint_t* ep = endpoint::bridged_node::create(node, &config, ENDPOINT_FLAG_BRIDGE, nullptr);
+        rule_endpoint[i] = ep;
+        if (ep == nullptr) continue;
+        endpoint::set_parent_endpoint(ep, aggregator);
+        if (!rules::exposed(i)) continue;
+        namespace bdbi = cluster::bridged_device_basic_information::attribute;
+        cluster_t* info = cluster::get(ep, BridgedDeviceBasicInformation::Id);
+        const char* label = rules::name(i);
+        bdbi::create_node_label(info, const_cast<char*>(label), std::strlen(label));
+        bdbi::create_vendor_name(info, const_cast<char*>(mb_core::app().vendor_name),
+                                 std::strlen(mb_core::app().vendor_name));
+        endpoint::on_off_plug_in_unit::config_t plug;
+        plug.on_off.on_off = rules::enabled(i);
+        endpoint::on_off_plug_in_unit::add(ep, &plug);
+        rule_endpoint_of[i] = endpoint::get_id(ep);
+        ESP_LOGI(TAG, "Rule %d '%s' on endpoint %u", i, label, rule_endpoint_of[i]);
+    }
+}
+
+// A rule turned on or off on the device (another rule, the page): its switch follows
+void on_rule_enabled(int rule, bool on) {
+    (void) chip::DeviceLayer::PlatformMgr().ScheduleWork([](intptr_t arg) {
+        const int i = static_cast<int>(arg >> 1);
+        if (i >= rules::RULES || rule_endpoint_of[i] == 0) return;
+        esp_matter_attr_val_t value = esp_matter_bool((arg & 1) != 0);
+        attribute::update(rule_endpoint_of[i], OnOff::Id, OnOff::Attributes::OnOff::Id, &value);
+    }, (static_cast<intptr_t>(rule) << 1) | (on ? 1 : 0));
 }
 
 void after_start() {
     for (int i = 0; i < io::SLOTS; ++i) {
         if (slot_endpoint[i] != nullptr && endpoint_of[i] == 0) {
             endpoint::disable(slot_endpoint[i]);
+        }
+    }
+    for (int i = 0; i < rules::RULES; ++i) {
+        if (rule_endpoint[i] != nullptr && rule_endpoint_of[i] == 0) {
+            endpoint::disable(rule_endpoint[i]);
         }
     }
     (void) chip::DeviceLayer::PlatformMgr().ScheduleWork([](intptr_t) {
@@ -312,6 +367,15 @@ void after_start() {
             } else if (kind == 4) {
                 set_occupancy(endpoint_of[i], io::input_active(i));
             }
+        }
+        for (int i = 0; i < rules::RULES; ++i) {
+            if (rule_endpoint_of[i] == 0) continue;
+            const char* label = rules::name(i);
+            esp_matter_attr_val_t rule_name = esp_matter_char_str(const_cast<char*>(label), std::strlen(label));
+            attribute::update(rule_endpoint_of[i], BridgedDeviceBasicInformation::Id,
+                              BridgedDeviceBasicInformation::Attributes::NodeLabel::Id, &rule_name);
+            esp_matter_attr_val_t on = esp_matter_bool(rules::enabled(i));
+            attribute::update(rule_endpoint_of[i], OnOff::Id, OnOff::Attributes::OnOff::Id, &on);
         }
         started = true;  // from now on a write is a command
     });
@@ -344,6 +408,9 @@ void start() {
     listener.climate = on_climate;
     listener.output = on_output;
     io::set_listener(listener);
+    rules::Listener rule_listener = {};
+    rule_listener.enabled = on_rule_enabled;
+    rules::set_listener(rule_listener);
     esp_matter::set_custom_device_instance_info_provider(&device_info);
     create_endpoints();
     setup_code::install();

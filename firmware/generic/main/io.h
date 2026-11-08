@@ -66,6 +66,8 @@ bool climate(int index, int16_t& centi_celsius, uint16_t& centi_percent);
 void set_output(int index, bool on, uint8_t level);
 bool is_momentary(int index);  // an IR code to send: "on" only for a moment
 bool output_on(int index);     // the state an output is in (after power-on: as set for it)
+// set_output, and Matter hears of it (for the rules on the device)
+void switch_output(int index, bool on, uint8_t level);
 
 // Every output off, before a restart
 void stop_outputs();

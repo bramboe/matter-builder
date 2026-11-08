@@ -83,8 +83,9 @@ class SpecError(Exception):
 
 # ---------------------------------------------------------------- YAML subset
 # Enough YAML for a spec, without libraries: nested mappings by indentation,
-# lists of mappings ("- key: value"), flow mappings ({ a: 1, b: 2 }),
-# comments, quoted strings, numbers and booleans.
+# lists of mappings ("- key: value"), flow mappings and lists ({ a: 1 },
+# [1, 2], nested), comments, quoted strings, numbers and booleans. Unlike
+# full YAML, on/off/yes/no stay words (a rule's "on: 0" is a key).
 
 def scalar(text):
     text = text.strip()
@@ -94,25 +95,63 @@ def scalar(text):
         return text == "true"
     if re.fullmatch(r"-?\d+", text):
         return int(text)
+    if re.fullmatch(r"-?\d+\.\d+", text):
+        return float(text)
     if re.fullmatch(r"0x[0-9a-fA-F]+", text):
         return int(text, 16)
     return text
 
 
+def flow(text):
+    """A flow value ({...}, [...], or a scalar) and nothing after it."""
+    def parse(i):
+        while i < len(text) and text[i] == " ":
+            i += 1
+        if i < len(text) and text[i] in "{[":
+            closing, is_map = ("}", True) if text[i] == "{" else ("]", False)
+            result = {} if is_map else []
+            i += 1
+            while True:
+                while i < len(text) and text[i] in " ,":
+                    i += 1
+                if i >= len(text):
+                    raise SpecError(f"cannot read “{text}”: missing {closing}")
+                if text[i] == closing:
+                    return result, i + 1
+                if is_map:
+                    m = re.match(r"\s*([A-Za-z0-9_\-]+)\s*:", text[i:])
+                    if not m:
+                        raise SpecError(f"cannot read “{text[i:].strip()}”")
+                    i += m.end()
+                    value, i = parse(i)
+                    result[m.group(1)] = value
+                else:
+                    value, i = parse(i)
+                    result.append(value)
+        # a scalar: up to , } ] (outside quotes)
+        start = i
+        if i < len(text) and text[i] in "\"'":
+            end = text.find(text[i], i + 1)
+            if end < 0:
+                raise SpecError(f"cannot read “{text}”: unclosed quote")
+            return text[i + 1:end], end + 1
+        while i < len(text) and text[i] not in ",}]":
+            i += 1
+        return scalar(text[start:i]), i
+
+    value, end = parse(0)
+    if text[end:].strip():
+        raise SpecError(f"cannot read “{text}”")
+    return value
+
+
 def flow_mapping(text):
-    body = text.strip()[1:-1]
-    result = {}
-    for part in [p for p in body.split(",") if p.strip()]:
-        if ":" not in part:
-            raise SpecError(f"cannot read “{part.strip()}”")
-        key, value = part.split(":", 1)
-        result[key.strip()] = scalar(value)
-    return result
+    return flow(text)
 
 
 def value_of(text):
     text = text.strip()
-    return flow_mapping(text) if text.startswith("{") and text.endswith("}") else scalar(text)
+    return flow(text) if text[:1] in "{[" else scalar(text)
 
 
 def parse_yaml(text):
@@ -190,11 +229,160 @@ def version_number(version):
     return major * 10000 + minor * 100 + patch
 
 
+# ---------------------------------------------------------------- rules
+
+# The rules on the device (firmware/generic/main/rules.h): YAML for people,
+# "rule set" options for the firmware, and one JSON shape for the add-on
+RULES_MAX = 12
+RULE_STEPS = 6
+DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+SLOT_TRIGGERS = ["press", "long", "active", "inactive", "on", "off"]
+VALUE_TRIGGERS = {"above": 100, "below": 100, "humid_above": 100, "humid_below": 100}  # °C or % to centi
+SLOT_CONDS = ["active", "inactive", "on", "off"]
+SLOT_STEPS = ["on", "off", "toggle"]
+RULE_STEPS_KINDS = ["enable", "disable", "toggle_rule"]
+
+
+def clock_minute(text, where):
+    m = re.fullmatch(r"(\d{1,2}):(\d{2})", str(text).strip())
+    if not m or int(m.group(1)) > 23 or int(m.group(2)) > 59:
+        raise SpecError(f"{where}: a time like 22:30")
+    return int(m.group(1)) * 60 + int(m.group(2))
+
+
+def one_key(mapping, kinds, where):
+    keys = [k for k in mapping if k in kinds]
+    if len(keys) != 1:
+        raise SpecError(f"{where}: one of {', '.join(kinds)}")
+    return keys[0]
+
+
+def check_rules(rules, slots):
+    """The rules of a spec as the add-on's JSON shape, with the firmware's options."""
+    if rules is None:
+        return []
+    if not isinstance(rules, list) or len(rules) > RULES_MAX:
+        raise SpecError(f"rules: a list of at most {RULES_MAX}")
+    out = []
+    # A rule's id is its number on the device (and its switch in Matter):
+    # its place in the list unless "id:" says otherwise, so ids stay put
+    ids = [r.get("id", n) if isinstance(r, dict) else n for n, r in enumerate(rules)]
+    if any(not isinstance(i, int) or not 0 <= i < RULES_MAX for i in ids) or len(set(ids)) != len(ids):
+        raise SpecError(f"rules: each id 0-{RULES_MAX - 1}, once")
+    for position, r in enumerate(rules):
+        index = ids[position]
+        where = f"rule {index}"
+        if not isinstance(r, dict):
+            raise SpecError(f"{where}: a mapping")
+        unknown = set(r) - {"id", "name", "when", "if", "do", "enabled", "matter"}
+        if unknown:
+            raise SpecError(f"{where}: unknown “{sorted(unknown)[0]}”")
+        name = str(r.get("name") or f"Rule {index + 1}").strip()
+        if not 1 <= len(name) <= 23 or '"' in name or "\\" in name:
+            raise SpecError(f"{where}: name 1-23 characters, no quotes")
+
+        def slot(value, label):
+            if not isinstance(value, int) or value not in slots:
+                raise SpecError(f"{where}: {label} must be a connection of this config")
+            return value
+
+        when = r.get("when")
+        if not isinstance(when, dict):
+            raise SpecError(f"{where}: when is a mapping, e.g. {{active: 1}}")
+        kind = one_key(when, SLOT_TRIGGERS + list(VALUE_TRIGGERS) + ["time", "boot"], f"{where}: when")
+        trig = {"kind": kind, "slot": 0, "value": 0, "days": 0}
+        if kind in SLOT_TRIGGERS:
+            trig["slot"] = slot(when[kind], "when")
+            if kind == "press":
+                count = when.get("count", 1)
+                if not isinstance(count, int) or not 1 <= count <= 5:
+                    raise SpecError(f"{where}: count 1-5")
+                trig["value"] = count
+        elif kind in VALUE_TRIGGERS:
+            trig["slot"] = slot(when[kind], "when")
+            value = when.get("value")
+            if not isinstance(value, (int, float)) or not -40 <= value <= 125:
+                raise SpecError(f"{where}: value in °C or %")
+            trig["value"] = round(value * 100)
+        elif kind == "time":
+            trig["value"] = clock_minute(when["time"], f"{where}: when")
+            days = when.get("days") or []
+            if isinstance(days, str):
+                days = [d.strip() for d in days.split(",")]
+            if any(str(d).lower()[:3] not in DAYS for d in days):
+                raise SpecError(f"{where}: days like [mon, tue]")
+            trig["days"] = sum(1 << DAYS.index(str(d).lower()[:3]) for d in days)
+        cond = None
+        if r.get("if") is not None:
+            c = r["if"]
+            if not isinstance(c, dict):
+                raise SpecError(f"{where}: if is a mapping, e.g. {{on: 0}}")
+            ck = one_key(c, SLOT_CONDS + list(VALUE_TRIGGERS) + ["time"], f"{where}: if")
+            cond = {"kind": ck, "slot": 0, "value": 0, "value2": 0}
+            if ck == "time":
+                parts = str(c["time"]).split("-")
+                if len(parts) != 2:
+                    raise SpecError(f"{where}: if time like 22:00-07:00")
+                cond["value"], cond["value2"] = (clock_minute(x, f"{where}: if") for x in parts)
+            else:
+                cond["slot"] = slot(c[ck], "if")
+                if ck in VALUE_TRIGGERS:
+                    value = c.get("value")
+                    if not isinstance(value, (int, float)) or not -40 <= value <= 125:
+                        raise SpecError(f"{where}: if value in °C or %")
+                    cond["value"] = round(value * 100)
+        steps = r.get("do")
+        if not isinstance(steps, list) or not 1 <= len(steps) <= RULE_STEPS:
+            raise SpecError(f"{where}: do is a list of 1 to {RULE_STEPS} steps")
+        do = []
+        for st in steps:
+            if not isinstance(st, dict) or len(st) != 1:
+                raise SpecError(f"{where}: each step is one of on, off, toggle, level, wait, enable, disable, toggle_rule")
+            (sk, sv), = st.items()
+            if sk in SLOT_STEPS:
+                do.append({"kind": sk, "target": slot(sv, sk), "value": 0})
+            elif sk == "level":
+                if not (isinstance(sv, list) and len(sv) == 2 and isinstance(sv[1], int) and 1 <= sv[1] <= 254):
+                    raise SpecError(f"{where}: level is [connection, 1-254]")
+                do.append({"kind": "level", "target": slot(sv[0], "level"), "value": sv[1]})
+            elif sk == "wait":
+                if not isinstance(sv, int) or not 1 <= sv <= 65535:
+                    raise SpecError(f"{where}: wait in seconds, 1-65535")
+                do.append({"kind": "wait", "target": 0, "value": sv})
+            elif sk in RULE_STEPS_KINDS:
+                if not isinstance(sv, int) or sv not in ids:
+                    raise SpecError(f"{where}: {sk} names a rule of this config (an id)")
+                do.append({"kind": sk, "target": sv, "value": 0})
+            else:
+                raise SpecError(f"{where}: unknown step “{sk}”")
+        out.append({"index": index, "name": name, "enabled": bool(r.get("enabled", True)),
+                    "matter": bool(r.get("matter", False)), "when": trig, "if": cond, "do": do})
+    return out
+
+
+def rule_options(r):
+    """The firmware's "rule set" options for one rule (the add-on writes the same)."""
+    w = r["when"]
+    when = {"time": f"time:{w['value']}:{w['days']}", "boot": "boot"}.get(w["kind"])
+    if when is None:
+        when = f"{w['kind']}:{w['slot']}" + (f":{w['value']}" if w["kind"] in VALUE_TRIGGERS or w["kind"] == "press" else "")
+    opts = [f"enabled={int(r['enabled'])}", f"matter={int(r['matter'])}", f"when={when}"]
+    c = r.get("if")
+    if c:
+        opts.append("if=" + (f"time:{c['value']}:{c['value2']}" if c["kind"] == "time" else
+                             f"{c['kind']}:{c['slot']}" + (f":{c['value']}" if c["kind"] in VALUE_TRIGGERS else "")))
+    for st in r["do"]:
+        opts.append("do=" + (f"wait:{st['value']}" if st["kind"] == "wait" else
+                             f"level:{st['target']}:{st['value']}" if st["kind"] == "level" else f"{st['kind']}:{st['target']}"))
+    opts.append("name-hex=" + r["name"].encode().hex())
+    return " ".join(opts)
+
+
 def check(spec):
     """The validated spec, with defaults filled in. Raises SpecError."""
     if not isinstance(spec, dict) or not isinstance(spec.get("device"), dict):
         raise SpecError("the spec needs a “device:” section")
-    unknown = set(spec) - {"device", "connections", "components"}
+    unknown = set(spec) - {"device", "connections", "components", "rules"}
     if unknown:
         raise SpecError(f"unknown section “{sorted(unknown)[0]}”")
     device = spec["device"]
@@ -317,7 +505,10 @@ def check(spec):
     if "bluetooth" in requires and not BOARD_CAPS[board]["bluetooth"]:
         what = "the Bluetooth connections need" if app == "generic" else f"{app} needs"
         raise SpecError(f"{what} a board with Bluetooth, and {board} has none")
-    return {"name": name, "slug": slug_of(name), "app": app, "board": board, "version": version,
+    rules = check_rules(spec.get("rules"), {c["slot"] for c in clean})
+    if rules and app != "generic":
+        raise SpecError("rules: only for app generic")
+    return {"name": name, "slug": slug_of(name), "app": app, "board": board, "version": version, "rules": rules,
             "version_number": number, "connections": sorted(clean, key=lambda x: x["slot"]),
             "requires": requires, "network": BOARD_CAPS[board]["network"][0],
             "components": [{"source": d["source"], "type": d["type"], "path": d["path"]} for d in components],
@@ -427,6 +618,12 @@ def spec_header(spec):
         "    int power;         // at power-on: 0 off, 1 on, 2 as it was, 3 the other way round",
         "    int off_after;     // seconds until an output switches itself off (0: never)",
         "    int controls;      // the output this input switches (-1: none)",
+        "};",
+        "",
+        "// The rules, as \"<id> <rule set options>\" for the firmware",
+        f"constexpr int SPEC_RULE_COUNT = {len(spec.get('rules') or [])};",
+        f"constexpr const char* SPEC_RULES[{max(len(spec.get('rules') or []), 1)}] = {{",
+        *([f'    "{r["index"]} {rule_options(r)}",' for r in spec.get("rules") or []] or ['    "",']),
         "};",
         "",
         f"constexpr int SPEC_CONNECTION_COUNT = {len(spec['connections'])};",

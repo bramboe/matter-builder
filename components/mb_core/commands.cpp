@@ -142,6 +142,7 @@ void console_start() {
     esp_console_repl_config_t repl_config = ESP_CONSOLE_REPL_CONFIG_DEFAULT();
     repl_config.prompt = "mb>";
     repl_config.max_cmdline_length = 600;  // a pasted Thread dataset
+    repl_config.task_stack_size = 8192;    // "io json" with sensor values overflowed the default 4 KB
     esp_console_dev_uart_config_t uart_config = ESP_CONSOLE_DEV_UART_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_console_new_repl_uart(&uart_config, &repl_config, &repl));
 

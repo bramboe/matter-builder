@@ -189,6 +189,39 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
   </div>
 </div>
 
+<div class="section" id="rulesSection" hidden>
+  <div class="section-head"><h2 data-t="rules"></h2></div>
+  <div class="sub" style="margin:-4px 0 8px" data-t="rulesHelp"></div>
+  <div class="card" id="clockCard" style="margin-bottom:8px">
+    <div class="row" style="border:0;min-height:40px"><span class="label" id="clockText"></span>
+      <select id="clockZone" style="max-width:45%"></select><button type="button" class="text" id="clockSet" data-t="clockSet"></button></div>
+  </div>
+  <div class="grid">
+    <div id="ruleCards" style="display:contents"></div>
+    <div class="card" id="ruleFormCard">
+      <h3 id="ruleFormTitle"></h3>
+      <form id="ruleForm" class="form" style="grid-template-columns:1fr">
+        <label class="field"><span data-t="name"></span><input id="ruleName" maxlength="23" autocomplete="off"></label>
+        <label class="field"><span data-t="ruleWhen"></span><select id="ruleWhen"></select></label>
+        <label class="field" id="ruleWhenSlotF"><span data-t="ruleWhich"></span><select id="ruleWhenSlot"></select></label>
+        <label class="field" id="ruleWhenValueF"><span id="ruleWhenValueL"></span><input id="ruleWhenValue" type="number"></label>
+        <label class="field" id="ruleWhenTimeF"><span data-t="ruleAt"></span><input id="ruleWhenTime" type="time" value="07:00"></label>
+        <div class="chips" id="ruleDays"></div>
+        <label class="field"><span data-t="ruleIf"></span><select id="ruleIf"></select></label>
+        <label class="field" id="ruleIfSlotF"><span data-t="ruleWhich"></span><select id="ruleIfSlot"></select></label>
+        <label class="field" id="ruleIfValueF"><span id="ruleIfValueL"></span><input id="ruleIfValue" type="number" step="0.1"></label>
+        <label class="field" id="ruleIfFromF"><span data-t="ruleFrom"></span><input id="ruleIfFrom" type="time" value="22:00"></label>
+        <label class="field" id="ruleIfToF"><span data-t="ruleTo"></span><input id="ruleIfTo" type="time" value="07:00"></label>
+        <div id="ruleSteps"></div>
+        <button type="button" class="text" id="ruleAddStep" data-t="addStep" style="justify-self:start"></button>
+        <label class="row" style="min-height:40px;border:0"><input type="checkbox" id="ruleMatter"><span class="label" data-t="ruleMatterHelp"></span></label>
+        <div class="features" style="margin-top:0"><button class="pri" type="submit" data-t="save"></button>
+          <button type="button" id="ruleFormCancel" data-t="cancel" hidden></button></div>
+      </form>
+    </div>
+  </div>
+</div>
+
 <div class="section">
   <div class="section-head"><h2 data-t="settings"></h2></div>
   <div class="grid">
@@ -338,6 +371,20 @@ const TEXT = {
   contactHelp: 'An input to ground: closed is “contact”. Appears as a contact sensor.',
   motionHelp: 'An input from a PIR sensor that drives the pin high. Appears as an occupancy sensor.',
   sht4xHelp: 'An I²C sensor (address 0x44) on two pins: SDA and SCL.',
+  rules: 'Rules', rulesHelp: 'When something happens, the device does something: on the device itself, also without Home Assistant.',
+  ruleWhen: 'When', ruleWhich: 'Which', ruleAt: 'At', ruleIf: 'Only if', ruleFrom: 'From', ruleTo: 'Until', ruleThen: 'Then', ruleRule: 'Rule',
+  addStep: '+ Add step', addRule: 'Add a rule', editRule: n => `Edit “${n}”`, rulesFull: 'All 12 rules are in use', ruleRun: 'Run', ruleOn: 'On', ruleOff: 'Off',
+  ruleMatterHelp: 'A switch in Matter that turns this rule on and off (shows up after a restart)', ruleRan: 'Rule run',
+  ifNone: 'Always', pressCount: 'Presses', seconds: 'Seconds', levelPct: 'Brightness %', confirmRuleRemove: n => `Remove the rule “${n}”?`,
+  clockSet: 'Set from this device', clockIs: x => `Clock: ${x}`, clockNotSet: 'The clock is not set: time rules wait for it', clockSaved: 'Clock set',
+  kind_press: 'Button pressed', kind_long: 'Button held', kind_active: 'Becomes active', kind_inactive: 'Becomes inactive', kind_on: 'Output turns on',
+  kind_off: 'Output turns off', kind_above: 'Temperature above', kind_below: 'Temperature below', kind_humid_above: 'Humidity above',
+  kind_humid_below: 'Humidity below', kind_time: 'At a time', kind_boot: 'Device starts',
+  cond_active: 'Is active', cond_inactive: 'Is inactive', cond_on: 'Output is on', cond_off: 'Output is off', cond_above: 'Temperature above',
+  cond_below: 'Temperature below', cond_humid_above: 'Humidity above', cond_humid_below: 'Humidity below', cond_time: 'Between times',
+  act_on: 'Turn on', act_off: 'Turn off', act_toggle: 'Toggle', act_level: 'Brightness', act_wait: 'Wait', act_enable: 'Turn a rule on',
+  act_disable: 'Turn a rule off', act_toggle_rule: 'Toggle a rule',
+  day_mon: 'Mo', day_tue: 'Tu', day_wed: 'We', day_thu: 'Th', day_fri: 'Fr', day_sat: 'Sa', day_sun: 'Su',
   powerOn: 'At power-on', power_off: 'Off', power_on: 'On', power_last: 'As it was', power_toggle: 'The other way round',
   offAfter: 'Off by itself after (seconds)', controls: 'Switches', controlsNone: 'Nothing',
   optionsHelp: 'These work on the device itself, also when Home Assistant is off.',
@@ -458,6 +505,183 @@ function liveText(d, r) {
     : `${r.temperature.toFixed(1)} °C · ${r.humidity.toFixed(0)} %`;
   return r.on ? t('testOn') : t('testOff');
 }
+
+// ---------------------------------------------------------------- rules
+// The device's rules ("rule json"): edited here as on the add-on, saved with
+// "rule set <n> <options>" (firmware rules.h)
+const TRIGGERS = ['press', 'long', 'active', 'inactive', 'on', 'off', 'above', 'below', 'humid_above', 'humid_below', 'time', 'boot'];
+const CONDS = ['active', 'inactive', 'on', 'off', 'above', 'below', 'humid_above', 'humid_below', 'time'];
+const STEP_KINDS = ['on', 'off', 'toggle', 'level', 'wait', 'enable', 'disable', 'toggle_rule'];
+const DAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+const VALUE_KINDS = ['above', 'below', 'humid_above', 'humid_below'];
+const ROLE = {press: 'button', long: 'button', active: 'input', inactive: 'input', on: 'output', off: 'output', above: 'climate', below: 'climate',
+  humid_above: 'climate', humid_below: 'climate', toggle: 'output', level: 'output'};
+// Common zones as POSIX TZ strings: the browser knows the zone's name, the device needs its rules
+const ZONES = {'Europe/Amsterdam': 'CET-1CEST,M3.5.0,M10.5.0/3', 'Europe/Brussels': 'CET-1CEST,M3.5.0,M10.5.0/3', 'Europe/Berlin': 'CET-1CEST,M3.5.0,M10.5.0/3',
+  'Europe/Paris': 'CET-1CEST,M3.5.0,M10.5.0/3', 'Europe/Madrid': 'CET-1CEST,M3.5.0,M10.5.0/3', 'Europe/London': 'GMT0BST,M3.5.0/1,M10.5.0',
+  'Europe/Helsinki': 'EET-2EEST,M3.5.0/3,M10.5.0/4', 'America/New_York': 'EST5EDT,M3.2.0,M11.1.0', 'America/Chicago': 'CST6CDT,M3.2.0,M11.1.0',
+  'America/Denver': 'MST7MDT,M3.2.0,M11.1.0', 'America/Los_Angeles': 'PST8PDT,M3.2.0,M11.1.0', 'Australia/Sydney': 'AEST-10AEDT,M10.1.0,M4.1.0/3', 'UTC': 'UTC0'};
+const hm = m => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+const minuteOf = text => { const m = /^(\d{1,2}):(\d{2})$/.exec(text); return m ? +m[1] * 60 + +m[2] : 0; };
+let rulesState = null, ruleEditing = null, ruleSteps = [];
+function roleOf(d) {
+  if (isOutput(d.type) || d.type === 'ir_send') return 'output';
+  const drv = driverOf(d.type);
+  if (d.type === 'button' || d.type === 'ir_receive' || (drv && drv.matter === 'button')) return 'button';
+  if (['contact', 'motion', 'ble_presence'].includes(d.type) || (drv && ['contact', 'occupancy'].includes(drv.matter))) return 'input';
+  if (d.type === 'sht4x' || d.type === 'ble_sensor' || (drv && drv.matter === 'climate')) return 'climate';
+  return '';
+}
+const slotsFor = role => (state ? state.io.draft : []).filter(d => d.type !== 'none' && (!role || roleOf(d) === role));
+const slotName = n => { const d = state && state.io.draft[n]; return d && d.type !== 'none' ? d.name : '#' + n; };
+const fill = (el, items, value) => { el.innerHTML = items.map(([v, label]) => `<option value="${v}">${esc(label)}</option>`).join(''); if (value !== undefined) el.value = String(value); };
+
+async function loadRules() {
+  try {
+    const reply = await cmd('rule json');
+    rulesState = JSON.parse(reply);
+  } catch (e) { rulesState = null; }
+  $('#rulesSection').hidden = !rulesState;
+  if (rulesState) renderRules();
+}
+function ruleSummary(r) {
+  const w = r.when, c = r.if, unit = k => k.startsWith('humid') ? ' %' : ' °C';
+  let text = w.kind === 'time' ? `${t('kind_time')} ${hm(w.value)}` : w.kind === 'boot' ? t('kind_boot')
+    : `${t('kind_' + w.kind)} · ${slotName(w.slot)}` + (VALUE_KINDS.includes(w.kind) ? ` ${w.value / 100}${unit(w.kind)}` : w.kind === 'press' && w.value > 1 ? ` ×${w.value}` : '');
+  if (c) text += ' · ' + (c.kind === 'time' ? `${hm(c.value)}–${hm(c.value2)}` : `${t('cond_' + c.kind)} ${slotName(c.slot)}`);
+  return text + ' → ' + r.do.map(st => st.kind === 'wait' ? `${st.value} s` : st.kind === 'level' ? `${slotName(st.target)} ${Math.round(st.value / 2.54)}%`
+    : ['enable', 'disable', 'toggle_rule'].includes(st.kind) ? `${t('act_' + st.kind)} ${(rulesState.rules.find(x => x.index === st.target) || {}).name || ''}` : `${t('act_' + st.kind)} ${slotName(st.target)}`).join(', ');
+}
+function renderRules() {
+  const c = rulesState.clock;
+  $('#clockText').textContent = c.set ? t('clockIs', c.local) : t('clockNotSet');
+  if (!$('#clockZone').options.length) {
+    const here = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    fill($('#clockZone'), Object.keys(ZONES).map(z => [ZONES[z] + '|' + z, z]));
+    const match = Object.keys(ZONES).find(z => ZONES[z] === c.zone) || (ZONES[here] ? here : 'UTC');
+    $('#clockZone').value = ZONES[match] + '|' + match;
+  }
+  $('#ruleCards').innerHTML = rulesState.rules.map(r => `<div class="card"><div class="tile"><div class="icon">${icon('bt')}</div>
+      <div class="info"><div class="name">${esc(r.name)}</div><div class="state">${esc(ruleSummary(r))}</div></div></div>
+    <div class="features">
+      <button onclick="ruleToggle(${r.index}, ${!r.enabled})">${r.enabled ? t('ruleOn') : t('ruleOff')}</button>
+      <button onclick="ruleRun(${r.index})">${t('ruleRun')}</button>
+      <button class="text" onclick="ruleEdit(${r.index})">${t('edit')}</button>
+      <button class="warn" onclick="ruleRemove(${r.index})">${t('remove')}</button></div></div>`).join('');
+  const full = rulesState.rules.length >= rulesState.max && ruleEditing === null;
+  $('#ruleForm').hidden = full;
+  $('#ruleFormTitle').textContent = full ? t('rulesFull') : ruleEditing === null ? t('addRule') : t('editRule', (rulesState.rules.find(x => x.index === ruleEditing) || {}).name || '');
+  $('#ruleFormCancel').hidden = ruleEditing === null;
+  if (!$('#ruleWhen').options.length) resetRuleForm();
+  updateRuleForm();
+}
+function resetRuleForm() {
+  fill($('#ruleWhen'), TRIGGERS.map(k => [k, t('kind_' + k)]), slotsFor('button').length ? 'press' : 'active');
+  fill($('#ruleIf'), [['', t('ifNone')], ...CONDS.map(k => [k, t('cond_' + k)])], '');
+  $('#ruleName').value = '';
+  $('#ruleMatter').checked = false;
+  $('#ruleWhenValue').value = 1;
+  $('#ruleDays').dataset.days = '0';
+  ruleSteps = [{kind: 'toggle', target: (slotsFor('output')[0] || {index: 0}).index, value: 0}];
+}
+function updateRuleForm() {
+  const w = $('#ruleWhen').value, c = $('#ruleIf').value;
+  const keepW = $('#ruleWhenSlot').value, keepC = $('#ruleIfSlot').value;
+  $('#ruleWhenSlotF').hidden = !ROLE[w];
+  if (ROLE[w]) fill($('#ruleWhenSlot'), slotsFor(ROLE[w]).map(d => [d.index, d.name]), keepW);
+  $('#ruleWhenValueF').hidden = !(w === 'press' || VALUE_KINDS.includes(w));
+  $('#ruleWhenValueL').textContent = w === 'press' ? t('pressCount') : w.startsWith('humid') ? '%' : '°C';
+  $('#ruleWhenTimeF').hidden = w !== 'time';
+  const days = +$('#ruleDays').dataset.days || 0;
+  $('#ruleDays').hidden = w !== 'time';
+  $('#ruleDays').innerHTML = DAY_KEYS.map((d, n) => `<button type="button" style="${days & (1 << n) ? 'background:var(--primary);color:#fff' : ''}" onclick="ruleDay(${n})">${t('day_' + d)}</button>`).join('');
+  $('#ruleIfSlotF').hidden = !c || !ROLE[c];
+  if (c && ROLE[c]) fill($('#ruleIfSlot'), slotsFor(ROLE[c]).map(d => [d.index, d.name]), keepC);
+  $('#ruleIfValueF').hidden = !VALUE_KINDS.includes(c);
+  $('#ruleIfValueL').textContent = c.startsWith('humid') ? '%' : '°C';
+  $('#ruleIfFromF').hidden = $('#ruleIfToF').hidden = c !== 'time';
+  const others = rulesState ? rulesState.rules.filter(x => x.index !== ruleEditing) : [];
+  $('#ruleSteps').innerHTML = ruleSteps.map((st, n) => `<div class="row" style="border:0;gap:6px;flex-wrap:wrap">
+      <label class="field" style="flex:1 1 140px"><span>${t('ruleThen')}</span><select onchange="ruleStep(${n}, 'kind', this.value)">${STEP_KINDS.map(k => `<option value="${k}" ${k === st.kind ? 'selected' : ''}>${t('act_' + k)}</option>`).join('')}</select></label>
+      ${ROLE[st.kind] ? `<label class="field" style="flex:1 1 140px"><span>${t('ruleWhich')}</span><select onchange="ruleStep(${n}, 'target', +this.value)">${slotsFor('output').map(d => `<option value="${d.index}" ${d.index === st.target ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}</select></label>` : ''}
+      ${['enable', 'disable', 'toggle_rule'].includes(st.kind) ? `<label class="field" style="flex:1 1 140px"><span>${t('ruleRule')}</span><select onchange="ruleStep(${n}, 'target', +this.value)">${others.map(x => `<option value="${x.index}" ${x.index === st.target ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label>` : ''}
+      ${st.kind === 'wait' ? `<label class="field" style="flex:0 1 110px"><span>${t('seconds')}</span><input type="number" min="1" max="65535" value="${st.value}" onchange="ruleStep(${n}, 'value', Math.max(1, Math.round(+this.value || 1)))"></label>` : ''}
+      ${st.kind === 'level' ? `<label class="field" style="flex:0 1 110px"><span>${t('levelPct')}</span><input type="number" min="1" max="100" value="${Math.round(st.value / 2.54) || 50}" onchange="ruleStep(${n}, 'value', Math.max(1, Math.min(254, Math.round(+this.value * 2.54))))"></label>` : ''}
+      <button type="button" class="warn" onclick="ruleSteps.splice(${n}, 1); updateRuleForm()" ${ruleSteps.length < 2 ? 'disabled' : ''}>✕</button></div>`).join('');
+  $('#ruleAddStep').hidden = ruleSteps.length >= (rulesState ? rulesState.steps : 6);
+}
+function ruleDay(n) { $('#ruleDays').dataset.days = String((+$('#ruleDays').dataset.days || 0) ^ (1 << n)); updateRuleForm(); }
+function ruleStep(n, key, value) {
+  const st = ruleSteps[n];
+  st[key] = value;
+  if (key === 'kind') {
+    if (ROLE[value]) st.target = (slotsFor('output')[0] || {index: 0}).index;
+    if (['enable', 'disable', 'toggle_rule'].includes(value)) st.target = ((rulesState.rules.find(x => x.index !== ruleEditing)) || {index: 0}).index;
+    st.value = value === 'wait' ? 60 : value === 'level' ? 128 : 0;
+  }
+  updateRuleForm();
+}
+function ruleEdit(index) {
+  const r = rulesState.rules.find(x => x.index === index);
+  ruleEditing = index;
+  $('#ruleName').value = r.name;
+  $('#ruleMatter').checked = r.matter;
+  $('#ruleWhen').value = r.when.kind;
+  updateRuleForm();
+  if (ROLE[r.when.kind]) $('#ruleWhenSlot').value = r.when.slot;
+  $('#ruleWhenValue').value = r.when.kind === 'press' ? (r.when.value || 1) : r.when.value / 100;
+  $('#ruleWhenTime').value = hm(r.when.value);
+  $('#ruleDays').dataset.days = String(r.when.days || 0);
+  $('#ruleIf').value = r.if ? r.if.kind : '';
+  updateRuleForm();
+  if (r.if && ROLE[r.if.kind]) $('#ruleIfSlot').value = r.if.slot;
+  if (r.if) { $('#ruleIfValue').value = r.if.value / 100; $('#ruleIfFrom').value = hm(r.if.value); $('#ruleIfTo').value = hm(r.if.value2); }
+  ruleSteps = r.do.map(st => ({...st}));
+  renderRules();
+  $('#ruleFormCard').scrollIntoView({behavior: 'smooth', block: 'center'});
+}
+async function ruleToggle(index, on) { await run(`rule enable ${index} ${on ? 'on' : 'off'}`); loadRules(); }
+async function ruleRun(index) { const reply = await cmd(`rule run ${index}`); toast(reply.trim() === 'ok' ? t('ruleRan') : reply.trim()); }
+async function ruleRemove(index) {
+  const r = rulesState.rules.find(x => x.index === index);
+  if (!confirm(t('confirmRuleRemove', r.name))) return;
+  await run(`rule clear ${index}`);
+  loadRules();
+}
+$('#ruleWhen').onchange = () => { $('#ruleWhenValue').value = $('#ruleWhen').value === 'press' ? 1 : $('#ruleWhen').value.startsWith('humid') ? 60 : 25; updateRuleForm(); };
+$('#ruleIf').onchange = () => { $('#ruleIfValue').value = $('#ruleIf').value.startsWith('humid') ? 60 : 20; updateRuleForm(); };
+$('#ruleAddStep').onclick = () => { ruleSteps.push({kind: 'wait', target: 0, value: 60}); updateRuleForm(); };
+$('#ruleFormCancel').onclick = () => { ruleEditing = null; resetRuleForm(); renderRules(); };
+$('#ruleForm').onsubmit = async e => {
+  e.preventDefault();
+  const index = ruleEditing !== null ? ruleEditing : [...Array(rulesState.max).keys()].find(i => !rulesState.rules.some(r => r.index === i));
+  if (index === undefined) return;
+  const w = $('#ruleWhen').value, c = $('#ruleIf').value;
+  const centi = el => Math.round(+el.value * 100);
+  const when = w === 'time' ? `time:${minuteOf($('#ruleWhenTime').value)}:${+$('#ruleDays').dataset.days || 0}` : w === 'boot' ? 'boot'
+    : `${w}:${$('#ruleWhenSlot').value}` + (w === 'press' ? `:${Math.max(1, Math.min(5, +$('#ruleWhenValue').value || 1))}` : VALUE_KINDS.includes(w) ? `:${centi($('#ruleWhenValue'))}` : '');
+  const opts = [`matter=${$('#ruleMatter').checked ? 1 : 0}`, `when=${when}`];
+  const old = rulesState.rules.find(x => x.index === index);
+  opts.unshift(`enabled=${old && !old.enabled ? 0 : 1}`);
+  if (c) opts.push('if=' + (c === 'time' ? `time:${minuteOf($('#ruleIfFrom').value)}:${minuteOf($('#ruleIfTo').value)}`
+    : `${c}:${$('#ruleIfSlot').value}` + (VALUE_KINDS.includes(c) ? `:${centi($('#ruleIfValue'))}` : '')));
+  for (const st of ruleSteps) opts.push('do=' + (st.kind === 'wait' ? `wait:${st.value}` : st.kind === 'level' ? `level:${st.target}:${st.value || 128}` : `${st.kind}:${st.target}`));
+  const name = $('#ruleName').value.trim();
+  if (name) opts.push('name-hex=' + hex(name));
+  const reply = await cmd(`rule set ${index} ${opts.join(' ')}`);
+  if (!reply.startsWith('ok')) { toast(reply.trim()); return; }
+  toast(reply.trim() === 'ok' ? t('saved') : reply.trim().replace(/^ok: /, ''));
+  ruleEditing = null;
+  resetRuleForm();
+  loadRules();
+};
+$('#clockSet').onclick = async () => {
+  const [zone] = $('#clockZone').value.split('|');
+  await cmd(`time zone ${zone}`);
+  await cmd(`time set ${Math.floor(Date.now() / 1000)}`);
+  toast(t('clockSaved'));
+  loadRules();
+};
 
 // The options of a connection, short: "at power-on as it was · off after 60 s"
 function optionsText(d) {
@@ -956,7 +1180,7 @@ document.addEventListener('submit', () => document.querySelectorAll('input[data-
 
 applyTexts();
 $('#sys').textContent = t('connecting');
-function startApp() { refresh(); loadMatter(); loadWifi(); loadThread(); loadAccess(); }
+function startApp() { refresh().then(loadRules); loadMatter(); loadWifi(); loadThread(); loadAccess(); }
 function keepToken(value) {
   token = value;
   try { localStorage.setItem('mbToken', token); } catch (err) {}
@@ -998,6 +1222,8 @@ setInterval(() => { if (!document.hidden && signedIn) loadMatter(); }, 30000);
 // A waiting link request counts down; otherwise a slow check is enough
 setInterval(() => { if (!document.hidden && signedIn && access && access.pending) loadAccess(); }, 3000);
 setInterval(() => { if (!document.hidden && signedIn) loadAccess(); }, 15000);
+// Rules: their on/off and the clock; not while one is being edited
+setInterval(() => { if (!document.hidden && signedIn && ruleEditing === null && !$('#ruleForm').contains(document.activeElement)) loadRules(); }, 20000);
 </script>
 </body>
 </html>

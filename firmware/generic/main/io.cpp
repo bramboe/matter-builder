@@ -18,6 +18,7 @@
 #include "ble_scan.h"
 #include "io.h"
 #include "ir.h"
+#include "rules.h"
 
 namespace io {
 
@@ -248,6 +249,21 @@ void on_trial_timeout(void*) {
 
 void act(int source, int how);  // below: an input switching the output it controls
 
+// What happened, to Matter (the listener) and to the rules on the device
+void emit_input(int i, bool active) {
+    if (listener.input) listener.input(i, active);
+    rules::on_input(i, active);
+}
+void emit_button(int i, Press press, uint8_t count) {
+    if (listener.button) listener.button(i, press, count);
+    if (press == Press::multi_complete) rules::on_press(i, count);
+    if (press == Press::long_press) rules::on_long(i);
+}
+void emit_climate(int i, int16_t centi_celsius, uint16_t centi_percent) {
+    if (listener.climate) listener.climate(i, centi_celsius, centi_percent);
+    rules::on_climate(i, centi_celsius, centi_percent);
+}
+
 void write_output(int i) {
     const Slot& s = running[i];
     const Live& l = live[i];
@@ -274,11 +290,9 @@ void on_ir_code(int pin, uint16_t address, uint16_t command) {
         if (s.type != Type::ir_receive || s.pin != pin || code_address(s) != address || code_command(s) != command) {
             continue;
         }
-        if (listener.button) {
-            listener.button(i, Press::initial, 0);
-            listener.button(i, Press::short_release, 0);
-            listener.button(i, Press::multi_complete, 1);
-        }
+        emit_button(i, Press::initial, 0);
+        emit_button(i, Press::short_release, 0);
+        emit_button(i, Press::multi_complete, 1);
     }
 }
 
@@ -308,9 +322,9 @@ void on_ble_advert(const ble_scan::Advert& a) {
                 if (report) l.next_report = now + BLE_CLIMATE_US;
             }
         }
-        if (arrived && listener.input) listener.input(i, true);
+        if (arrived) emit_input(i, true);
         if (arrived) act(i, 1);
-        if (report && listener.climate) listener.climate(i, a.centi_celsius, a.centi_percent);
+        if (report) emit_climate(i, a.centi_celsius, a.centi_percent);
     }
 }
 
@@ -422,9 +436,7 @@ void read_sht4x(int i) {
         l.centi_celsius = static_cast<int16_t>(centi_celsius);
         l.centi_percent = static_cast<uint16_t>(centi_percent);
     }
-    if (listener.climate != nullptr) {
-        listener.climate(i, l.centi_celsius, l.centi_percent);
-    }
+    emit_climate(i, l.centi_celsius, l.centi_percent);
 }
 
 void button_step(int i, bool active, int64_t now) {
@@ -433,23 +445,23 @@ void button_step(int i, bool active, int64_t now) {
         l.active = true;
         l.down_since = now;
         l.long_sent = false;
-        if (listener.button) listener.button(i, Press::initial, 0);
+        emit_button(i, Press::initial, 0);
     } else if (active && !l.long_sent && now - l.down_since > LONG_PRESS_US) {
         l.long_sent = true;
         l.presses = 0;
-        if (listener.button) listener.button(i, Press::long_press, 0);
+        emit_button(i, Press::long_press, 0);
     } else if (!active && l.active) {
         l.active = false;
         if (l.long_sent) {
-            if (listener.button) listener.button(i, Press::long_release, 0);
+            emit_button(i, Press::long_release, 0);
         } else {
             ++l.presses;
             l.last_release = now;
-            if (listener.button) listener.button(i, Press::short_release, 0);
+            emit_button(i, Press::short_release, 0);
             act(i, -1);  // a press toggles the output it controls
         }
     } else if (!active && l.presses > 0 && now - l.last_release > MULTI_PRESS_US) {
-        if (listener.button) listener.button(i, Press::multi_complete, l.presses);
+        emit_button(i, Press::multi_complete, l.presses);
         l.presses = 0;
     }
 }
@@ -471,7 +483,7 @@ void poll_task(void*) {
             }
             if (s.type == Type::ble_presence && l.active && now - l.seen_us > PRESENCE_US) {
                 l.active = false;
-                if (listener.input) listener.input(i, false);
+                emit_input(i, false);
                 act(i, 0);
             }
             if (!is_input(s.type)) {
@@ -485,7 +497,7 @@ void poll_task(void*) {
                 button_step(i, stable ? sample : l.active, now);
             } else if (stable && sample != l.active) {
                 l.active = sample;
-                if (listener.input) listener.input(i, sample);
+                emit_input(i, sample);
                 act(i, sample ? 1 : 0);  // the output it controls follows
             }
         }
@@ -795,16 +807,15 @@ void register_driver(const Driver& driver) {
 void report_input(int slot, bool active) {
     if (slot < 0 || slot >= SLOTS || live[slot].active == active) return;
     live[slot].active = active;
-    if (listener.input) listener.input(slot, active);
+    emit_input(slot, active);
     act(slot, active ? 1 : 0);
 }
 
 void report_press(int slot) {
     if (slot >= 0 && slot < SLOTS) act(slot, -1);
-    if (!listener.button) return;
-    listener.button(slot, Press::initial, 0);
-    listener.button(slot, Press::short_release, 0);
-    listener.button(slot, Press::multi_complete, 1);
+    emit_button(slot, Press::initial, 0);
+    emit_button(slot, Press::short_release, 0);
+    emit_button(slot, Press::multi_complete, 1);
 }
 
 void report_climate(int slot, int16_t centi_celsius, uint16_t centi_percent) {
@@ -814,7 +825,7 @@ void report_climate(int slot, int16_t centi_celsius, uint16_t centi_percent) {
         live[slot].centi_celsius = centi_celsius;
         live[slot].centi_percent = centi_percent;
     }
-    if (listener.climate) listener.climate(slot, centi_celsius, centi_percent);
+    emit_climate(slot, centi_celsius, centi_percent);
 }
 
 void report_output(int slot, bool on) {
@@ -998,6 +1009,7 @@ void set_output(int index, bool on, uint8_t level) {
     if (index < 0 || index >= SLOTS || !is_output(running[index].type)) {
         return;
     }
+    const bool changed = live[index].on != on;
     live[index].on = on;
     if (level > 0) {
         live[index].level = level;
@@ -1008,6 +1020,12 @@ void set_output(int index, bool on, uint8_t level) {
         write_output(index);
     }
     after_output(index);
+    if (changed) rules::on_output(index, on);
+}
+
+void switch_output(int index, bool on, uint8_t level) {
+    set_output(index, on, level);
+    if (!is_momentary(index) && listener.output) listener.output(index, on);
 }
 
 bool output_on(int index) { return index >= 0 && index < SLOTS && is_output(running[index].type) && live[index].on; }
@@ -1060,6 +1078,50 @@ std::string command(const std::vector<std::string>& args) {
         if (index < 0 || (!is_output(running[index].type) && !is_momentary(index))) return "not an output in use\n";
         set_output(index, args[3] == "on", 0);
         return "ok\n";
+    }
+    // Inputs as if they happened, for trying out rules and controls without wiring
+    if (sub == "simulate" && args.size() >= 4) {
+        const int index = parse_slot(args[2]);
+        if (index < 0 || running[index].type == Type::none) return "not a connection in use\n";
+        const std::string what = args[3];
+        if (what == "press") {
+            const long count = args.size() > 4 ? std::strtol(args[4].c_str(), nullptr, 10) : 1;
+            if (count < 1 || count > 5) return "press [1-5]\n";
+            for (long k = 0; k < count; ++k) {
+                emit_button(index, Press::initial, 0);
+                emit_button(index, Press::short_release, 0);
+                act(index, -1);
+            }
+            emit_button(index, Press::multi_complete, static_cast<uint8_t>(count));
+            return "ok\n";
+        }
+        if (what == "long") {
+            emit_button(index, Press::initial, 0);
+            emit_button(index, Press::long_press, 0);
+            emit_button(index, Press::long_release, 0);
+            return "ok\n";
+        }
+        if (what == "active" || what == "inactive") {
+            const bool active = what == "active";
+            if (live[index].active != active) {
+                live[index].active = active;
+                emit_input(index, active);
+                act(index, active ? 1 : 0);
+            }
+            return "ok\n";
+        }
+        if (what == "climate" && args.size() == 6) {
+            const long c = std::strtol(args[4].c_str(), nullptr, 10), h = std::strtol(args[5].c_str(), nullptr, 10);
+            {
+                std::lock_guard<std::mutex> guard(lock);
+                live[index].have_climate = true;
+                live[index].centi_celsius = static_cast<int16_t>(c);
+                live[index].centi_percent = static_cast<uint16_t>(h);
+            }
+            emit_climate(index, static_cast<int16_t>(c), static_cast<uint16_t>(h));
+            return "ok\n";
+        }
+        return "io simulate <n> press [count]|long|active|inactive|climate <centi °C> <centi %>\n";
     }
     if (sub == "cancel") {
         std::lock_guard<std::mutex> guard(lock);

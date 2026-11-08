@@ -18,6 +18,7 @@
 #include "esp_system.h"
 #include "http_api.h"
 #include "io.h"
+#include "rules.h"
 #include "io.h"
 #include "matter_device.h"
 #include "matter_info.h"
@@ -167,7 +168,11 @@ extern "C" void app_main() {
     app.ble_pairing = ble_pairing_enabled;
     mb_core::init(app);
     // Also in configuration mode
-    add_command("io", "io [json|set|clear|test|apply|confirm|cancel]  connections\n", io::command);
+    add_command("io", "io [json|set|clear|test|simulate|apply|confirm|cancel]  connections\n", io::command);
+    add_command("rule", "rule [json|set <n> ...|clear <n>|enable <n> on|off|run <n>]  rules on the device\n",
+                rules::command);
+    add_command("time", "time [set <unix>|zone <POSIX TZ>]       the device's clock, for time rules\n",
+                rules::time_command);
     add_command("name", "name [<text>]                           the device's name\n", io::name_command);
     add_command("json", "json                                    state for the settings page\n", cmd_json);
 
@@ -178,6 +183,10 @@ extern "C" void app_main() {
         config_mode::run();
     }
     io::start();
+#ifdef HAS_SPEC
+    rules::set_factory(SPEC_RULES, SPEC_RULE_COUNT);
+#endif
+    rules::load();  // before Matter: which rules are switches there
 
     esp_openthread_platform_config_t thread_config = {};
     thread_config.radio_config.radio_mode = RADIO_MODE_NATIVE;
@@ -188,6 +197,7 @@ extern "C" void app_main() {
     set_openthread_platform_config(&thread_config);
 
     matter_device::start();
+    rules::start();  // the rules run from here on, also without a controller
     // Matter starts its Bluetooth layer; without pairing over Bluetooth it lets
     // go of it again, and the connections that listen start their own
     const bool pairing = ble_pairing_enabled();

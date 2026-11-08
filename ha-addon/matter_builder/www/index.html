@@ -77,6 +77,9 @@ details.more{position:relative}
 details.more summary{list-style:none;display:grid;place-items:center;width:36px;height:36px;border-radius:18px;cursor:pointer;color:var(--mute)}
 details.more summary::-webkit-details-marker{display:none}
 details.more .pop{position:absolute;right:0;bottom:40px;z-index:3;background:var(--card);border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);padding:4px 0;min-width:180px}
+.days{display:flex;flex-wrap:wrap;gap:6px;grid-column:1/-1}.day{display:flex;align-items:center;gap:4px;border:1px solid var(--line);border-radius:8px;padding:4px 8px;cursor:pointer}
+.steps{display:flex;flex-direction:column;gap:8px;margin-top:8px}.step{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end}
+@media (max-width:560px){.step{grid-template-columns:1fr auto}.step .field:nth-child(2){grid-column:1}}
 details.more .pop button,details.more .pop a.button{display:flex;align-items:center;padding:0 16px;box-sizing:border-box;text-decoration:none;width:100%;justify-content:flex-start;border-radius:0;background:none;color:var(--fg);font-weight:400;min-height:40px}
 details.more .pop button:hover,details.more .pop a.button:hover{background:var(--fill)}
 details.more .pop button.warn{color:var(--bad)}
@@ -362,6 +365,32 @@ const TEXT = {
   form: 'Form', visualEditor: 'Visual editor', duplicate: 'Duplicate', editInYaml: 'Edit in YAML', cancel: 'Cancel',
   ofEight: n => `${n} of 8`, allUsed: 'All 8 connections are in use', invertedShort: 'inverted',
   invertedHelp: 'Inverted: a relay that switches on with a low pin, or an input the other way round',
+  rules: 'Rules', ofTwelve: n => `${n} of 12`, rulesHelp: 'Run on the device itself, also when Home Assistant is off.', addRule: 'Add rule',
+  rulesNeedUpdate: 'Rules on the device need generic 0.1.7 or newer: update its firmware first.', ruleN: n => `Rule ${n}`,
+  ruleNeedsSlot: n => `Rule “${n}” uses a connection that is not there`, ruleNeedsStep: n => `Rule “${n}” needs at least one step`,
+  ruleNeedsRule: n => `Rule “${n}” turns a rule on or off that is not there`,
+  ruleWhen: 'When', ruleWhich: 'Which', pressCount: 'Presses', ruleAt: 'At', ruleIf: 'Only if', ifNone: 'Always', ruleFrom: 'From', ruleTo: 'Until',
+  ruleThen: 'Then', ruleThenNext: 'Then', ruleRule: 'Rule', seconds: 'Seconds', addStep: 'Add step',
+  ruleMatterHelp: 'A switch in Matter (Home Assistant, Apple Home) that turns this rule on and off; it shows up after the device restarts',
+  ruleMatterChip: 'in Matter', ruleEnabled: 'On', ruleRun: 'Run now', ruleRan: 'Rule run', missingSlot: '(not there)',
+  clockIs: x => `Device clock: ${x}`, clockNotSet: 'The device clock is not set yet; the add-on sets it within a minute', clockHelp: 'Time rules use the device clock, which the add-on sets',
+  kind_press: 'Button pressed', kind_long: 'Button held', kind_active: 'Becomes active', kind_inactive: 'Becomes inactive', kind_on: 'Output turns on',
+  kind_off: 'Output turns off', kind_above: 'Temperature above', kind_below: 'Temperature below', kind_humid_above: 'Humidity above',
+  kind_humid_below: 'Humidity below', kind_time: 'At a time', kind_boot: 'Device starts',
+  cond_active: 'Is active', cond_inactive: 'Is inactive', cond_on: 'Output is on', cond_off: 'Output is off', cond_above: 'Temperature above',
+  cond_below: 'Temperature below', cond_humid_above: 'Humidity above', cond_humid_below: 'Humidity below', cond_time: 'Between times',
+  act_on: 'Turn on', act_off: 'Turn off', act_toggle: 'Toggle', act_level: 'Brightness', act_wait: 'Wait', act_enable: 'Turn a rule on',
+  act_disable: 'Turn a rule off', act_toggle_rule: 'Toggle a rule',
+  day_mon: 'Mo', day_tue: 'Tu', day_wed: 'We', day_thu: 'Th', day_fri: 'Fr', day_sat: 'Sa', day_sun: 'Su', everyDay: 'every day',
+  whenTime: (x, d) => `At ${x} (${d})`, whenBoot: 'When the device starts', whenPress: (n, c) => c > 1 ? `When ${n} is pressed ${c} times` : `When ${n} is pressed`,
+  when_long: n => `When ${n} is held`, when_active: n => `When ${n} becomes active`, when_inactive: n => `When ${n} becomes inactive`,
+  when_on: n => `When ${n} turns on`, when_off: n => `When ${n} turns off`, when_above: (n, v) => `When ${n} rises above ${v}`,
+  when_below: (n, v) => `When ${n} drops below ${v}`, when_humid_above: (n, v) => `When ${n} rises above ${v}`, when_humid_below: (n, v) => `When ${n} drops below ${v}`,
+  ifTime: (a, b) => `between ${a} and ${b}`, if_active: n => `if ${n} is active`, if_inactive: n => `if ${n} is inactive`, if_on: n => `if ${n} is on`,
+  if_off: n => `if ${n} is off`, if_above: (n, v) => `if ${n} is above ${v}`, if_below: (n, v) => `if ${n} is below ${v}`,
+  if_humid_above: (n, v) => `if ${n} is above ${v}`, if_humid_below: (n, v) => `if ${n} is below ${v}`,
+  stepWait: x => `wait ${x} s`, stepLevel: (n, p) => `${n} to ${p} %`, step_on: n => `${n} on`, step_off: n => `${n} off`, step_toggle: n => `toggle ${n}`,
+  step_enable: n => `rule “${n}” on`, step_disable: n => `rule “${n}” off`, step_toggle_rule: n => `toggle rule “${n}”`,
   powerOn: 'At power-on', power_off: 'Off', power_on: 'On', power_last: 'As it was', power_toggle: 'The other way round',
   offAfter: 'Off by itself after (s)', controls: 'Switches', controlsNone: 'Nothing',
   optionsHelp: 'These work on the device itself, also when Home Assistant is off.',
@@ -647,12 +676,80 @@ const EDITORS = {};
 let editorPref = 'visual';
 try { editorPref = localStorage.getItem('mbEditor') === 'yaml' ? 'yaml' : 'visual'; } catch (e) {}
 
+// ---------------------------------------------------------------- rules
+// Rules on the device (firmware rules.h): "when … only if … then …". One JSON
+// shape everywhere ({index, name, enabled, matter, when, if, do}), the same
+// as "rule json" and as tools/mb_generate.py checks the YAML.
+const RULES_MAX = 12, RULE_STEPS = 6;
+const TRIGGERS = ['press', 'long', 'active', 'inactive', 'on', 'off', 'above', 'below', 'humid_above', 'humid_below', 'time', 'boot'];
+const CONDS = ['active', 'inactive', 'on', 'off', 'above', 'below', 'humid_above', 'humid_below', 'time'];
+const STEP_KINDS = ['on', 'off', 'toggle', 'level', 'wait', 'enable', 'disable', 'toggle_rule'];
+const DAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+const VALUE_KINDS = ['above', 'below', 'humid_above', 'humid_below'];
+const hm = m => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+const minuteOf = text => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(text).trim()); return m && +m[1] < 24 && +m[2] < 60 ? +m[1] * 60 + +m[2] : null; };
+// What a connection can be in a rule
+function roleOf(r, d) {
+  if (optOutput(r.type, d) || r.type === 'ir_send') return 'output';
+  if (r.type === 'button' || r.type === 'ir_receive' || (d && d.matter === 'button')) return 'button';
+  if (['contact', 'motion', 'ble_presence'].includes(r.type) || (d && ['contact', 'occupancy'].includes(d.matter))) return 'input';
+  if (r.type === 'sht4x' || r.type === 'ble_sensor' || (d && d.matter === 'climate')) return 'climate';
+  return '';
+}
+const ROLE_OF_KIND = {press: 'button', long: 'button', active: 'input', inactive: 'input', on: 'output', off: 'output',
+  above: 'climate', below: 'climate', humid_above: 'climate', humid_below: 'climate', toggle: 'output', level: 'output'};
+// The firmware's "rule set" options (as rule_options() in tools/mb_generate.py)
+function ruleOptions(r) {
+  const w = r.when;
+  const when = w.kind === 'time' ? `time:${w.value}:${w.days || 0}` : w.kind === 'boot' ? 'boot'
+    : `${w.kind}:${w.slot}` + (VALUE_KINDS.includes(w.kind) || w.kind === 'press' ? `:${w.value}` : '');
+  const opts = [`enabled=${r.enabled ? 1 : 0}`, `matter=${r.matter ? 1 : 0}`, `when=${when}`];
+  const c = r.if;
+  if (c) opts.push('if=' + (c.kind === 'time' ? `time:${c.value}:${c.value2}` : `${c.kind}:${c.slot}` + (VALUE_KINDS.includes(c.kind) ? `:${c.value}` : '')));
+  for (const st of r.do) opts.push('do=' + (st.kind === 'wait' ? `wait:${st.value}` : st.kind === 'level' ? `level:${st.target}:${st.value}` : `${st.kind}:${st.target}`));
+  opts.push('name-hex=' + Array.from(new TextEncoder().encode(r.name), b => b.toString(16).padStart(2, '0')).join(''));
+  return opts.join(' ');
+}
+const ruleKey = r => ruleOptions(r);
+// The commands that turn the device's rules into these
+function ruleLines(before, after) {
+  const old = new Map((before || []).map(r => [r.index, ruleKey(r)]));
+  const lines = [];
+  for (const r of after) {
+    if (old.get(r.index) !== ruleKey(r)) lines.push(`rule set ${r.index} ${ruleOptions(r)}`);
+    old.delete(r.index);
+  }
+  for (const index of old.keys()) lines.push(`rule clear ${index}`);
+  return lines;
+}
+function rulesYaml(rules) {
+  if (!rules || !rules.length) return [];
+  const lines = ['', 'rules:'];
+  const value = (kind, v) => (v / 100).toString();
+  [...rules].sort((a, b) => a.index - b.index).forEach((r, position) => {
+    lines.push(`  - name: ${r.name}`);
+    if (r.index !== position) lines.push(`    id: ${r.index}`);  // its number on the device and in Matter
+    const w = r.when;
+    lines.push('    when: ' + (w.kind === 'time' ? `{ time: "${hm(w.value)}"${w.days ? `, days: [${DAY_KEYS.filter((d, i) => w.days & (1 << i)).join(', ')}]` : ''} }`
+      : w.kind === 'boot' ? '{ boot: true }' : VALUE_KINDS.includes(w.kind) ? `{ ${w.kind}: ${w.slot}, value: ${value(w.kind, w.value)} }`
+      : w.kind === 'press' && w.value > 1 ? `{ press: ${w.slot}, count: ${w.value} }` : `{ ${w.kind}: ${w.slot} }`));
+    const c = r.if;
+    if (c) lines.push('    if: ' + (c.kind === 'time' ? `{ time: "${hm(c.value)}-${hm(c.value2)}" }`
+      : VALUE_KINDS.includes(c.kind) ? `{ ${c.kind}: ${c.slot}, value: ${value(c.kind, c.value)} }` : `{ ${c.kind}: ${c.slot} }`));
+    lines.push('    do: [ ' + r.do.map(st => st.kind === 'wait' ? `{wait: ${st.value}}` : st.kind === 'level' ? `{level: [${st.target}, ${st.value}]}` : `{${st.kind}: ${st.target}}`).join(', ') + ' ]');
+    if (!r.enabled) lines.push('    enabled: false');
+    if (r.matter) lines.push('    matter: true');
+  });
+  return lines;
+}
+
 class ConfigEditor {
   constructor(id) {
     this.id = id; this.host = null; this.name = ''; this.rows = []; this.pins = SAFE_PINS;
     this.mode = editorPref; this.yaml = ''; this.error = ''; this.open = new Set(); this.cardYaml = {};
     this.picking = false; this.live = null; this.tester = null; this.onChange = null;
     this.components = []; this.drivers = [];  // component types: from the config, or from the device
+    this.rules = []; this.ruleOpen = new Set(); this.rulesSupported = true; this.clock = null;
     EDITORS[id] = this;
   }
   get ref() { return `EDITORS['${this.id}']`; }
@@ -662,15 +759,16 @@ class ConfigEditor {
   help(type) { const d = this.driver(type); return d ? (d.description || '') : TEXT.typeHelp[type] || ''; }
   pinCount(type) { const d = this.driver(type); return d ? d.pins : isBle(type) ? 0 : type === 'sht4x' ? 2 : 1; }
   mount(host) { this.host = host; this.render(); }
-  load(name, rows, pins) {
+  load(name, rows, pins, rules) {
     this.name = name; this.rows = rows.map(r => ({...r})); if (pins) this.pins = pins;
-    this.yaml = specYaml(name, this.rows, this.components, this.drivers); this.error = ''; this.open.clear(); this.cardYaml = {}; this.picking = false;
+    this.rules = JSON.parse(JSON.stringify(rules || [])); this.ruleOpen.clear();
+    this.yaml = specYaml(name, this.rows, this.components, this.drivers, this.rules); this.error = ''; this.open.clear(); this.cardYaml = {}; this.picking = false;
     this.render();
   }
   // A YAML text (a config or recipe): shown as it is in the YAML mode
   async loadText(text) {
     this.yaml = text; this.cardYaml = {}; this.open.clear();
-    try { const s = await parseSpec(text); this.name = s.name; this.rows = s.rows; this.components = s.components; this.drivers = s.drivers; this.error = ''; }
+    try { const s = await parseSpec(text); this.name = s.name; this.rows = s.rows; this.components = s.components; this.drivers = s.drivers; this.rules = s.rules; this.error = ''; }
     catch (e) { this.error = t('yamlError', e.message); this.mode = 'yaml'; }
     this.changed();
   }
@@ -682,9 +780,9 @@ class ConfigEditor {
 
   async setMode(mode) {
     if (mode === this.mode) return;
-    if (mode === 'yaml') this.yaml = specYaml(this.name, this.rows, this.components, this.drivers);
+    if (mode === 'yaml') this.yaml = specYaml(this.name, this.rows, this.components, this.drivers, this.rules);
     else {
-      try { const s = await parseSpec(this.yaml); this.name = s.name; this.rows = s.rows; this.components = s.components; this.drivers = s.drivers; this.error = ''; }
+      try { const s = await parseSpec(this.yaml); this.name = s.name; this.rows = s.rows; this.components = s.components; this.drivers = s.drivers; this.rules = s.rules; this.error = ''; }
       catch (e) { this.error = t('yamlError', e.message); this.render(); return; }
     }
     this.mode = mode; this.error = '';
@@ -695,7 +793,7 @@ class ConfigEditor {
   async get() {
     if (this.mode === 'yaml') {
       const s = await parseSpec(this.yaml);
-      this.name = s.name; this.rows = s.rows; this.components = s.components; this.drivers = s.drivers; this.error = '';
+      this.name = s.name; this.rows = s.rows; this.components = s.components; this.drivers = s.drivers; this.rules = s.rules; this.error = '';
       return s;
     }
     const rows = this.rows.map(r => ({...r, name: (r.name || '').trim() || this.title(r.type),
@@ -705,9 +803,143 @@ class ConfigEditor {
       if (isIr(r.type) && !/^nec:[0-9A-F]{4}:[0-9A-F]{4}$/.test(r.code)) throw new Error(t('needCode', r.name));
       if (isBle(r.type) && !/^[0-9A-F]{2}(:[0-9A-F]{2}){5}$/.test(r.mac)) throw new Error(t('needMac', r.name));
     }
-    return {name: this.name.trim(), rows};
+    // Rules: each needs a trigger on a connection that is there, and steps that point somewhere
+    const slots = new Set(rows.map(r => r.slot));
+    for (const r of this.rules) {
+      if (!r.name.trim()) r.name = t('ruleN', r.index + 1);
+      const w = r.when;
+      if (!['time', 'boot'].includes(w.kind) && !slots.has(w.slot)) throw new Error(t('ruleNeedsSlot', r.name));
+      if (r.if && r.if.kind !== 'time' && !slots.has(r.if.slot)) throw new Error(t('ruleNeedsSlot', r.name));
+      if (!r.do.length) throw new Error(t('ruleNeedsStep', r.name));
+      for (const st of r.do) {
+        if (['on', 'off', 'toggle', 'level'].includes(st.kind) && !slots.has(st.target)) throw new Error(t('ruleNeedsSlot', r.name));
+        if (['enable', 'disable', 'toggle_rule'].includes(st.kind) && !this.rules.some(x => x.index === st.target)) throw new Error(t('ruleNeedsRule', r.name));
+      }
+    }
+    return {name: this.name.trim(), rows, rules: JSON.parse(JSON.stringify(this.rules))};
   }
-  text() { return this.mode === 'yaml' ? this.yaml : specYaml(this.name.trim(), this.rows, this.components, this.drivers); }
+  text() { return this.mode === 'yaml' ? this.yaml : specYaml(this.name.trim(), this.rows, this.components, this.drivers, this.rules); }
+
+  // ---- rules
+  slotsFor(role) { return this.rows.filter(x => roleOf(x, this.driver(x.type)) === role); }
+  addRule() {
+    const index = [...Array(RULES_MAX).keys()].find(i => !this.rules.some(r => r.index === i));
+    if (index === undefined) return;
+    const input = this.rows.find(x => ['button', 'input'].includes(roleOf(x, this.driver(x.type))));
+    const output = this.slotsFor('output')[0];
+    const kind = input ? (roleOf(input, this.driver(input.type)) === 'button' ? 'press' : 'active') : 'boot';
+    this.rules.push({index, name: t('ruleN', index + 1), enabled: true, matter: false,
+      when: {kind, slot: input ? input.slot : 0, value: kind === 'press' ? 1 : 0, days: 0}, if: null,
+      do: [{kind: 'toggle', target: output ? output.slot : 0, value: 0}]});
+    this.ruleOpen.add(index);
+    this.changed();
+  }
+  removeRule(index) {
+    this.rules = this.rules.filter(r => r.index !== index);
+    for (const r of this.rules) r.do = r.do.filter(st => !(['enable', 'disable', 'toggle_rule'].includes(st.kind) && st.target === index));
+    this.changed();
+  }
+  rule(index) { return this.rules.find(r => r.index === index); }
+  setWhen(index, key, value) {
+    const r = this.rule(index), w = r.when;
+    w[key] = value;
+    if (key === 'kind') {
+      const role = ROLE_OF_KIND[value], first = role ? this.slotsFor(role)[0] : null;
+      if (first && !this.slotsFor(role).some(x => x.slot === w.slot)) w.slot = first.slot;
+      w.value = value === 'press' ? 1 : value === 'time' ? 7 * 60 : value.startsWith('humid') ? 6000 : VALUE_KINDS.includes(value) ? 2500 : 0;
+      w.days = 0;
+    }
+    this.changed();
+  }
+  setIf(index, key, value) {
+    const r = this.rule(index);
+    if (key === 'kind') {
+      if (!value) r.if = null;
+      else {
+        const role = ROLE_OF_KIND[value], first = role ? this.slotsFor(role)[0] : null;
+        r.if = {kind: value, slot: first ? first.slot : 0, value: value === 'time' ? 22 * 60 : value.startsWith('humid') ? 6000 : 2000, value2: 7 * 60};
+      }
+    } else r.if[key] = value;
+    this.changed();
+  }
+  setStep(index, n, key, value) {
+    const st = this.rule(index).do[n];
+    st[key] = value;
+    if (key === 'kind') {
+      const role = ROLE_OF_KIND[value];
+      if (role && !this.slotsFor(role).some(x => x.slot === st.target)) st.target = (this.slotsFor(role)[0] || {slot: 0}).slot;
+      if (['enable', 'disable', 'toggle_rule'].includes(value)) st.target = (this.rules.find(x => x.index !== index) || {index: 0}).index;
+      st.value = value === 'wait' ? 60 : value === 'level' ? 128 : 0;
+    }
+    this.changed();
+  }
+  addStep(index) { const r = this.rule(index); if (r.do.length < RULE_STEPS) r.do.push({kind: 'wait', target: 0, value: 60}); this.changed(); }
+  removeStep(index, n) { this.rule(index).do.splice(n, 1); this.changed(); }
+  setRuleField(index, key, value, rerender = true) { this.rule(index)[key] = value; this.changed(rerender); }
+  toggleRule(index) { this.ruleOpen.has(index) ? this.ruleOpen.delete(index) : this.ruleOpen.add(index); this.render(); }
+  slotName(slot) { const x = this.row(slot); return x ? (x.name || this.title(x.type)) : '#' + slot; }
+  ruleName(index) { const x = this.rule(index); return x ? x.name : '#' + index; }
+  // "When Motion becomes active, between 22:00 and 07:00: Lamp on, wait 120 s, Lamp off"
+  ruleSummary(r) {
+    const w = r.when, c = r.if;
+    const unit = k => k.startsWith('humid') ? ' %' : ' °C';
+    const when = w.kind === 'time' ? t('whenTime', hm(w.value), w.days ? DAY_KEYS.filter((d, i) => w.days & (1 << i)).map(d => t('day_' + d)).join(' ') : t('everyDay'))
+      : w.kind === 'boot' ? t('whenBoot') : VALUE_KINDS.includes(w.kind) ? t('when_' + w.kind, this.slotName(w.slot), (w.value / 100) + unit(w.kind))
+      : w.kind === 'press' ? t('whenPress', this.slotName(w.slot), w.value || 1) : t('when_' + w.kind, this.slotName(w.slot));
+    const cond = !c ? '' : ', ' + (c.kind === 'time' ? t('ifTime', hm(c.value), hm(c.value2))
+      : VALUE_KINDS.includes(c.kind) ? t('if_' + c.kind, this.slotName(c.slot), (c.value / 100) + unit(c.kind)) : t('if_' + c.kind, this.slotName(c.slot)));
+    const steps = r.do.map(st => st.kind === 'wait' ? t('stepWait', st.value) : st.kind === 'level' ? t('stepLevel', this.slotName(st.target), Math.round(st.value / 2.54))
+      : ['enable', 'disable', 'toggle_rule'].includes(st.kind) ? t('step_' + st.kind, this.ruleName(st.target)) : t('step_' + st.kind, this.slotName(st.target))).join(', ');
+    return `${when}${cond}: ${steps}`;
+  }
+  slotSelect(role, value, onchange) {
+    const list = role ? this.slotsFor(role) : this.rows;
+    return `<select onchange="${onchange}">${list.map(x => `<option value="${x.slot}" ${x.slot === value ? 'selected' : ''}>${esc(x.name || this.title(x.type))}</option>`).join('')}
+      ${list.some(x => x.slot === value) ? '' : `<option value="${value}" selected>${t('missingSlot')}</option>`}</select>`;
+  }
+  ruleCard(r) {
+    const ref = this.ref, i = r.index, open = this.ruleOpen.has(i), w = r.when, c = r.if;
+    const kindSelect = (list, value, prefix, onchange, none) => `<select onchange="${onchange}">${none ? `<option value="">${t('ifNone')}</option>` : ''}${list.map(k => `<option value="${k}" ${k === value ? 'selected' : ''}>${t(prefix + k)}</option>`).join('')}</select>`;
+    const valueInput = (kind, value, onchange) => `<label class="field"><span>${kind.startsWith('humid') ? '%' : '°C'}</span><input type="number" step="${kind.startsWith('humid') ? 1 : 0.1}" value="${value / 100}" onchange="${onchange}"></label>`;
+    const whenFields = `<label class="field"><span>${t('ruleWhen')}</span>${kindSelect(TRIGGERS, w.kind, 'kind_', `${ref}.setWhen(${i}, 'kind', this.value)`)}</label>
+      ${ROLE_OF_KIND[w.kind] ? `<label class="field"><span>${t('ruleWhich')}</span>${this.slotSelect(ROLE_OF_KIND[w.kind], w.slot, `${ref}.setWhen(${i}, 'slot', +this.value)`)}</label>` : ''}
+      ${w.kind === 'press' ? `<label class="field"><span>${t('pressCount')}</span><input type="number" min="1" max="5" value="${w.value || 1}" onchange="${ref}.setWhen(${i}, 'value', Math.max(1, Math.min(5, +this.value || 1)))"></label>` : ''}
+      ${VALUE_KINDS.includes(w.kind) ? valueInput(w.kind, w.value, `${ref}.setWhen(${i}, 'value', Math.round(+this.value * 100))`) : ''}
+      ${w.kind === 'time' ? `<label class="field"><span>${t('ruleAt')}</span><input type="time" value="${hm(w.value)}" onchange="${ref}.setWhen(${i}, 'value', minuteOf(this.value) ?? 0)"></label>
+        <div class="days">${DAY_KEYS.map((d, n) => `<label class="day"><input type="checkbox" ${w.days & (1 << n) ? 'checked' : ''} onchange="${ref}.setWhen(${i}, 'days', ${ref}.rule(${i}).when.days ^ ${1 << n})"><span>${t('day_' + d)}</span></label>`).join('')}</div>` : ''}`;
+    const ifFields = `<label class="field"><span>${t('ruleIf')}</span>${kindSelect(CONDS, c ? c.kind : '', 'cond_', `${ref}.setIf(${i}, 'kind', this.value)`, true)}</label>
+      ${c && ROLE_OF_KIND[c.kind] ? `<label class="field"><span>${t('ruleWhich')}</span>${this.slotSelect(ROLE_OF_KIND[c.kind] === 'button' ? 'input' : ROLE_OF_KIND[c.kind], c.slot, `${ref}.setIf(${i}, 'slot', +this.value)`)}</label>` : ''}
+      ${c && VALUE_KINDS.includes(c.kind) ? valueInput(c.kind, c.value, `${ref}.setIf(${i}, 'value', Math.round(+this.value * 100))`) : ''}
+      ${c && c.kind === 'time' ? `<label class="field"><span>${t('ruleFrom')}</span><input type="time" value="${hm(c.value)}" onchange="${ref}.setIf(${i}, 'value', minuteOf(this.value) ?? 0)"></label>
+        <label class="field"><span>${t('ruleTo')}</span><input type="time" value="${hm(c.value2)}" onchange="${ref}.setIf(${i}, 'value2', minuteOf(this.value) ?? 0)"></label>` : ''}`;
+    const steps = r.do.map((st, n) => `<div class="step">
+        <label class="field"><span>${n ? t('ruleThenNext') : t('ruleThen')}</span>${kindSelect(STEP_KINDS, st.kind, 'act_', `${ref}.setStep(${i}, ${n}, 'kind', this.value)`)}</label>
+        ${ROLE_OF_KIND[st.kind] ? `<label class="field"><span>${t('ruleWhich')}</span>${this.slotSelect('output', st.target, `${ref}.setStep(${i}, ${n}, 'target', +this.value)`)}</label>` : ''}
+        ${['enable', 'disable', 'toggle_rule'].includes(st.kind) ? `<label class="field"><span>${t('ruleRule')}</span><select onchange="${ref}.setStep(${i}, ${n}, 'target', +this.value)">${this.rules.map(x => `<option value="${x.index}" ${x.index === st.target ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label>` : ''}
+        ${st.kind === 'wait' ? `<label class="field"><span>${t('seconds')}</span><input type="number" min="1" max="65535" value="${st.value}" onchange="${ref}.setStep(${i}, ${n}, 'value', Math.max(1, Math.min(65535, Math.round(+this.value || 1))))"></label>` : ''}
+        ${st.kind === 'level' ? `<label class="field"><span>%</span><input type="number" min="1" max="100" value="${Math.round(st.value / 2.54)}" onchange="${ref}.setStep(${i}, ${n}, 'value', Math.max(1, Math.min(254, Math.round(+this.value * 2.54))))"></label>` : ''}
+        <button class="icon" onclick="${ref}.removeStep(${i}, ${n})" aria-label="${t('remove')}" ${r.do.length < 2 ? 'disabled' : ''}>${icon('close')}</button></div>`).join('');
+    return `<div class="ed-item ${open ? 'open' : ''}">
+      <div class="ed-item-head" onclick="if (!event.target.closest('details,button,label')) ${ref}.toggleRule(${i})">
+        <span class="ico">${icon('sync')}</span>
+        <div class="info"><b>${esc(r.name)}</b><div class="sub">${esc(this.ruleSummary(r))}</div></div>
+        ${r.matter ? `<span class="chip">${t('ruleMatterChip')}</span>` : ''}
+        <label class="switch" title="${t('ruleEnabled')}"><input type="checkbox" ${r.enabled ? 'checked' : ''} onchange="${ref}.setRuleField(${i}, 'enabled', this.checked)"></label>
+        <details class="more"><summary aria-label="${t('more')}">${icon('dots')}</summary><div class="pop" style="bottom:auto;top:40px">
+          ${this.runner ? `<button onclick="${ref}.runner(${i})">${t('ruleRun')}</button>` : ''}
+          <button class="warn" onclick="${ref}.removeRule(${i})">${t('remove')}</button></div></details>
+      </div>
+      ${open ? `<div class="ed-item-body"><div class="ed-fields">
+          <label class="field" style="grid-column:1/-1"><span>${t('name')}</span><input maxlength="23" value="${esc(r.name)}" oninput="${ref}.setRuleField(${i}, 'name', this.value, false)"></label>
+          ${whenFields}</div>
+        <div class="ed-fields" style="margin-top:8px">${ifFields}</div>
+        <div class="steps">${steps}</div>
+        ${r.do.length < RULE_STEPS ? `<button class="text" onclick="${ref}.addStep(${i})">${icon('plus')} ${t('addStep')}</button>` : ''}
+        <label class="switch" style="margin-top:10px"><input type="checkbox" ${r.matter ? 'checked' : ''} onchange="${ref}.setRuleField(${i}, 'matter', this.checked)"><span class="sub">${t('ruleMatterHelp')}</span></label>
+        ${['time'].includes(w.kind) || (c && c.kind === 'time') ? `<div class="sub" style="margin-top:6px">${this.clock ? (this.clock.set ? t('clockIs', this.clock.local) : t('clockNotSet')) : t('clockHelp')}</div>` : ''}
+      </div>` : ''}
+    </div>`;
+  }
 
   // Who else uses a pin; IR codes of the same kind share their LED or receiver
   usedBy(pin, slot) {
@@ -895,6 +1127,11 @@ class ConfigEditor {
           <button class="icon" onclick="${ref}.picking = false; ${ref}.render()" aria-label="${t('close')}">${icon('close')}</button></div>
           <div class="ed-item-body"><div class="choices" style="margin:0">${this.types().map(x => `<button class="choice" onclick="${ref}.add('${x}')"><span class="ico">${typeIcon(x, this.driver(x))}</span><span><b>${esc(this.title(x))}</b><span class="sub">${esc(this.help(x))}</span></span></button>`).join('')}</div></div></div>`
         : `<button class="ed-add" onclick="${ref}.picking = true; ${ref}.render()" ${full ? 'disabled' : ''}>${icon('plus')} ${full ? t('allUsed') : t('addConnection')}</button>`}
+      ${this.rulesSupported ? `<div class="ed-section"><h3>${t('rules')}</h3><span class="sub">${t('ofTwelve', this.rules.length)}</span></div>
+        <div class="sub" style="margin:-4px 2px 6px">${t('rulesHelp')}</div>
+        ${[...this.rules].sort((a, b) => a.index - b.index).map(r => this.ruleCard(r)).join('')}
+        <button class="ed-add" onclick="${ref}.addRule()" ${this.rules.length >= RULES_MAX ? 'disabled' : ''}>${icon('plus')} ${t('addRule')}</button>`
+        : `<div class="sub" style="margin:12px 2px">${t('rulesNeedUpdate')}</div>`}
       ${error}`;
   }
 }
@@ -1420,6 +1657,10 @@ async function openDevice(id, which, recipe) {
   try {
     managed = {id, io: JSON.parse(await proxyCommand(id, 'io json')).io};
   } catch (e) { managed = {id, io: null}; }
+  if (managed.io) {
+    // Rules: firmware from before generic 0.1.7 has none (its answer is not JSON)
+    try { managed.rules = JSON.parse(await proxyCommand(id, 'rule json')); } catch (e) { managed.rules = null; }
+  }
   if (!managed.io) {
     try {
       const j = JSON.parse(await proxyCommand(id, 'settings json'));
@@ -1431,10 +1672,13 @@ async function openDevice(id, which, recipe) {
     devEditor.mount($('#devEditor'));
     devEditor.drivers = managed.io.drivers || [];
     devEditor.components = [];
-    devEditor.load(managed.io.name, rowsFromIo(managed.io), managed.io.pins);
+    devEditor.rulesSupported = !!managed.rules;
+    devEditor.clock = managed.rules ? managed.rules.clock : null;
+    devEditor.runner = managed.rules ? index => proxyCommand(id, `rule run ${index}`).then(reply => note(reply.trim() === 'ok' ? t('ruleRan') : reply)) : null;
+    devEditor.load(managed.io.name, rowsFromIo(managed.io), managed.io.pins, managed.rules ? managed.rules.rules : []);
     $('#mSave').classList.remove('pri');
     if (recipe) {
-      devEditor.load(managed.io.name, recipe.rows.map(r => ({...r})), managed.io.pins);
+      devEditor.load(managed.io.name, recipe.rows.map(r => ({...r})), managed.io.pins, recipe.rules || []);
       devEditor.onChange();
       $('#recipeNotice').innerHTML = `${esc(t('fromRecipe', recipe.title))} <button class="text" onclick="saveAndApply()">${t('saveApply')}</button>`;
       $('#recipeNotice').hidden = false;
@@ -1553,7 +1797,7 @@ function rowsFromIo(io) {
 
 // One YAML format everywhere (device, config, recipe, wizard): the spec of
 // tools/mb_generate.py, checked by the add-on with the generator itself
-function specYaml(name, rows, components = [], drivers = []) {
+function specYaml(name, rows, components = [], drivers = [], rules = []) {
   const lines = ['device:', `  name: ${name}`, '  app: generic', '', 'connections:'];
   for (const r of rows) {
     const d = drivers.find(x => x.type === r.type);
@@ -1570,6 +1814,7 @@ function specYaml(name, rows, components = [], drivers = []) {
     lines.push(`    name: ${r.name || (d ? d.title : TEXT.types[r.type])}`);
   }
   if (components.length) lines.push('', 'components:', ...components.map(c => `  - source: ${c.source}`));
+  lines.push(...rulesYaml(rules));
   return lines.join('\n') + '\n';
 }
 
@@ -1577,7 +1822,7 @@ async function parseSpec(text) {
   const r = await api('api/specs', {text, check_only: true});
   if (!r.spec) throw new Error(r.error || 'not valid');
   return {name: r.spec.name, rows: rowsOf(r.spec.connections), components: (r.spec.components || []).map(c => ({source: c.source})),
-    drivers: r.spec.drivers || []};
+    drivers: r.spec.drivers || [], rules: r.spec.rules || []};
 }
 
 // The commands that turn a device's draft into these connections and name
@@ -1626,11 +1871,14 @@ async function saveManage() {
   if (tooOld(running(statuses[managed.id]), spec.rows)) {
     $('#mError').textContent = t('firmwareTooOld', MIN_NEW_TYPES); $('#mError').hidden = false; return;
   }
-  const lines = diffLines(managed.io, spec.rows, spec.name, devEditor.drivers);
+  const lines = diffLines(managed.io, spec.rows, spec.name, devEditor.drivers)
+    .concat(managed.rules ? ruleLines(managed.rules.rules, spec.rules || []) : []);
   try { await sendLines(managed.id, lines); }
   catch (e) { $('#mError').textContent = e.message; $('#mError').hidden = false; return; }
   managed.io = JSON.parse(await proxyCommand(managed.id, 'io json')).io;
-  devEditor.load(managed.io.name, rowsFromIo(managed.io), managed.io.pins);
+  if (managed.rules) try { managed.rules = JSON.parse(await proxyCommand(managed.id, 'rule json')); } catch (e) {}
+  devEditor.clock = managed.rules ? managed.rules.clock : null;
+  devEditor.load(managed.io.name, rowsFromIo(managed.io), managed.io.pins, managed.rules ? managed.rules.rules : []);
   $('#mSave').classList.remove('pri');
   $('#recipeNotice').hidden = true;
   showManageState();
@@ -1641,7 +1889,7 @@ async function saveAsConfig() {
   $('#mError').hidden = true;
   try {
     const spec = await devEditor.get();
-    const r = await api('api/specs', {text: specYaml(spec.name, spec.rows)});
+    const r = await api('api/specs', {text: specYaml(spec.name, spec.rows, [], [], spec.rules || [])});
     if (r.error) throw new Error(r.error);
     note(t('configSaved', r.spec.name));
     invalidateSpecs();
@@ -1853,6 +2101,11 @@ async function applyConfig() {
     const missing = missingType(spec.rows, io.drivers);
     if (missing) throw new Error(t('missingComponent', missing));
     await sendLines(id, diffLines(io, spec.rows, spec.name, (io.drivers || []).concat(spec.drivers || [])));
+    if (spec.rules && spec.rules.length) {
+      let have = null;
+      try { have = JSON.parse(await proxyCommand(id, 'rule json')).rules; } catch (e) {}
+      if (have) await sendLines(id, ruleLines(have, spec.rules));
+    }
     try { await proxyCommand(id, 'io apply'); } catch (e) {}
     for (let i = 0; i < 40; i++) {
       await new Promise(r => setTimeout(r, 3000));

@@ -204,6 +204,49 @@ def proxy_status(proxy):
 last_status = {}  # id -> (last good status, misses since)
 
 
+def posix_zone():
+    """Home Assistant's time zone (TZ, set by the Supervisor) as a POSIX TZ string,
+    for a device's local time: the last line of its zoneinfo file."""
+    name = os.environ.get("TZ", "")
+    files = ([Path("/usr/share/zoneinfo") / name] if name and ".." not in name else []) + [Path("/etc/localtime")]
+    for path in files:
+        try:
+            data = path.read_bytes()
+            footer = data.rstrip(b"\n").rsplit(b"\n", 1)[-1].decode() if data.startswith(b"TZif") else ""
+            if footer and len(footer) < 64:
+                return footer
+        except (OSError, UnicodeDecodeError):
+            continue
+    offset = int(-(time.altzone if time.localtime().tm_isdst > 0 else time.timezone))  # without DST rules
+    hours, minutes = divmod(abs(offset) // 60, 60)
+    sign = "-" if offset > 0 else "+"  # POSIX counts west as positive
+    return f"LT{sign}{hours}" + (f":{minutes:02d}" if minutes else "")
+
+
+clock_checked = {}  # id -> when the device's clock was last looked at
+
+
+def keep_clock(proxy):
+    """A device with rules keeps its clock from Home Assistant: SNTP over Thread
+    needs NAT64 at the border router, which not every home has."""
+    now = time.time()
+    if now - clock_checked.get(proxy["id"], 0) < 3600:
+        return
+    clock_checked[proxy["id"]] = now
+    status, text = command(proxy, "time", timeout=10)
+    try:
+        clock = json.loads(text) if status == 200 else None
+    except ValueError:
+        clock = None  # firmware without a clock
+    if not isinstance(clock, dict):
+        return
+    if not clock.get("set") or abs(int(clock.get("unix", 0)) - now) > 30:
+        command(proxy, f"time set {int(time.time())}", timeout=10)
+    zone = posix_zone()
+    if clock.get("zone") != zone and " " not in zone:
+        command(proxy, f"time zone {zone}", timeout=10)
+
+
 def checked_status(proxy):
     status = proxy_status(proxy)
     good, misses = last_status.get(proxy["id"], (None, 0))
@@ -211,6 +254,8 @@ def checked_status(proxy):
     if status["ok"]:
         status = dict(status, last_seen=now)
         last_status[proxy["id"]] = (status, 0)
+        if status.get("io") is not None:  # a generic device: rules may use the clock
+            threading.Thread(target=keep_clock, args=(proxy,), daemon=True).start()
         if now - (proxy.get("last_seen") or 0) > 600:  # on disk now and then, not every poll
             remember(proxy, last_seen=now)
         return status
@@ -1096,7 +1141,7 @@ def examples():
 # and Wi-Fi, its Matter pairing (the code, and a window for one more
 # controller such as Home Assistant) and the settings its firmware declares;
 # nothing that changes access or the firmware
-ALLOWED_COMMANDS = ("io ", "name ", "wifi ssid ", "wifi password ", "wifi ssid-hex ", "wifi password-hex ")
+ALLOWED_COMMANDS = ("io ", "name ", "wifi ssid ", "wifi password ", "wifi ssid-hex ", "wifi password-hex ", "rule ")
 HEX_WIFI = re.compile(r"wifi (ssid|password)-hex ([0-9a-f]+)")
 
 

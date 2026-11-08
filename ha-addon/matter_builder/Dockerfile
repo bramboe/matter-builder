@@ -3,11 +3,13 @@
 FROM espressif/idf:v5.5.5
 
 # What the Matter bootstrap (connectedhomeip) needs to build its Python
-# packages, as listed in its Linux build guide
+# packages, as listed in its Linux build guide; tzdata gives devices with
+# time rules Home Assistant's time zone, summer time included
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential pkg-config libffi-dev libssl-dev libdbus-1-dev libglib2.0-dev \
         libavahi-client-dev libgirepository1.0-dev libcairo2-dev libreadline-dev \
         python3-dev python3-venv python3-pip unzip openssl \
+        tzdata \
     && rm -rf /var/lib/apt/lists/*
 
 # Finding devices on the network (mDNS) for the add-on's own server, and

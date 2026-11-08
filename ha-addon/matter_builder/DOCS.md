@@ -143,6 +143,52 @@ Wi-Fi, Thread and passwords never go in: they are set on the device itself.
 A device's page can look for Wi-Fi networks (*Look for networks*) instead of
 typing the name; on Thread the radio pauses for those few seconds.
 
+## Rules on the device
+
+A generic device runs rules of its own, like HAA's actions or ESPHome's
+automations, but set as data instead of compiled: **when** something happens,
+**only if** something holds, **then** up to six steps. They keep working when
+Home Assistant is off. Set them in the device's *Configuration* (Rules), in
+YAML, or on the device's own page.
+
+- **When**: a button pressed (1-5 times) or held, an input becoming active or
+  inactive, an output turning on or off (also by Home Assistant), a
+  temperature or humidity crossing a value (with a little hysteresis), a time
+  of day on chosen days, or the device starting.
+- **Only if**: an input active or not, an output on or off, a temperature or
+  humidity above or below a value, or between two times (over midnight too).
+- **Then**: turn an output on, off or the other way, set a brightness, wait,
+  or turn another rule on or off. A rule triggered again while it waits
+  starts over, so a motion light stays on while there is motion.
+- **A switch in Matter** per rule (*matter: true*): Home Assistant, Apple
+  Home or Google Home turn the rule on and off ("motion light off at night")
+  while the rule itself runs on the device. It shows up after a restart and
+  keeps its place (rule n is always the same switch).
+- **The clock** for time rules: the add-on sets it with Home Assistant's time
+  zone (summer time included) and keeps it right; SNTP is tried as well,
+  which on Thread needs NAT64 at the border router. On the device's page,
+  *Set from this device* sets it from your phone.
+- **Trying out without wiring**: `io simulate <n> press|long|active|inactive`
+  and `io simulate <n> climate <centi °C> <centi %>` on the device, and *Run
+  now* in a rule's menu.
+
+```yaml
+rules:
+  - name: Night light
+    when: { active: 1 }            # press: 3 + count: 2, long: 3, on: 0, above: 2 + value: 25.5,
+                                   # time: "22:30" + days: [sat, sun], boot: true
+    if: { time: "22:00-07:00" }    # on: 0, inactive: 1, below: 2 + value: 18
+    do: [ {on: 0}, {wait: 120}, {off: 0} ]   # toggle, level: [0, 128], enable/disable/toggle_rule: <id>
+    matter: true
+  - name: Hot
+    id: 3                          # its number on the device; the list position when left out
+    when: { above: 2, value: 26 }
+    do: [ {on: 4} ]
+```
+
+At most 12 rules; a step that triggers another rule may do so three levels
+deep, and a rule runs at most ten times a second (a loop stops there).
+
 ## Pairing over Bluetooth
 
 A device can be paired directly by a phone over Bluetooth (Matter's own

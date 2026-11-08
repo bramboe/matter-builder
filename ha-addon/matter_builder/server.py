@@ -463,6 +463,17 @@ def download(url, timeout=60, accept="application/octet-stream"):
         return reply.read()
 
 
+def download_asset(url, api_url=None, timeout=60):
+    """A release file; when GitHub's download link fails (it gives a 5xx now and
+    then), the same file through the API. Integrity comes from the signature."""
+    try:
+        return download(url, timeout)
+    except (OSError, ValueError):
+        if not api_url:
+            raise
+        return download(api_url, timeout)
+
+
 def key_fingerprint(pem):
     """SHA-256 of an ECDSA P-256 public key (DER), or None when it is not one."""
     with tempfile.TemporaryDirectory() as tmp:
@@ -505,15 +516,16 @@ def check_source(src):
         info = json.loads(download(f"https://api.github.com/repos/{src['repo']}/releases/latest", 20,
                                      accept="application/vnd.github+json"))
         assets = {a["name"]: a["browser_download_url"] for a in info.get("assets", [])}
-        manifest = download(assets["manifest.json"])
-        signature = download(assets["manifest.json.sig"])
+        api_assets = {a["name"]: a["url"] for a in info.get("assets", []) if a.get("url")}
+        manifest = download_asset(assets["manifest.json"], api_assets.get("manifest.json"))
+        signature = download_asset(assets["manifest.json.sig"], api_assets.get("manifest.json.sig"))
     except (OSError, ValueError, KeyError) as err:
         result["error"] = f"{src['repo']}: {err}"
         return result
     if not signature_ok(manifest, signature, src["key"].encode()):
         result["error"] = f"{src['repo']}: signature does not match: release ignored"
         return result
-    result.update(data=json.loads(manifest), assets=assets)
+    result.update(data=json.loads(manifest), assets=assets, api_assets=api_assets)
     result["release"] = result["data"].get("release")
     return result
 
@@ -528,7 +540,8 @@ def check_releases():
             for img in res["data"].get(kind, []):
                 if img["file"] in res["assets"] and (kind, img["file"]) not in seen:
                     seen.add((kind, img["file"]))
-                    merged[kind].append(dict(img, url=res["assets"][img["file"]], source=res["repo"], official=res["official"]))
+                    merged[kind].append(dict(img, url=res["assets"][img["file"]], api_url=res.get("api_assets", {}).get(img["file"]),
+                                             source=res["repo"], official=res["official"]))
         for pkg in res["data"].get("packages", []):
             merged["packages"].append(dict(pkg, source=res["repo"], official=res["official"]))
     own = results[0]
@@ -606,7 +619,7 @@ def release_image(name, kind="images"):
     RELEASES.mkdir(parents=True, exist_ok=True)
     path = RELEASES / image["file"]
     if not path.exists() or hashlib.sha256(path.read_bytes()).hexdigest() != image["sha256"]:
-        data = download(image["url"], 300)
+        data = download_asset(image["url"], image.get("api_url"), 300)
         if hashlib.sha256(data).hexdigest() != image["sha256"]:
             raise ValueError("downloaded firmware does not match the signed hash")
         path.write_bytes(data)

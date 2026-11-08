@@ -243,6 +243,10 @@ struct BedEndpoints {
     uint16_t light_endpoint = 0;
     bool reachable = false;
     char label[32] = {};
+    // Head, legs and light are bridged devices of their own ("Sam Head"):
+    // Home Assistant names an entity after its device and ignores the part
+    // labels, so as parts of one device all three were called "Sam"
+    char part_names[3][48] = {};
 
     // Preset choice labels and options, read by the Mode Select server
     char mode_labels[MODE_COUNT][40] = {};
@@ -251,6 +255,9 @@ struct BedEndpoints {
 };
 
 BedEndpoints beds[bed_link::MAX_BEDS];
+
+void name_parts(BedEndpoints& bed);
+void set_parts_attribute(BedEndpoints& bed, uint32_t attribute_id, esp_matter_attr_val_t* value);
 // Beds with endpoints: bed_link::bed_count() at start. Endpoints of a bed not
 // made are 0, the root endpoint, so loops stop at this count.
 int bed_total = 1;
@@ -566,6 +573,7 @@ void update_from_links() {
             esp_matter_attr_val_t label = esp_matter_char_str(bed.label, std::strlen(bed.label));
             attribute::update(bed.device_endpoint, BridgedDeviceBasicInformation::Id,
                               BridgedDeviceBasicInformation::Attributes::NodeLabel::Id, &label);
+            name_parts(bed);
             if (bed_total == 2) {
                 build_modes(1 - i);  // the other bed's "Match <name>"
                 MatterReportingAttributeChangeCallback(beds[1 - i].device_endpoint, ModeSelect::Id,
@@ -579,6 +587,7 @@ void update_from_links() {
         esp_matter_attr_val_t value = esp_matter_bool(bed.reachable);
         attribute::update(bed.device_endpoint, BridgedDeviceBasicInformation::Id,
                           BridgedDeviceBasicInformation::Attributes::Reachable::Id, &value);
+        set_parts_attribute(bed, BridgedDeviceBasicInformation::Attributes::Reachable::Id, &value);
         ESP_LOGI(TAG, "Bed %d %s", i, bed.reachable ? "reachable" : "unreachable");
     }
 }
@@ -676,7 +685,23 @@ endpoint_t* add_bed_device(node_t* node, endpoint_t* aggregator, BedEndpoints& b
     return ep;
 }
 
-void add_cover(node_t* node, endpoint_t* device, Cover& cover) {
+// A part of a bed as a bridged device of its own, next to the bed under the
+// aggregator; created in the same order as before, so its endpoint number
+// (and with it a controller's entity) stays the same
+void make_bridged(endpoint_t* ep, const char* name) {
+    endpoint::bridged_node::config_t config;
+    config.bridged_device_basic_information.reachable = false;
+    endpoint::bridged_node::add(ep, &config);
+    cluster_t* info = cluster::get(ep, BridgedDeviceBasicInformation::Id);
+    namespace bdbi = cluster::bridged_device_basic_information::attribute;
+    bdbi::create_node_label(info, const_cast<char*>(name), std::strlen(name));
+    bdbi::create_vendor_name(info, const_cast<char*>(BED_VENDOR), std::strlen(BED_VENDOR));
+    bdbi::create_product_name(info, const_cast<char*>(BED_PRODUCT), std::strlen(BED_PRODUCT));
+    bdbi::create_vendor_id(info, CONFIG_DEVICE_VENDOR_ID);
+    bdbi::create_product_id(info, CONFIG_DEVICE_PRODUCT_ID);
+}
+
+void add_cover(node_t* node, endpoint_t* device, Cover& cover, const char* name) {
     endpoint::window_covering::config_t config;
     config.window_covering.feature_flags =
         cluster::window_covering::feature::lift::get_id() |
@@ -684,7 +709,8 @@ void add_cover(node_t* node, endpoint_t* device, Cover& cover) {
     config.window_covering.features.position_aware_lift.current_position_lift_percent_100ths = cover.position;
     config.window_covering.features.position_aware_lift.target_position_lift_percent_100ths = cover.position;
     config.window_covering.delegate = &cover;
-    endpoint_t* ep = endpoint::window_covering::create(node, &config, ENDPOINT_FLAG_NONE, nullptr);
+    endpoint_t* ep = endpoint::window_covering::create(node, &config, ENDPOINT_FLAG_BRIDGE, nullptr);
+    make_bridged(ep, name);
     endpoint::set_parent_endpoint(ep, device);
     cluster::fixed_label::config_t label_config;
     cluster::fixed_label::create(ep, &label_config, CLUSTER_FLAG_SERVER);
@@ -692,13 +718,34 @@ void add_cover(node_t* node, endpoint_t* device, Cover& cover) {
     cover.SetEndpoint(cover.endpoint_id);
 }
 
-uint16_t add_light(node_t* node, endpoint_t* device) {
+uint16_t add_light(node_t* node, endpoint_t* device, const char* name) {
     endpoint::on_off_light::config_t config;
-    endpoint_t* ep = endpoint::on_off_light::create(node, &config, ENDPOINT_FLAG_NONE, nullptr);
+    endpoint_t* ep = endpoint::on_off_light::create(node, &config, ENDPOINT_FLAG_BRIDGE, nullptr);
+    make_bridged(ep, name);
     endpoint::set_parent_endpoint(ep, device);
     cluster::fixed_label::config_t label_config;
     cluster::fixed_label::create(ep, &label_config, CLUSTER_FLAG_SERVER);
     return endpoint::get_id(ep);
+}
+
+// The parts' names follow the bed's name and the language (in the Matter thread)
+void name_parts(BedEndpoints& bed) {
+    const Language& text = LANGUAGES[language];
+    const char* parts[3] = {text.head, text.legs, text.light};
+    const uint16_t endpoints[3] = {bed.head.endpoint_id, bed.feet.endpoint_id, bed.light_endpoint};
+    for (int k = 0; k < 3; ++k) {
+        std::snprintf(bed.part_names[k], sizeof(bed.part_names[k]), "%s %s", bed.label, parts[k]);
+        if (endpoints[k] == 0) continue;
+        esp_matter_attr_val_t name = esp_matter_char_str(bed.part_names[k], std::strlen(bed.part_names[k]));
+        attribute::update(endpoints[k], BridgedDeviceBasicInformation::Id,
+                          BridgedDeviceBasicInformation::Attributes::NodeLabel::Id, &name);
+    }
+}
+
+void set_parts_attribute(BedEndpoints& bed, uint32_t attribute_id, esp_matter_attr_val_t* value) {
+    for (uint16_t ep : {bed.head.endpoint_id, bed.feet.endpoint_id, bed.light_endpoint}) {
+        if (ep != 0) attribute::update(ep, BridgedDeviceBasicInformation::Id, attribute_id, value);
+    }
 }
 
 // Calibration ends with the motor at the top: make that the known position.
@@ -740,9 +787,13 @@ void start() {
 
         endpoint_t* device = add_bed_device(node, aggregator, bed);
         bed.device_endpoint = endpoint::get_id(device);
-        add_cover(node, device, bed.head);
-        add_cover(node, device, bed.feet);
-        bed.light_endpoint = add_light(node, device);
+        const Language& text = LANGUAGES[language];
+        std::snprintf(bed.part_names[0], sizeof(bed.part_names[0]), "%s %s", bed.label, text.head);
+        std::snprintf(bed.part_names[1], sizeof(bed.part_names[1]), "%s %s", bed.label, text.legs);
+        std::snprintf(bed.part_names[2], sizeof(bed.part_names[2]), "%s %s", bed.label, text.light);
+        add_cover(node, aggregator, bed.head, bed.part_names[0]);
+        add_cover(node, aggregator, bed.feet, bed.part_names[1]);
+        bed.light_endpoint = add_light(node, aggregator, bed.part_names[2]);
     }
 
     bed_link::run_in_host([] { bed_link::on_calibrated(on_calibrated); });
@@ -771,6 +822,7 @@ void start() {
             esp_matter_attr_val_t label = esp_matter_char_str(bed.label, std::strlen(bed.label));
             attribute::update(bed.device_endpoint, BridgedDeviceBasicInformation::Id,
                               BridgedDeviceBasicInformation::Attributes::NodeLabel::Id, &label);
+            name_parts(bed);
             WC::ConfigStatusSet(bed.head.endpoint_id, status);
             WC::ConfigStatusSet(bed.feet.endpoint_id, status);
             reset_mode(i);

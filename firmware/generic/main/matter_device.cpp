@@ -65,11 +65,17 @@ void momentary_off(chip::System::Layer*, void* arg) {
     attribute::update(endpoint_of[i], OnOff::Id, OnOff::Attributes::OnOff::Id, &off);
 }
 
+// Until Matter has started, its own start-up writes are not commands: after a
+// power cut the On/Off server applies StartUpOnOff and switched every output
+// off, over the connection's own power-on setting (io). after_start() hands
+// Matter the real states and then lets writes through.
+bool started = false;
+
 // Matter writes an output: switch the pin before the value is stored
 esp_err_t on_attribute(attribute::callback_type_t type, uint16_t endpoint_id, uint32_t cluster_id,
                        uint32_t attribute_id, esp_matter_attr_val_t* val, void*) {
     const int index = slot_of(endpoint_id);
-    if (type != attribute::PRE_UPDATE || index < 0) {
+    if (type != attribute::PRE_UPDATE || index < 0 || !started) {
         return ESP_OK;
     }
     if (cluster_id == OnOff::Id && attribute_id == OnOff::Attributes::OnOff::Id) {
@@ -307,6 +313,7 @@ void after_start() {
                 set_occupancy(endpoint_of[i], io::input_active(i));
             }
         }
+        started = true;  // from now on a write is a command
     });
 }
 

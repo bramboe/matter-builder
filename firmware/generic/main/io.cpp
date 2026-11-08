@@ -710,6 +710,7 @@ std::string cmd_set(const std::vector<std::string>& args) {
 }
 
 void store_last(uint8_t bits) {
+    ESP_LOGI(TAG, "Last state of the outputs: 0x%02x", bits);
     nvs_handle_t nvs;
     if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs) == ESP_OK) {
         nvs_set_u8(nvs, "last", bits);
@@ -944,12 +945,16 @@ void start() {
         bluetooth = bluetooth || is_ble(running[i].type);
     }
     setup_pins();
+    const bool power_cut = esp_reset_reason() == ESP_RST_POWERON;
+    ESP_LOGI(TAG, "Outputs at start: last state 0x%02x%s", last_on, power_cut ? ", after a power cut" : "");
     for (int i = 0; i < SLOTS; ++i) {
         if (is_input(running[i].type)) {
             live[i].raw = live[i].active = input_level_active(running[i]);
         }
-        // What an output does at power-on (off unless set otherwise)
-        const uint8_t power = power_of(running[i]);
+        // What an output does at power-on (off unless set otherwise). "toggle"
+        // flips only after a real power cut: a restart (an update,
+        // configuration mode) keeps the output as it was
+        const uint8_t power = power_of(running[i]) == POWER_TOGGLE && !power_cut ? POWER_LAST : power_of(running[i]);
         const bool was_on = (last_on >> i) & 1;
         if (is_output(running[i].type) && (power == POWER_ON || (power == POWER_LAST && was_on) ||
                                            (power == POWER_TOGGLE && !was_on))) {

@@ -35,3 +35,7 @@ CONFIG_ENABLE_EXTENDED_DISCOVERY=y
 # The setup access point of configuration mode (config_mode.h), for a new
 # bridge that has no Wi-Fi network yet
 CONFIG_ESP_WIFI_SOFTAP_SUPPORT=y
+# More OpenThread message buffers (65 by default): with 65, a TCP transfer
+# ran out of them (NoBufs) and dropped frames; with 160 it ran about twice
+# as fast over Thread (page 22 KB: 19-25 s -> 9-13 s), for ~29 KB of heap
+CONFIG_OPENTHREAD_NUM_MESSAGE_BUFFERS=160

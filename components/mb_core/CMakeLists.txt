@@ -4,7 +4,7 @@
 set(srcs "mb_core.cpp" "boot_guard.cpp" "commands.cpp" "http_api.cpp" "program_access.cpp" "setup_code.cpp"
     "matter_info.cpp" "log_buffer.cpp")
 set(requires nvs_flash console esp_timer app_update esp_app_format esp_http_server esp_driver_gpio mbedtls
-    esp_matter esp_netif esp_event)
+    esp_matter esp_netif esp_event esp_http_client)
 if(CONFIG_OPENTHREAD_ENABLED)
     list(APPEND srcs "net_thread.cpp" "config_mode.cpp" "thread_dataset.cpp" "setup_dns.cpp")
     list(APPEND requires openthread esp_wifi mdns)

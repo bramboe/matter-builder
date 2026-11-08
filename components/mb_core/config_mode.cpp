@@ -10,6 +10,9 @@
 #include "commands.h"
 #include "esp_app_desc.h"
 #include "esp_event.h"
+#include "esp_crt_bundle.h"
+#include "esp_http_client.h"
+#include "esp_ota_ops.h"
 #include "esp_log.h"
 #include "esp_mac.h"
 #include "esp_netif.h"
@@ -18,6 +21,7 @@
 #include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "mbedtls/sha256.h"
 #include "http_api.h"
 #include "mb_core.h"
 #include "mdns.h"
@@ -257,6 +261,112 @@ void start_mdns() {
     mdns_service_add(nullptr, "_http", "_tcp", 80, nullptr, 0);
 }
 
+// ------------------------------------------------------- fetching an update
+// "wifi fetch <url> <sha256>" (asked on Thread): this boot downloads the
+// image itself as soon as Wi-Fi is up, from Home Assistant's own address.
+// The device fetching it works across subnets and VLANs, where Home
+// Assistant could not find the device in configuration mode (mDNS stays in
+// one subnet). The hash comes over Thread from the add-on, which checked
+// the release signature; nothing that does not match it is booted.
+std::string fetch_url;
+std::string fetch_url2;  // optional: where else (GitHub, for a release)
+std::string fetch_sha;
+
+[[noreturn]] void fetch_done(const std::string& result) {
+    store("result", result);
+    ESP_LOGW(TAG, "Fetching the firmware: %s", result.c_str());
+    vTaskDelay(pdMS_TO_TICKS(300));
+    esp_restart();  // the new firmware, or back to Thread with the old one
+    while (true) vTaskDelay(portMAX_DELAY);
+}
+
+// One address: download, check against the hash, and select the image.
+// "" when it is ready to boot, else what went wrong. GitHub's download links
+// redirect to a storage host, so redirects are followed.
+std::string fetch_from(const std::string& url) {
+    const esp_partition_t* target = esp_ota_get_next_update_partition(nullptr);
+    if (target == nullptr) return "no firmware slot";
+    esp_http_client_config_t config = {};
+    config.url = url.c_str();
+    config.timeout_ms = 15000;
+    config.buffer_size = 4096;
+    config.buffer_size_tx = 2048;  // GitHub's redirect carries a long URL
+    config.crt_bundle_attach = esp_crt_bundle_attach;  // https: the usual root certificates
+    esp_http_client_handle_t client = esp_http_client_init(&config);
+    if (client == nullptr) return "no HTTP client";
+    int64_t length = -1;
+    int status = 0;
+    for (int hop = 0; hop < 5; ++hop) {
+        if (esp_http_client_open(client, 0) != ESP_OK) {
+            esp_http_client_cleanup(client);
+            return url.rfind("https", 0) == 0 ? "the internet not reachable from this Wi-Fi"
+                                             : "Home Assistant not reachable from this Wi-Fi";
+        }
+        length = esp_http_client_fetch_headers(client);
+        status = esp_http_client_get_status_code(client);
+        if (status != 301 && status != 302 && status != 303 && status != 307 && status != 308) break;
+        esp_http_client_set_redirection(client);
+        esp_http_client_close(client);
+    }
+    if (status != 200 || length <= 0 || length > static_cast<int64_t>(target->size)) {
+        esp_http_client_cleanup(client);
+        return "HTTP " + std::to_string(status) + ", " + std::to_string(length) + " bytes";
+    }
+    ESP_LOGW(TAG, "Fetching the firmware: %lld bytes from %.40s... to %s", static_cast<long long>(length),
+             url.c_str(), target->label);
+    std::vector<char> buf(4096);
+    esp_ota_handle_t handle = 0;
+    mbedtls_sha256_context sha;
+    mbedtls_sha256_init(&sha);
+    mbedtls_sha256_starts(&sha, 0);
+    int64_t got = 0;
+    std::string error;
+    while (got < length && error.empty()) {
+        const int r = esp_http_client_read(client, buf.data(), buf.size());
+        if (r <= 0) {
+            error = "the download stopped at " + std::to_string(got) + " bytes";
+            break;
+        }
+        if (got == 0) {
+            if (static_cast<uint8_t>(buf[0]) != 0xE9) error = "not an app image";
+            else if (esp_ota_begin(target, OTA_WITH_SEQUENTIAL_WRITES, &handle) != ESP_OK) error = "cannot write the slot";
+            if (!error.empty()) break;
+        }
+        if (esp_ota_write(handle, buf.data(), r) != ESP_OK) {
+            error = "writing flash failed";
+            break;
+        }
+        mbedtls_sha256_update(&sha, reinterpret_cast<const unsigned char*>(buf.data()), r);
+        got += r;
+    }
+    esp_http_client_cleanup(client);
+    unsigned char digest[32];
+    mbedtls_sha256_finish(&sha, digest);
+    mbedtls_sha256_free(&sha);
+    char hex[65];
+    for (int i = 0; i < 32; ++i) std::snprintf(hex + 2 * i, 3, "%02x", digest[i]);
+    if (error.empty() && fetch_sha != hex) error = "the image does not match its hash";
+    if (!error.empty()) {
+        if (handle != 0) esp_ota_abort(handle);
+        return error;
+    }
+    if (esp_ota_end(handle) != ESP_OK || esp_ota_set_boot_partition(target) != ESP_OK) return "the image did not validate";
+    return "";
+}
+
+// Home Assistant's address first, then (for a release) its download on GitHub,
+// for a Wi-Fi network that may not reach Home Assistant (an IoT network)
+void fetch_task(void*) {
+    std::string error;
+    for (const std::string* url : {&fetch_url, &fetch_url2}) {
+        if (url->empty()) continue;
+        error = fetch_from(*url);
+        if (error.empty()) fetch_done(url == &fetch_url ? "fetch ok" : "fetch ok (from the internet)");
+        ESP_LOGW(TAG, "Fetching from %.48s failed: %s", url->c_str(), error.c_str());
+    }
+    fetch_done("fetch failed: " + error);
+}
+
 void on_event(void*, esp_event_base_t base, int32_t id, void* data) {
     if (base == WIFI_EVENT && id == WIFI_EVENT_STA_START && !ap_mode) {
         esp_wifi_connect();
@@ -270,6 +380,15 @@ void on_event(void*, esp_event_base_t base, int32_t id, void* data) {
         if (!http_started) {
             store("result", "");
             start_http();
+        }
+        static bool fetching = false;
+        if (!fetch_url.empty()) {
+            // Fetching: nothing else on the radio meanwhile, the beds stay off
+            if (!fetching) {
+                fetching = true;
+                xTaskCreate(fetch_task, "fetch", 8192, nullptr, 5, nullptr);
+            }
+            return;
         }
         start_app_once();
     }
@@ -396,8 +515,14 @@ bool requested() {
         uint8_t ap = 0;
         force_ap = nvs_get_u8(handle, "ap", &ap) == ESP_OK && ap != 0;
         // Clear it first: whatever happens in this boot, the next one is normal
+        fetch_url = nvs_string(handle, "fetch_url");
+        fetch_sha = nvs_string(handle, "fetch_sha");
+        fetch_url2 = nvs_string(handle, "fetch_url2");
         nvs_erase_key(handle, "boot");
         nvs_erase_key(handle, "ap");
+        nvs_erase_key(handle, "fetch_url");  // once: a failing fetch never repeats by itself
+        nvs_erase_key(handle, "fetch_sha");
+        nvs_erase_key(handle, "fetch_url2");
         nvs_commit(handle);
         idle_limit_us = static_cast<int64_t>(minutes) * MINUTE_US;
     }
@@ -577,8 +702,23 @@ std::string command(const std::vector<std::string>& args) {
                "\",\"password_set\":" + (network.password.empty() ? "false" : "true") +
                ",\"skipped\":" + (stored_text("skip").empty() ? "false" : "true") +
                ",\"last_result\":" + json_text(stored_text("result")) +
-               ",\"minutes\":" + std::to_string(DEFAULT_MINUTES) +
+               ",\"minutes\":" + std::to_string(DEFAULT_MINUTES) + ",\"fetch\":true" +
                ",\"host\":" + json_text(std::string(hostname()) + ".local") + "}";
+    }
+    if ((args.size() == 4 || args.size() == 5) && args[1] == "fetch") {
+        const std::string& url = args[2];
+        const std::string& sha = args[3];
+        const std::string url2 = args.size() == 5 ? args[4] : "";
+        if (url.rfind("http://", 0) != 0 || url.size() > 200) return "error: fetch <http://...> <sha256> [<https://...>]\n";
+        if (!url2.empty() && (url2.rfind("https://", 0) != 0 || url2.size() > 300)) return "error: the second address is https://...\n";
+        if (sha.size() != 64 || sha.find_first_not_of("0123456789abcdef") != std::string::npos) return "error: sha256 as 64 lower-case hex digits\n";
+        if (network.ssid.empty()) return "error: no Wi-Fi network set: the update goes over Thread\n";
+        if (!store("fetch_url", url) || !store("fetch_sha", sha) || !store("fetch_url2", url2) || !request(5)) {
+            return "storing failed\n";
+        }
+        mb_core::stop();
+        restart_in_background();
+        return "restarting on Wi-Fi '" + network.ssid + "' to fetch the firmware\n";
     }
     if (args.size() >= 2 && args[1] == "config") {
         int minutes = args.size() == 3 ? std::atoi(args[2].c_str()) : DEFAULT_MINUTES;

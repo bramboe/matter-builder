@@ -97,9 +97,9 @@ def save_proxies(proxies):
 
 def load_settings():
     try:
-        return {"dev_mode": False, **json.loads(SETTINGS.read_text())}
+        return {"dev_mode": False, "night_hour": 3, **json.loads(SETTINGS.read_text())}
     except (OSError, ValueError):
-        return {"dev_mode": False}
+        return {"dev_mode": False, "night_hour": 3}
 
 
 def save_settings(settings):
@@ -1303,6 +1303,55 @@ def update_all():
     return True
 
 
+def running_version(proxy):
+    """The running firmware's version ("1.0.17"), or None when the device does not answer."""
+    status, system = command(proxy, "system")
+    if status != 200:
+        return None
+    return system.split("\n")[0].split(" (")[0].rsplit(" ", 1)[-1]
+
+
+def night_updates():
+    """Devices with automatic updates on, each to the newest firmware of its
+    own application, one after the other."""
+    done = 0
+    for proxy in [p for p in load_proxies() if p.get("auto_update")]:
+        app = proxy.get("app")
+        name = newest_firmware(app) if app else None
+        version = running_version(proxy)
+        if not name or version is None:
+            log(f"== {proxy['name']}: " + ("not reachable, skipped" if version is None else "no firmware, skipped"))
+            continue
+        if version_key(f"x-{version}.bin") >= version_key(name):
+            log(f"== {proxy['name']}: already up to date ({version})")
+            continue
+        image = FIRMWARE / name if (FIRMWARE / name).is_file() else release_image(name)
+        if update_proxy(proxy, image):
+            done += 1
+        else:
+            log(f"!! {proxy['name']} did not update; the others go on")
+    log(f"== Night updates done: {done} updated")
+    return True
+
+
+def night_loop():
+    """At the hour set in the settings (Home Assistant's time zone), once a day."""
+    while True:
+        time.sleep(300)
+        settings = load_settings()
+        now = time.localtime()
+        today = time.strftime("%Y-%m-%d", now)
+        if now.tm_hour != settings.get("night_hour", 3) or settings.get("night_done") == today:
+            continue
+        if not any(p.get("auto_update") for p in load_proxies()):
+            continue
+        check_releases()  # the newest release, not the one from hours ago
+        if start_job("update", "night", night_updates):
+            settings["night_done"] = today
+            save_settings(settings)
+        # a job already running: tried again in five minutes, still within the hour
+
+
 # ---------------------------------------------------------------- links
 
 def link_start(host, password):
@@ -1434,7 +1483,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path == "/api/state":
             with lock:
                 current = dict(job)
-            proxies = [{k: p.get(k) for k in ("id", "name", "host", "added", "app", "local")} for p in load_proxies()]
+            proxies = [{k: p.get(k) for k in ("id", "name", "host", "added", "app", "local", "auto_update")} for p in load_proxies()]
             return self.reply({"proxies": proxies, "found": found_unlinked(), "toolchain": toolchain_ready(),
                                "builds": builds(), "job": current,
                                "releases": [{k: i[k] for k in ("file", "app", "version", "source", "official")}
@@ -1584,6 +1633,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 settings["community_ok"] = bool(data["community_ok"])
             if "dev_mode" in data:
                 settings["dev_mode"] = bool(data["dev_mode"])
+            if "night_hour" in data and isinstance(data["night_hour"], int) and 0 <= data["night_hour"] <= 23:
+                settings["night_hour"] = data["night_hour"]
             save_settings(settings)
             return self.reply(settings)
         if path == "/api/toolchain":
@@ -1599,6 +1650,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             proxy = find_proxy(parts[2])
             if not proxy:
                 return self.reply({"error": "unknown proxy"}, 404)
+            if parts[3] == "auto":
+                remember(proxy, auto_update=bool(data.get("on")))
+                return self.reply({"ok": True, "auto_update": proxy.get("auto_update")})
             if parts[3] == "update":
                 name = Path(str(data.get("file", ""))).name
                 image = FIRMWARE / name
@@ -1646,6 +1700,7 @@ if __name__ == "__main__":
     DATA.mkdir(parents=True, exist_ok=True)
     discovery.start()
     threading.Thread(target=releases_loop, daemon=True).start()
+    threading.Thread(target=night_loop, daemon=True).start()
     fetch_server = Server(("::", FETCH_PORT), FetchHandler)
     threading.Thread(target=fetch_server.serve_forever, daemon=True).start()
     print(f"Matter Builder on port {PORT}, updates fetched from port {FETCH_PORT}", flush=True)

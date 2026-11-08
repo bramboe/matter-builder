@@ -319,6 +319,9 @@ textarea.yaml{width:100%;min-height:280px;font:12px/1.5 ui-monospace,Menlo,monos
       </form>
       <div id="sourceResult"></div>
       <div class="actions"><button id="checkReleases" data-t="checkReleases"></button></div>
+      <h3 style="margin-top:20px" data-t="nightTitle"></h3>
+      <div class="sub" data-t="nightHelp"></div>
+      <label class="field" style="max-width:220px;margin-top:8px"><span data-t="nightHour"></span><select id="nightHour"></select></label>
       <h3 style="margin-top:20px" data-t="devTitle"></h3>
       <label class="switch" style="margin-top:8px"><input type="checkbox" id="devMode"><span class="sub" data-t="devHelp"></span></label>
       <div id="devSettings" hidden>
@@ -365,6 +368,8 @@ const TEXT = {
   form: 'Form', visualEditor: 'Visual editor', duplicate: 'Duplicate', editInYaml: 'Edit in YAML', cancel: 'Cancel',
   ofEight: n => `${n} of 8`, allUsed: 'All 8 connections are in use', invertedShort: 'inverted',
   invertedHelp: 'Inverted: a relay that switches on with a low pin, or an input the other way round',
+  nightUpdates: 'Update automatically at night', nightUpdatesHelp: h => `At ${h}:00 (Settings), to the newest firmware: over Wi-Fi in about a minute, over Thread longer`,
+  nightTitle: 'Night updates', nightHelp: 'Devices with automatic updates on get the newest firmware at this hour, one after the other.', nightHour: 'Hour',
   rules: 'Rules', ofTwelve: n => `${n} of 12`, rulesHelp: 'Run on the device itself, also when Home Assistant is off.', addRule: 'Add rule',
   rulesNeedUpdate: 'Rules on the device need generic 0.1.7 or newer: update its firmware first.', ruleN: n => `Rule ${n}`,
   ruleNeedsSlot: n => `Rule “${n}” uses a connection that is not there`, ruleNeedsStep: n => `Rule “${n}” needs at least one step`,
@@ -1738,7 +1743,9 @@ function renderDevicePanel() {
   setHtml($('#dFirmware'), `<div class="row" style="margin-top:8px"><div class="label">${t('running')}</div><div>${r ? esc(appTitle(r.app) + ' ' + r.version) : '–'}</div></div>
     ${files.length ? `<div class="row"><label class="field" style="flex:1"><span>${t('installFile')}</span><select id="fwPick">${files.map(f => `<option>${esc(f)}</option>`).join('')}</select></label>
       <button class="pri" onclick="updateProxy('${p.id}', $('#fwPick').value)" ${state.job.running ? 'disabled' : ''}>${t('install')}</button></div>`
-      : `<div class="sub" style="margin-top:12px">${t('noFirmware')}</div>`}`);
+      : `<div class="sub" style="margin-top:12px">${t('noFirmware')}</div>`}
+    <div class="row"><div class="label">${t('nightUpdates')}<div class="sub">${t('nightUpdatesHelp', String(state.settings.night_hour ?? 3).padStart(2, '0'))}</div></div>
+      <label class="switch"><input type="checkbox" ${p.auto_update ? 'checked' : ''} onchange="setAutoUpdate('${p.id}', this.checked)"></label></div>`);
   const token = shownTokens[p.id];
   setHtml($('#dInfo'), `<div class="row" style="margin-top:8px"><div class="label">${t('address')}<div class="sub mono">${esc(p.host)}</div></div>
       <a class="button text" href="${esc(portalUrl(p))}">${t('openPage')} ${icon('open')}</a></div>
@@ -1777,6 +1784,11 @@ async function testOutput(id, slot, on) {
   try { await proxyCommand(id, `io test ${slot} ${on ? 'on' : 'off'}`); } catch (e) {}
   try { statuses[id] = await api(`api/proxy/${id}/status`); } catch (e) {}
   render();
+}
+
+async function setAutoUpdate(id, on) {
+  await api(`api/proxy/${encodeURIComponent(id)}/auto`, {on});
+  refresh();
 }
 
 async function toggleToken(id) {
@@ -2252,6 +2264,7 @@ async function startLink() {
 function renderSettings() {
   const dev = state.settings.dev_mode;
   $('#devMode').checked = dev;
+  if (document.activeElement !== $('#nightHour')) $('#nightHour').value = String(state.settings.night_hour ?? 3);
   $('#devSettings').hidden = !dev;
   setHtml($('#sourceList'), (state.sources || []).map(s => `<div class="row"><div class="label">${esc(s.repo)}
       <div class="sub">${s.error ? esc(s.error) : s.release ? t('signedRelease', esc(s.release)) : t('noReleases')}</div></div>
@@ -2278,6 +2291,8 @@ $('#bulkWifi').onsubmit = async e => {
 };
 $('#checkReleases').onclick = async () => { await api('api/releases/check', {}); catalogData = null; refresh(); };
 $('#sourceForm').onsubmit = e => { e.preventDefault(); const repo = $('#sourceRepo').value.trim().replace(/^https:\/\/github\.com\//, '').replace(/\/$/, ''); if (repo) addSourceFlow(repo); };
+$('#nightHour').innerHTML = [...Array(24).keys()].map(h => `<option value="${h}">${String(h).padStart(2, '0')}:00</option>`).join('');
+$('#nightHour').onchange = async () => { await api('api/settings', {night_hour: +$('#nightHour').value}); refresh(); };
 $('#devMode').onchange = async () => { await api('api/settings', {dev_mode: $('#devMode').checked}); refresh(); };
 $('#toolchainBtn').onclick = async () => { await api('api/toolchain', {}); refresh(); };
 

@@ -275,6 +275,12 @@ goes back to the previous one by itself.
 Your own builds (developer mode) are not on GitHub: for those the device's
 Wi-Fi must reach Home Assistant, or the update goes over Thread.
 
+**At night, by themselves**: turn on *Update automatically at night* in a
+device's Firmware tab, and choose the hour under Settings (Night updates,
+03:00 by default, in Home Assistant's time zone). At that hour the add-on
+updates every such device to the newest firmware of its own kind, one after
+the other; one that does not come back does not stop the others.
+
 **Over Thread** when Wi-Fi does not work (no Wi-Fi network set on the
 device, or it cannot connect) or for older firmware: roughly 1 KB per
 second, about half an hour for a 2 MB image, with the progress shown in the

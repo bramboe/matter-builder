@@ -2,8 +2,7 @@
 
 [![Sponsor on GitHub](https://img.shields.io/badge/Sponsor-GitHub-EA4AAA?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/bramboe?frequency=one-time) [![Sponsor bunq.me](https://img.shields.io/badge/Sponsor-bunq.me-2E9AD0)](https://bunq.me/bramboe)
 
-ESP32 devices as standard **Matter** devices, over Thread or Wi-Fi, set up
-like ESPHome but without a Home Assistant integration of their own: they work
+ESP32 devices as standard **Matter** devices, over Thread or Wi-Fi: they work
 in Home Assistant, Apple Home and Google Home at the same time, and keep
 working when Home Assistant is off.
 

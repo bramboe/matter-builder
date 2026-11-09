@@ -5,9 +5,10 @@ Matter Builder sets up and maintains ESP32 devices that act as standard
 Home and Google Home at the same time, and keep working when Home Assistant
 is off: every device has a settings page of its own.
 
-The standard firmware is the **generic device** (ESP32-C6, Thread): relays,
-LEDs, buttons, contacts, motion and SHT4x sensors on free pins, set up on the
-device's page or in the add-on.
+The standard firmware is the **generic device**: relays, LEDs, buttons,
+contacts, motion and SHT4x sensors on free pins, set up on the device's page
+or in the add-on. It runs on the ESP32-C6 (Thread or Wi-Fi) and the classic
+ESP32 (Wi-Fi); see *Chips and networks*.
 
 ## What the add-on does
 
@@ -72,6 +73,36 @@ Each firmware in a release also has a **factory image** for a new ESP32.
 
 The ESP32 then opens its setup network, where you choose its password and
 network; link it afterwards, and the wizard continues with its connections.
+Before installing, the wizard checks that the board is the firmware's chip
+and has 8 MB of flash, and says so when it is not.
+
+## Chips and networks
+
+| Chip | Network | Firmware |
+|---|---|---|
+| ESP32-C6 | Thread or Wi-Fi, chosen in the wizard | `mb_generic` (Thread), `mb_generic_wifi` (Wi-Fi) |
+| Classic ESP32 | Wi-Fi | `mb_generic_esp32` |
+
+Every chip needs **8 MB of flash**: the firmware is about 2.5 MB and an
+update needs room for a second copy. A classic ESP32 module usually says so
+in its name (ESP32-WROOM-32E-**N8**, WROVER-E-N8 or N16); the common 4 MB
+boards cannot be used.
+
+**Thread** needs a Thread border router (Home Assistant Connect ZBT-1/ZBT-2,
+an Apple TV or HomePod, a Nest Hub). It uses little power, forms a mesh that
+reaches far, and keeps no Wi-Fi password on the device for normal use.
+Updates switch to Wi-Fi for about a minute when the device can reach your
+Wi-Fi; over Thread alone an update takes about half an hour, which is fine
+at night (*Updating a device*).
+
+**Wi-Fi** needs only your Wi-Fi network. Updates take seconds. It uses more
+power and needs good Wi-Fi where the device is. A Wi-Fi device gets its
+network on its setup page, or from the Home Assistant app when you pair it
+over Bluetooth (the app gives it the network with the pairing). When it
+cannot connect within three minutes, it opens its setup network again.
+
+To change a C6 from one network to the other, install the other firmware
+over USB.
 
 ## Catalog and package sources
 
@@ -260,6 +291,9 @@ Nothing personal is built into the firmware: Wi-Fi, Thread network and the
 password are set on the device's own page.
 
 ## Updating a device
+
+**A Wi-Fi device** (classic ESP32, or a C6 on Wi-Fi) is updated straight
+over its own network: a few seconds of upload, then a restart.
 
 **Over Wi-Fi, by the device itself** (generic 0.1.8 and bed bridge 1.0.17
 on): the add-on asks the device over Thread to fetch the firmware. The

@@ -1,0 +1,30 @@
+# ESP32-C6: Thread on its own 802.15.4 radio unless Wi-Fi was chosen
+# (sdkconfig.wifi then turns this off again).
+
+# Thread on the chip's own 802.15.4 radio, as a minimal end device. The
+# network is set on the settings page; Matter is then commissioned over
+# Thread, so CHIPoBLE stays off.
+CONFIG_OPENTHREAD_ENABLED=y
+CONFIG_OPENTHREAD_FTD=n
+CONFIG_OPENTHREAD_MTD=y
+CONFIG_OPENTHREAD_SRP_CLIENT=y
+CONFIG_OPENTHREAD_DNS_CLIENT=y
+CONFIG_OPENTHREAD_CLI=n
+CONFIG_OPENTHREAD_LOG_LEVEL_DYNAMIC=n
+CONFIG_OPENTHREAD_LOG_LEVEL_NOTE=y
+# More OpenThread message buffers (65 by default): with 65, a TCP transfer
+# ran out of them (NoBufs) and dropped frames; with 160 it ran about twice
+# as fast over Thread (page 22 KB: 19-25 s -> 9-13 s), for ~29 KB of heap
+CONFIG_OPENTHREAD_NUM_MESSAGE_BUFFERS=160
+CONFIG_ENABLE_WIFI_STATION=n
+CONFIG_ESP_COEX_SW_COEXIST_ENABLE=y
+
+# IPv6 comes from OpenThread, not from router advertisements on Wi-Fi
+CONFIG_LWIP_IPV6_AUTOCONFIG=n
+CONFIG_LWIP_IPV6_NUM_ADDRESSES=8
+CONFIG_LWIP_MULTICAST_PING=y
+CONFIG_LWIP_HOOK_IP6_ROUTE_NONE=y
+CONFIG_LWIP_HOOK_ND6_GET_GW_NONE=y
+CONFIG_USE_MINIMAL_MDNS=n
+CONFIG_ENABLE_EXTENDED_DISCOVERY=y
+

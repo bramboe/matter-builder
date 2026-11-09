@@ -19,6 +19,8 @@ Handler handler = nullptr;
 uint8_t own_addr_type = 0;
 bool shared_stack = false;
 volatile bool is_scanning = false;
+bool listen = true;          // some connection listens to advertisements
+volatile int paused = 0;     // a connection is being made (ble_device)
 
 constexpr uint16_t BTHOME_UUID = 0xFCD2;
 constexpr uint16_t ENVIRONMENT_UUID = 0x181A;  // pvvx and ATC1441 custom formats
@@ -93,12 +95,14 @@ int on_gap(ble_gap_event* event, void*) {
     if (event->type == BLE_GAP_EVENT_DISC) {
         on_advert(event->disc);
     } else if (event->type == BLE_GAP_EVENT_DISC_COMPLETE) {
-        ESP_LOGW(TAG, "Scan stopped (%d)", event->disc_complete.reason);
+        is_scanning = false;
+        if (paused == 0) ESP_LOGW(TAG, "Scan stopped (%d)", event->disc_complete.reason);
     }
     return 0;
 }
 
 void scan() {
+    if (!listen || paused > 0) return;
     ble_gap_disc_params params = {};
     params.itvl = 0x140;          // 200 ms
     params.window = 0x50;         // 50 ms: Thread gets the rest of the radio time
@@ -115,7 +119,7 @@ void scan() {
 void on_sync() {
     ble_hs_id_infer_auto(0, &own_addr_type);
     scan();
-    ESP_LOGI(TAG, "Listening for Bluetooth advertisements");
+    if (listen) ESP_LOGI(TAG, "Listening for Bluetooth advertisements");
 }
 
 void on_reset(int reason) { ESP_LOGW(TAG, "Bluetooth host reset (%d)", reason); }
@@ -130,8 +134,9 @@ void start_task(void*) {
     for (int i = 0; i < 300; ++i) {  // up to a minute
         vTaskDelay(pdMS_TO_TICKS(200));
         if (shared_stack && ble_hs_synced()) {
+            ble_hs_id_infer_auto(0, &own_addr_type);
             scan();  // passive scanning next to Matter's advertising
-            ESP_LOGI(TAG, "Listening for Bluetooth advertisements (shared with Matter pairing)");
+            if (listen) ESP_LOGI(TAG, "Listening for Bluetooth advertisements (shared with Matter pairing)");
             vTaskDelete(nullptr);
         }
         if (!shared_stack && !ble_hs_is_enabled() && i >= 10) {
@@ -151,12 +156,30 @@ void start_task(void*) {
 
 }  // namespace
 
-void start(Handler on_advert, bool shared) {
+void start(Handler on_advert, bool shared, bool listen_to_adverts) {
     handler = on_advert;
     shared_stack = shared;
+    listen = listen_to_adverts;
     xTaskCreate(start_task, "ble_start", 3072, nullptr, 4, nullptr);
 }
 
 bool scanning() { return is_scanning; }
+
+bool ready() { return ble_hs_synced(); }
+
+uint8_t own_address_type() { return own_addr_type; }
+
+// Scanning and connecting share the radio: the scan stops while a connection
+// is made and its services are found, then goes on
+void pause() {
+    if (paused++ == 0 && is_scanning) {
+        ble_gap_disc_cancel();
+        is_scanning = false;
+    }
+}
+
+void resume() {
+    if (paused > 0 && --paused == 0) scan();
+}
 
 }  // namespace ble_scan

@@ -30,7 +30,9 @@
 #include "sdkconfig.h"
 #include "setup_code.h"
 #include "setup_dns.h"
+#if CONFIG_OPENTHREAD_ENABLED
 #include "thread_dataset.h"
+#endif
 
 namespace config_mode {
 
@@ -187,11 +189,30 @@ void start_http() {
     }
 }
 
+// Somewhere to go back to when Wi-Fi does not connect. A Wi-Fi device has
+// only Wi-Fi: it stays on its setup access point until the network is fixed.
 bool has_thread_network() {
+#if CONFIG_OPENTHREAD_ENABLED
     uint8_t tlvs[254];
     const char* source = nullptr;
     return thread_dataset::wanted(tlvs, sizeof(tlvs), &source) > 0;
+#else
+    return false;
+#endif
 }
+
+// What the device runs on normally: Thread, or Wi-Fi itself
+#if CONFIG_OPENTHREAD_ENABLED
+constexpr bool has_thread_radio() { return true; }
+#else
+constexpr bool has_thread_radio() { return false; }
+#endif
+
+#if CONFIG_OPENTHREAD_ENABLED
+const char* NORMAL = "Thread";
+#else
+const char* NORMAL = "normal";
+#endif
 
 // The app's prefix and the last four hex digits of the access point's MAC
 std::string setup_ap_name() {
@@ -229,8 +250,7 @@ void start_ap() {
 void on_check(void*) {
     const int64_t now = esp_timer_get_time();
     if (!ap_mode && ip_text[0] == '\0' && !http_started && now > CONNECT_LIMIT_US) {
-        ESP_LOGE(TAG, "No Wi-Fi connection after %lld s (reason %d), back to Thread", CONNECT_LIMIT_US / 1000000,
-                 last_reason);
+        ESP_LOGE(TAG, "No Wi-Fi connection after %lld s (reason %d)", CONNECT_LIMIT_US / 1000000, last_reason);
         // 15/202/204: the password was refused; 201: network not found
         store_result(last_reason == WIFI_REASON_NO_AP_FOUND ? "notfound"
                      : last_reason == WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT || last_reason == WIFI_REASON_AUTH_FAIL ||
@@ -244,7 +264,7 @@ void on_check(void*) {
         return;
     }
     if (now - last_activity_us > idle_limit_us || now > HARD_LIMIT_US) {
-        ESP_LOGW(TAG, "Time limit reached, back to Thread");
+        ESP_LOGW(TAG, "Time limit reached, back to %s", NORMAL);
         esp_restart();
     }
 }
@@ -471,7 +491,7 @@ std::string command_in_config_mode(const std::vector<std::string>& args) {
     if (cmd == "wifi" && args.size() == 2 && args[1] == "exit") {
         mb_core::stop();
         restart_in_background();
-        return "back to normal (Thread)\n";
+        return std::string("back to normal (") + NORMAL + ")\n";
     }
     if (cmd == "wifi" && args.size() >= 2 && args[1] == "config" && !ap_mode) {
         return "already in configuration mode\n";
@@ -479,9 +499,11 @@ std::string command_in_config_mode(const std::vector<std::string>& args) {
     if (cmd == "wifi") {
         return command(args);
     }
+#if CONFIG_OPENTHREAD_ENABLED
     if (cmd == "thread") {
         return thread_dataset::command(args);
     }
+#endif
     if (cmd == "access") {
         return program_access::command(args);
     }
@@ -492,8 +514,13 @@ std::string command_in_config_mode(const std::vector<std::string>& args) {
         return "not available in configuration mode: Matter is off (wifi exit to go back)\n";
     }
     if (cmd == "help") {
+#if CONFIG_OPENTHREAD_ENABLED
         return "Configuration mode on Wi-Fi: the connections work, Matter and Thread are off.\n"
                "system | wifi exit (back to normal) | thread dataset <hex> | POST /ota for a firmware update\n";
+#else
+        return "Setup mode on Wi-Fi: the connections work, Matter is off.\n"
+               "system | wifi ssid-hex/password-hex | wifi exit (back to normal) | POST /ota for a firmware update\n";
+#endif
     }
     return "";
 }
@@ -703,6 +730,7 @@ std::string command(const std::vector<std::string>& args) {
                ",\"skipped\":" + (stored_text("skip").empty() ? "false" : "true") +
                ",\"last_result\":" + json_text(stored_text("result")) +
                ",\"minutes\":" + std::to_string(DEFAULT_MINUTES) + ",\"fetch\":true" +
+               ",\"network\":\"" + (has_thread_radio() ? "thread" : "wifi") + "\"" +
                ",\"host\":" + json_text(std::string(hostname()) + ".local") + "}";
     }
     if ((args.size() == 4 || args.size() == 5) && args[1] == "fetch") {
@@ -712,7 +740,7 @@ std::string command(const std::vector<std::string>& args) {
         if (url.rfind("http://", 0) != 0 || url.size() > 200) return "error: fetch <http://...> <sha256> [<https://...>]\n";
         if (!url2.empty() && (url2.rfind("https://", 0) != 0 || url2.size() > 300)) return "error: the second address is https://...\n";
         if (sha.size() != 64 || sha.find_first_not_of("0123456789abcdef") != std::string::npos) return "error: sha256 as 64 lower-case hex digits\n";
-        if (network.ssid.empty()) return "error: no Wi-Fi network set: the update goes over Thread\n";
+        if (network.ssid.empty()) return "error: no Wi-Fi network set\n";
         if (!store("fetch_url", url) || !store("fetch_sha", sha) || !store("fetch_url2", url2) || !request(5)) {
             return "storing failed\n";
         }
@@ -739,6 +767,17 @@ std::string command(const std::vector<std::string>& args) {
     }
     return "wifi: '" + network.ssid + "' (" + network.source + ")" +
            (network.password.empty() ? ", no password" : ", password set") + "\n";
+}
+
+bool page_network(std::string& ssid, std::string& password) {
+    const Network network = stored_network();
+    ssid = network.ssid;
+    password = network.password;
+    return !ssid.empty();
+}
+
+bool store_network(const std::string& ssid, const std::string& password) {
+    return store("ssid", ssid) && store("pass", password);
 }
 
 bool request(int minutes, bool setup_ap) {

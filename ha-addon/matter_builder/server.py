@@ -636,6 +636,14 @@ def update_proxy(proxy, image):
         return False
     log(text.strip().splitlines()[0])
 
+    # A Wi-Fi device (the classic ESP32, or a C6 set up on Wi-Fi) is on Wi-Fi
+    # already: straight to /ota, no detour
+    info = device_info(resolve(proxy["host"]) or proxy["host"]) or {}
+    if info.get("network") == "wifi":
+        status, text = upload_over_thread(proxy, image, wifi=True)
+        log(text.strip() or f"HTTP {status}")
+        return status == 200 and wait_until_back(proxy)
+
     status, wifi = command(proxy, "wifi json")
     try:
         can_fetch = status == 200 and json.loads(wifi).get("fetch") is True
@@ -699,11 +707,15 @@ def update_proxy(proxy, image):
 THREAD_RATE = 1200  # bytes per second, measured: Thread is slow for a whole image
 
 
-def upload_over_thread(proxy, image):
-    """The image in pieces, with progress; a timeout per piece, not for the whole."""
+def upload_over_thread(proxy, image, wifi=False):
+    """The image in pieces, with progress; a timeout per piece, not for the whole.
+    The same upload serves a Wi-Fi device, where it takes seconds."""
     data = image.read_bytes()
-    minutes = max(1, round(len(data) / THREAD_RATE / 60))
-    log(f"== Uploading the firmware over Thread (about {minutes} minutes for {len(data) // 1024} KB)")
+    if wifi:
+        log(f"== Uploading the firmware over Wi-Fi ({len(data) // 1024} KB)")
+    else:
+        minutes = max(1, round(len(data) / THREAD_RATE / 60))
+        log(f"== Uploading the firmware over Thread (about {minutes} minutes for {len(data) // 1024} KB)")
     host = resolve(proxy["host"]) or proxy["host"]
     conn = http.client.HTTPConnection(url_host(host), timeout=120)  # brackets: http.client strips them
     try:
@@ -1056,12 +1068,65 @@ def serial_ports():
     return ports
 
 
+CHIP_NAMES = {"esp32c6": "ESP32-C6", "esp32h2": "ESP32-H2", "esp32s3": "ESP32-S3", "esp32c3": "ESP32-C3",
+              "esp32": "ESP32"}
+MIN_FLASH_MB = 8  # two 3 MB app slots (firmware/generic/partitions_8mb.csv)
+
+
+def chip_and_network(app):
+    """The chip and network of a firmware by its name, as the release writes
+    them (tools/release_manifest.py), for images and builds without them."""
+    if app.endswith("_wifi"):
+        return "esp32c6", "wifi"
+    for chip in ("esp32c6", "esp32h2", "esp32s3", "esp32c3", "esp32"):
+        if app.endswith("_" + chip):
+            return chip, "thread" if chip == "esp32h2" else "wifi"
+    return "esp32c6", "thread"
+
+
+def image_summary(image):
+    chip, network = chip_and_network(image["app"])
+    return {**{k: image[k] for k in ("file", "app", "version", "source", "official")},
+            "chip": image.get("chip", chip), "network": image.get("network", network)}
+
+
+def check_board(port, chip):
+    """The board on the port is the image's chip, with flash enough for two
+    images; the reason when it is not, else None."""
+    result = subprocess.run(["python3", "-m", "esptool", "-p", port, "flash_id"],
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=60)
+    text = result.stdout
+    with JOB_LOG.open("a") as out:
+        out.write(text)
+    if result.returncode != 0:
+        return "no ESP32 answered on that port (hold BOOT while plugging it in, and try again)"
+    found = re.search(r"Chip (?:is|type:)\s*(ESP32[-\w]*)", text)
+    name = found.group(1).upper() if found else ""
+    wanted = CHIP_NAMES.get(chip, chip.upper())
+    # The classic ESP32 reports its die (ESP32-D0WD-V3, ESP32-PICO-…, ESP32-U4WDH)
+    same = (name == "ESP32" or name.startswith(("ESP32-D", "ESP32-U", "ESP32-PICO"))) if wanted == "ESP32" \
+        else name.startswith(wanted)
+    if name and not same:
+        return f"this board is an {name}, the firmware is for the {wanted}: choose the firmware for the {name}"
+    size = re.search(r"Detected flash size:\s*(\d+)MB", text)
+    if size and int(size.group(1)) < MIN_FLASH_MB:
+        return (f"this board has {size.group(1)} MB of flash; the firmware needs {MIN_FLASH_MB} MB "
+                "(room for an update next to it): look for an 8 MB or larger module (N8, N16)")
+    return None
+
+
 def flash_on_host(port, image, backup):
     """A factory image at 0 with esptool, after a backup of the whole flash."""
-    esptool = ["python3", "-m", "esptool", "--chip", "esp32c6", "-p", port, "-b", "460800"]
+    chip, _ = chip_and_network(image.name.removesuffix("-factory.bin").rpartition("-")[0])
+    log(f"== Checking the board ({CHIP_NAMES.get(chip, chip)} with {MIN_FLASH_MB} MB of flash needed)")
+    problem = check_board(port, chip)
+    if problem:
+        log(f"!! {problem}")
+        return False
+    esptool = ["python3", "-m", "esptool", "--chip", chip, "-p", port, "-b", "460800"]
     if backup:
         BACKUPS.mkdir(parents=True, exist_ok=True)
-        target = BACKUPS / f"backup-esp32c6-{time.strftime('%Y%m%d-%H%M%S')}.bin"
+        target = BACKUPS / f"backup-{chip}-{time.strftime('%Y%m%d-%H%M%S')}.bin"
         log(f"== Backup of the whole flash to {target}")
         if not run_logged([*esptool, "read_flash", "0", "ALL", str(target)]):
             return False
@@ -1486,10 +1551,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             proxies = [{k: p.get(k) for k in ("id", "name", "host", "added", "app", "local", "auto_update")} for p in load_proxies()]
             return self.reply({"proxies": proxies, "found": found_unlinked(), "toolchain": toolchain_ready(),
                                "builds": builds(), "job": current,
-                               "releases": [{k: i[k] for k in ("file", "app", "version", "source", "official")}
-                                            for i in release_state["images"]],
-                               "release_factory": [{k: i[k] for k in ("file", "app", "version", "source", "official")}
-                                                   for i in release_state["factory"]],
+                               "releases": [image_summary(i) for i in release_state["images"]],
+                               "release_factory": [image_summary(i) for i in release_state["factory"]],
                                "sources": release_state["sources"],
                                "packages": release_state["packages"],
                                "release": release_state["release"], "release_error": release_state["error"],

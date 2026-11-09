@@ -7,8 +7,8 @@
 #include "bed_link.h"
 #include "boot_guard.h"
 #include "commands.h"
-#if CONFIG_OPENTHREAD_ENABLED
 #include "config_mode.h"
+#if CONFIG_OPENTHREAD_ENABLED
 #include "thread_dataset.h"
 #endif
 #include "esp_log.h"
@@ -69,9 +69,7 @@ std::string cmd_matter(const std::vector<std::string>& args) {
 // point, so the owner can choose a new one with the bridge in hand
 void recovery() {
     http_api::reset_password();
-#if CONFIG_OPENTHREAD_ENABLED
     config_mode::request(15, true);
-#endif
     esp_restart();
 }
 
@@ -106,12 +104,10 @@ extern "C" void app_main() {
 
     boot_guard::early();
     program_access::start(recovery);  // the BOOT button, also in configuration mode
-#if CONFIG_OPENTHREAD_ENABLED
-    // One boot on Wi-Fi for fast updates, asked for on the settings page
+    // One boot on Wi-Fi for fast updates (Thread), or the setup access point
     if (config_mode::requested()) {
         config_mode::run();
     }
-#endif
     bed_link::start();
 #if CONFIG_OPENTHREAD_ENABLED
     // OpenThread on the chip's own 802.15.4 radio, sharing it with BLE
@@ -130,9 +126,9 @@ extern "C" void app_main() {
                 matter_bridge::preset_command);
     add_command("language", "language [en|nl|de|es]                  settings page and preset names\n",
                 matter_bridge::language_command);
-#if CONFIG_OPENTHREAD_ENABLED
-    add_command("wifi", "wifi [ssid <name>|password <pw>|clear|config [minutes]]  Wi-Fi for configuration mode\n",
+    add_command("wifi", "wifi [ssid <name>|password <pw>|clear|config [minutes]]  the Wi-Fi network\n",
                 config_mode::command);
+#if CONFIG_OPENTHREAD_ENABLED
     add_command("thread", "thread [dataset <hex>|clear|json]        Thread network, joined at the next start\n",
                 thread_dataset::command);
 #endif

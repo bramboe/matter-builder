@@ -29,9 +29,9 @@ from mb_generate import parse_yaml  # noqa: E402
 
 PACKAGE_FIELDS = ("name", "app", "kind", "format", "title", "description")
 # What the firmware needs from its board (e.g. bluetooth) and which networks it
-# runs on; optional in package.yaml, like "settings" (the schema of what can be
+# runs on and the chips it is built for; optional in package.yaml, like "settings" (the schema of what can be
 # set on the device)
-PACKAGE_DEFAULTS = {"requires": [], "network": ["thread"]}
+PACKAGE_DEFAULTS = {"requires": [], "network": ["thread"], "chips": ["esp32c6"]}
 
 
 def as_list(value):
@@ -42,10 +42,26 @@ def as_list(value):
     return [v.strip() for v in text.split(",") if v.strip()]
 
 
+CHIPS = ("esp32c6", "esp32h2", "esp32s3", "esp32c3", "esp32")
+
+
+def chip_and_network(app):
+    """From the firmware's name (firmware/generic/CMakeLists.txt): mb_generic
+    is the ESP32-C6 on Thread, <app>_wifi the C6 on Wi-Fi, <app>_<chip> another
+    chip (Wi-Fi; the ESP32-H2 only has Thread)."""
+    if app.endswith("_wifi"):
+        return "esp32c6", "wifi"
+    for chip in CHIPS:
+        if app.endswith("_" + chip):
+            return chip, "thread" if chip == "esp32h2" else "wifi"
+    return "esp32c6", "thread"
+
+
 def image(path, stem):
     app, _, version = stem.rpartition("-")
     data = path.read_bytes()
-    return {"file": path.name, "app": app, "version": version, "chip": "esp32c6",
+    chip, network = chip_and_network(app)
+    return {"file": path.name, "app": app, "version": version, "chip": chip, "network": network,
             "size": len(data), "sha256": hashlib.sha256(data).hexdigest()}
 
 

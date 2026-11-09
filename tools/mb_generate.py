@@ -62,10 +62,14 @@ BOARD_CAPS = {
 def requirements(connections):
     """What a generic device's connections need from its board: Bluetooth for
     the Bluetooth connections, nothing else beyond the network."""
-    return ["bluetooth"] if any(c["type"] in BLE_TYPES for c in connections) else []
+    return ["bluetooth"] if any(c["type"] in BLE_TYPES or c["type"] == "ble_command" for c in connections) else []
 TYPES = {"relay", "led", "button", "contact", "motion", "sht4x", "ir_send", "ir_receive", "ble_sensor", "ble_presence"}
 IR_TYPES = {"ir_send", "ir_receive"}
 BLE_TYPES = {"ble_sensor", "ble_presence"}
+# Types the generic firmware registers like a component (main/ble_device.cpp):
+# a command to a Bluetooth device, its number is the command (1-8)
+BUILTIN_DRIVERS = {"ble_command": {"type": "ble_command", "title": "Bluetooth command", "matter": "on_off",
+                                   "pins": 0, "number": "Command (1-8)"}}
 # Options that work on the device itself (io.cpp): what an output does at
 # power-on and after how many seconds it switches off; the output an input
 # switches (a button toggles it, a contact, motion or presence sets it)
@@ -404,7 +408,7 @@ def check(spec):
     components = load_components(spec.get("components") or [])
     if components and app != "generic":
         raise SpecError("components: only for app generic")
-    drivers = {c["type"]: c for c in components}
+    drivers = {**BUILTIN_DRIVERS, **{c["type"]: c for c in components}}
 
     connections = spec.get("connections") or []
     if connections and app != "generic":

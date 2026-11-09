@@ -2,6 +2,7 @@
 
 #include <cstdarg>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 #include "esp_log.h"
@@ -17,7 +18,9 @@ namespace {
 constexpr size_t SIZE = 16384;    // a quiet device's whole boot and the minutes after
 constexpr size_t LINE_LEN = 192;  // longer lines are cut here (the serial port has them whole)
 
-char ring[SIZE];
+// On the heap, not static: the classic ESP32 has little static RAM and more
+// heap in other regions
+char* ring = nullptr;
 uint32_t written = 0;  // bytes ever written; ring[written % SIZE] is the next one
 portMUX_TYPE lock = portMUX_INITIALIZER_UNLOCKED;
 vprintf_like_t serial = nullptr;  // where the log went before (the console)
@@ -31,6 +34,9 @@ void keep(char* line, int length, size_t size) {
     size_t n = static_cast<size_t>(length) < size ? static_cast<size_t>(length) : size - 1;
     if (static_cast<size_t>(length) >= size) {
         line[n - 1] = '\n';
+    }
+    if (ring == nullptr) {
+        return;
     }
     portENTER_CRITICAL_SAFE(&lock);
     for (size_t i = 0; i < n; ++i) {
@@ -88,6 +94,7 @@ void matter_line(const char* module, uint8_t category, const char* msg, va_list 
 
 void start() {
     if (serial == nullptr) {
+        ring = static_cast<char*>(std::malloc(SIZE));
         boot_id = esp_random() & 0x7fffffff;
         serial = esp_log_set_vprintf(copy_line);
         chip::Logging::SetLogRedirectCallback(matter_line);
@@ -97,6 +104,9 @@ void start() {
 std::string read(uint32_t from, size_t max) {
     if (max > SIZE) {
         max = SIZE;
+    }
+    if (ring == nullptr) {
+        return "log 0 0 0\n";
     }
     std::string text(max, '\0');  // allocated before the lock: no allocation inside it
     portENTER_CRITICAL_SAFE(&lock);

@@ -45,7 +45,7 @@ design, including package sources and the catalog.
 | Path | Contents |
 |---|---|
 | `components/mb_core` | Shared core: Matter and Thread setup, settings page API, adoption, OTA, configuration mode, boot guard |
-| `firmware/generic` | The generic device (ESP32-C6, esp-matter release/v1.6) |
+| `firmware/generic` | The generic device (ESP32-C6 on Thread or Wi-Fi, classic ESP32 on Wi-Fi; esp-matter release/v1.6) |
 | `firmware/bridge`, `components/octo_*` | The Octo bed bridge package: two Octo beds over Bluetooth ([README](firmware/bridge/README.md)) |
 | `ha-addon/matter_builder` | The Home Assistant add-on |
 | `tools/mb_generate.py` | Turns a device spec (YAML) into a project |

@@ -222,6 +222,36 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
   </div>
 </div>
 
+<div class="section" id="bleSection" hidden>
+  <div class="section-head"><h2 data-t="bleTitle"></h2></div>
+  <div class="sub" style="margin:-4px 0 8px" data-t="bleHelp"></div>
+  <div class="grid">
+    <div class="card">
+      <h3 data-t="bleDevice"></h3>
+      <form id="bleForm" class="form" style="grid-template-columns:1fr">
+        <label class="field"><span data-t="bleTemplate"></span><select id="bleTemplate"></select></label>
+        <label class="field"><span data-t="mac"></span><input id="bleMac" maxlength="17" placeholder="AA:BB:CC:DD:EE:FF" autocomplete="off" spellcheck="false"></label>
+        <label class="row" style="min-height:36px;border:0"><input type="checkbox" id="bleRandom"><span class="label" data-t="bleRandom"></span></label>
+        <label class="field"><span data-t="bleService"></span><input id="bleService" placeholder="FFE0" autocomplete="off" spellcheck="false"></label>
+        <label class="field"><span data-t="bleChr"></span><input id="bleChr" placeholder="FFE1" autocomplete="off" spellcheck="false"></label>
+        <label class="field"><span data-t="bleWrite"></span><select id="bleWrite"><option value="response"></option><option value="no-response"></option></select></label>
+        <label class="field"><span data-t="bleHello"></span><input id="bleHello" placeholder="4020430004190000000040" autocomplete="off" spellcheck="false"></label>
+        <label class="field" id="blePinField" hidden><span data-t="blePin"></span><input id="blePin" inputmode="numeric" maxlength="4" autocomplete="off"></label>
+        <label class="field"><span data-t="bleIdle"></span><input id="bleIdle" type="number" min="0" max="3600" value="30"></label>
+        <div class="sub" id="bleState"></div>
+        <div class="features" style="margin-top:0"><button class="pri" type="submit" data-t="save"></button>
+          <button type="button" id="bleDisconnect" data-t="bleDisconnectBtn"></button></div>
+      </form>
+    </div>
+    <div class="card">
+      <h3 data-t="bleCommands"></h3>
+      <div class="sub" data-t="bleCommandsHelp"></div>
+      <div id="bleRows"></div>
+      <button type="button" class="text" id="bleAdd" data-t="bleAdd" style="justify-self:start;margin-top:8px"></button>
+    </div>
+  </div>
+</div>
+
 <div class="section">
   <div class="section-head"><h2 data-t="settings"></h2></div>
   <div class="grid">
@@ -302,6 +332,19 @@ const TEXT = {
   configApGo: 'Continue on my Wi-Fi',
   configApMoved: h => `The device restarts on your Wi-Fi. Connect this phone to your own Wi-Fi again and open http://${h}/`,
   configApDone: h => `The device goes to Thread. Connect this phone to your own Wi-Fi again; the page is then at http://${h}/`,
+  configInfoApWifi: s => `Setup network “${s}”. Set your own Wi-Fi below; connections can be added already.`,
+  configApDoneWifi: h => `The device restarts on your Wi-Fi. Connect this phone to your own Wi-Fi again; the page is then at http://${h}/`,
+  bleTitle: 'Bluetooth device', bleHelp: 'A device this ESP32 sends commands to over Bluetooth: a bed, fan, blind or desk that takes bytes written to one characteristic. Give each command a name; it can then be a switch in Matter (Add as connection).',
+  bleDevice: 'Device', bleTemplate: 'Start from', bleTemplateNone: 'My own device', bleRandom: 'Random address (most devices use a public one)',
+  bleService: 'Service UUID', bleChr: 'Characteristic UUID', bleWrite: 'Write', bleWriteResp: 'With response', bleWriteNoResp: 'Without response',
+  bleHello: 'Sent after connecting (hex, optional)', blePin: 'PIN of the bed (4 digits)', bleIdle: 'Stay connected after the last command (seconds; 0 = disconnect at once, 3600 = always)',
+  bleDisconnectBtn: 'Disconnect', bleCommands: 'Commands', bleCommandsHelp: 'Bytes in hex, sent once or repeated (times, with a pause in ms between them) when you press Send or the switch in Matter.',
+  bleAdd: 'Add command', bleLabel: 'Name', bleBytes: 'Bytes (hex)', bleTimes: 'Times', bleGap: 'Pause (ms)', bleSend: 'Send',
+  bleAsConnection: 'Add as connection', bleNoSlot: 'All 8 connections are in use.', bleSaved: 'Saved', bleSending: 'Sending…',
+  bleConnected: 'Connected', bleNotConnected: 'Not connected (it connects when a command is sent)', bleSentCount: n => `${n} sent since the start`,
+  bleBadHex: 'The bytes must be hex (0-9, A-F), at most 64.', bleNeedsSetup: 'Set the device, service and characteristic first.',
+  bleOctoNote: 'Octo beds: the motor commands are repeated for about 3 seconds of movement (the remote repeats them while held). The bed wants its PIN right after connecting.',
+  wifiDeviceHelp: 'This device runs on Wi-Fi. A changed network takes effect after a restart; when the device cannot connect within three minutes it opens its setup network again.',
   threadTitle: 'Thread network', threadChange: 'Set network',
   threadHelp: 'Paste the dataset from Home Assistant: Settings › Devices & services › Thread › Configure, then (i) at the preferred network.',
   threadDataset: 'Dataset (hex)',
@@ -977,10 +1020,13 @@ function showConfigMode(c) {
   // On the setup access point the Wi-Fi card stays: that is what is set here
   $('#cfgCard').hidden = !!c && !c.ap;
   $('#cfgStart').textContent = t(c && c.ap ? 'configApGo' : 'configStart');
-  $('#cfgCardTitle').textContent = t(c && c.ap ? 'wifiNetwork' : 'configMode');
+  // A Wi-Fi device has no configuration mode to go to: its Wi-Fi is its network
+  $('#cfgStart').hidden = wifiDevice && !(c && c.ap);
+  $('#cfgCardTitle').textContent = t(c && c.ap || wifiDevice ? 'wifiNetwork' : 'configMode');
+  $('#cfgCardHelp').textContent = t(wifiDevice ? 'wifiDeviceHelp' : 'configHelp');
   $('#cfgCardHelp').hidden = !!(c && c.ap);
   if (!c) return;
-  $('#cfgInfo').textContent = c.ap ? t('configInfoAp', c.ssid)
+  $('#cfgInfo').textContent = c.ap ? t(wifiDevice ? 'configInfoApWifi' : 'configInfoAp', c.ssid)
     : t('configInfo', c.ssid, c.ip || c.host, Math.ceil(c.remaining / 60));
 }
 
@@ -1005,7 +1051,7 @@ function moveTo(url, textEl) {
 let wizardForced = false;
 function updateWizard(w) {
   const firstRun = !!w && w.source !== 'page' && !w.skipped && !!state && !state.io.slots.some(c => c.type !== 'none');
-  const show = !configMode && (firstRun || wizardForced);
+  const show = !configMode && !wifiDevice && (firstRun || wizardForced);
   $('#wizard').hidden = !show;
   document.querySelectorAll('#app > .section:not(#wizard):not(#cfgView), #ioSection').forEach(el => {
     el.hidden = show;
@@ -1024,10 +1070,12 @@ async function loadWifi() {
     const key = {password: 'resultPassword', notfound: 'resultNotFound', noconnect: 'resultNoConnect'}[why];
     document.querySelectorAll('.wifiResult').forEach(el => { el.hidden = !key; el.textContent = key ? t(key, code) : ''; });
     wifiInfo = w;
+    if ((w.network === 'wifi') !== wifiDevice) { wifiDevice = w.network === 'wifi'; showConfigMode(configMode); }
     updateWizard(w);
   } catch (e) {}
 }
 let wifiInfo = null;
+let wifiDevice = false;  // runs on Wi-Fi (no Thread): "wifi json" says so
 
 // The Thread network (ESP32-C6 only: the classic ESP32 has no "thread" command)
 async function loadThread() {
@@ -1094,8 +1142,9 @@ $('#cfgStart').onclick = async () => {
   try {
     if (configMode && configMode.ap) {
       if (!await saveWifi()) return;
-      await cmd('wifi config 30');
-      $('#cfgBack').textContent = t('configApMoved', wifiHost);
+      // A Wi-Fi device simply starts normally on its network
+      await cmd(wifiDevice ? 'wifi exit' : 'wifi config 30');
+      $('#cfgBack').textContent = t(wifiDevice ? 'configApDoneWifi' : 'configApMoved', wifiHost);
       return;
     }
     if (!await saveWifi() || !confirm(t('configConfirm', wifiHost))) return;
@@ -1113,7 +1162,7 @@ $('#cfgExit').onclick = async () => {
   try {
     await cmd('wifi exit');
     const home = configMode && configMode.home;
-    if (configMode && configMode.ap) { $('#cfgBack').textContent = t('configApDone', home); return; }
+    if (configMode && configMode.ap) { $('#cfgBack').textContent = t(wifiDevice ? 'configApDoneWifi' : 'configApDone', home || wifiHost); return; }
     $('#cfgBack').textContent = home ? t('backStarted', home) : t('backStartedNoHome');
     if (home) moveTo(`http://${home}/`, $('#cfgBack'));
   } catch (e) { toast(t('error') + ': ' + e.message); }
@@ -1148,6 +1197,144 @@ $('#otaForm').onsubmit = e => {
   xhr.send(file);
 };
 
+// ---------------------------------------------------------------- Bluetooth device
+// A device the ESP32 sends commands to ("bledev"). Templates fill in a known
+// device; Octo is the example: its packets are framed and checksummed here,
+// so a PIN or a new command is one line.
+function octoPacket(c0, c1, data = []) {
+  const summed = [0x40, c0, c1, (data.length >> 8) & 255, data.length & 255, ...data, 0x40];
+  const checksum = (((summed.reduce((a, b) => a + b, 0) & 255) ^ 0xFF) + 1) & 255;
+  const escape = {0x40: 1, 0x3C: 2, 0x4F: 3, 0x41: 4};
+  const out = [0x40];
+  for (const b of [c0, c1, summed[3], summed[4], checksum, ...data]) {
+    if (b in escape) out.push(0x3C, escape[b]); else out.push(b);
+  }
+  out.push(0x40);
+  return out.map(b => b.toString(16).padStart(2, '0').toUpperCase()).join('');
+}
+const BLE_TEMPLATES = {
+  octo: {title: 'Octo bed (example)', service: 'FFE0', characteristic: 'FFE1', write: 'no-response', idle: 25, pin: true,
+    commands: [
+      ['Head up', octoPacket(0x02, 0x70, [0x02]), 8, 375], ['Head down', octoPacket(0x02, 0x71, [0x02]), 8, 375],
+      ['Legs up', octoPacket(0x02, 0x70, [0x04]), 8, 375], ['Legs down', octoPacket(0x02, 0x71, [0x04]), 8, 375],
+      ['Both up', octoPacket(0x02, 0x70, [0x06]), 8, 375], ['Both down', octoPacket(0x02, 0x71, [0x06]), 8, 375],
+      ['Stop', octoPacket(0x02, 0x73), 1, 0],
+      ['Light on', octoPacket(0x20, 0x72, [0, 1, 2, 1, 1, 1, 1, 1]), 1, 0]]},
+};
+let ble = null;
+const cleanHex = v => v.replace(/[\s:-]/g, '').toUpperCase();
+const isHex = v => /^([0-9A-F]{2}){1,64}$/.test(v);
+
+async function loadBle() {
+  let r;
+  try { r = JSON.parse(await cmd('bledev json')).bledev; } catch (e) { return; }  // older firmware: no Bluetooth device
+  ble = r;
+  $('#bleSection').hidden = false;
+  if (!$('#bleTemplate').options.length) {
+    $('#bleTemplate').innerHTML = `<option value="">${esc(t('bleTemplateNone'))}</option>` +
+      Object.entries(BLE_TEMPLATES).map(([k, v]) => `<option value="${k}">${esc(v.title)}</option>`).join('');
+    $('#bleWrite').options[0].textContent = t('bleWriteResp');
+    $('#bleWrite').options[1].textContent = t('bleWriteNoResp');
+  }
+  if (!$('#bleForm').contains(document.activeElement)) {
+    $('#bleMac').value = r.mac; $('#bleRandom').checked = r.random;
+    $('#bleService').value = r.service; $('#bleChr').value = r.characteristic;
+    $('#bleWrite').value = r.no_response ? 'no-response' : 'response';
+    $('#bleHello').value = r.hello; $('#bleIdle').value = r.idle;
+  }
+  $('#bleState').textContent = (r.connected ? t('bleConnected') : t('bleNotConnected')) + (r.sent ? ' · ' + t('bleSentCount', r.sent) : '') + (r.error ? ' · ' + r.error : '');
+  $('#bleState').style.color = r.error ? 'var(--bad)' : '';
+  if (!$('#bleRows').contains(document.activeElement)) renderBleRows();
+}
+
+function renderBleRows(extra) {
+  const rows = ble.commands.map((c, i) => ({...c, i})).filter(c => c.bytes || (extra !== undefined && extra === c.i));
+  $('#bleRows').innerHTML = rows.map(c => `<div class="form" data-cmd="${c.i}" style="grid-template-columns:2fr 3fr 1fr 1fr;border-top:1px solid var(--line);padding-top:8px;margin-top:8px">
+      <label class="field"><span>${t('bleLabel')}</span><input class="bl" maxlength="32" value="${esc(c.label)}"></label>
+      <label class="field"><span>${t('bleBytes')}</span><input class="bb" spellcheck="false" style="font:12px ui-monospace,Menlo,monospace" value="${esc(c.bytes)}"></label>
+      <label class="field"><span>${t('bleTimes')}</span><input class="bt" type="number" min="1" max="50" value="${c.times || 1}"></label>
+      <label class="field"><span>${t('bleGap')}</span><input class="bg" type="number" min="0" max="2000" value="${c.gap || 0}"></label>
+      <div class="features" style="grid-column:1/-1;margin-top:0"><button type="button" class="pri" data-ble="send">${t('bleSend')}</button>
+        <button type="button" data-ble="save">${t('save')}</button><button type="button" data-ble="conn">${t('bleAsConnection')}</button>
+        <button type="button" class="text" data-ble="clear">${t('remove')}</button></div></div>`).join('');
+}
+
+async function saveBleRow(row) {
+  const n = row.dataset.cmd, label = row.querySelector('.bl').value.trim() || `Command ${+n + 1}`;
+  const bytes = cleanHex(row.querySelector('.bb').value);
+  if (!isHex(bytes)) { toast(t('bleBadHex')); return false; }
+  const out = await cmd(`bledev cmd ${n} ${bytes} ${row.querySelector('.bt').value || 1} ${row.querySelector('.bg').value || 0} ${hex(label)}`);
+  if (!out.startsWith('ok')) { toast(out); return false; }
+  ble.commands[n] = {label, bytes, times: +row.querySelector('.bt').value || 1, gap: +row.querySelector('.bg').value || 0};
+  return true;
+}
+
+$('#bleRows').addEventListener('click', async e => {
+  const b = e.target.closest('[data-ble]');
+  if (!b) return;
+  const row = b.closest('[data-cmd]'), n = +row.dataset.cmd;
+  try {
+    if (b.dataset.ble === 'clear') { await cmd(`bledev clear ${n}`); ble.commands[n] = {label: '', bytes: '', times: 1, gap: 0}; renderBleRows(); return; }
+    if (!await saveBleRow(row)) return;
+    if (b.dataset.ble === 'save') { toast(t('bleSaved')); return; }
+    if (b.dataset.ble === 'send') {
+      const out = await cmd(`bledev send ${n}`);
+      toast(out.startsWith('sending') ? t('bleSending') : out);
+      setTimeout(loadBle, 2500);
+      return;
+    }
+    // A connection of type ble_command in the first free place: a switch in Matter
+    const free = state.io.slots.findIndex(c => c.type === 'none');
+    if (free < 0) { toast(t('bleNoSlot')); return; }
+    const out = await cmd(`io set ${free} ble_command n=${n + 1} ${ble.commands[n].label}`);
+    toast(out.trim());
+    await refresh();
+  } catch (err) { toast(t('error') + ': ' + err.message); }
+});
+$('#bleAdd').onclick = () => {
+  const n = ble.commands.findIndex(c => !c.bytes);
+  if (n < 0) return;
+  renderBleRows(n);
+  $(`#bleRows [data-cmd="${n}"] .bl`).focus();
+};
+$('#bleTemplate').onchange = () => {
+  const tp = BLE_TEMPLATES[$('#bleTemplate').value];
+  $('#blePinField').hidden = !(tp && tp.pin);
+  if (!tp) return;
+  $('#bleService').value = tp.service; $('#bleChr').value = tp.characteristic;
+  $('#bleWrite').value = tp.write; $('#bleIdle').value = tp.idle;
+  toast(t('bleOctoNote'));
+};
+$('#bleForm').onsubmit = async e => {
+  e.preventDefault();
+  try {
+    const mac = $('#bleMac').value.trim().toUpperCase(), tp = BLE_TEMPLATES[$('#bleTemplate').value];
+    let hello = cleanHex($('#bleHello').value);
+    const pin = $('#blePin').value.trim();
+    if (tp && tp.pin && /^\d{4}$/.test(pin)) hello = octoPacket(0x20, 0x43, pin.split('').map(Number));
+    const lines = [];
+    if (mac) lines.push(`bledev target ${mac}${$('#bleRandom').checked ? ' random' : ''}`);
+    if ($('#bleService').value.trim()) lines.push(`bledev service ${$('#bleService').value.trim()}`);
+    if ($('#bleChr').value.trim()) lines.push(`bledev characteristic ${$('#bleChr').value.trim()}`);
+    lines.push(`bledev write ${$('#bleWrite').value}`, `bledev hello ${hello || 'none'}`, `bledev idle ${$('#bleIdle').value || 0}`);
+    for (const line of lines) {
+      const out = await cmd(line);
+      if (!out.startsWith('ok')) { toast(out); return; }
+    }
+    if (tp) {  // the template's commands, where nothing is set yet
+      for (const [i, [label, bytes, times, gap]] of tp.commands.entries()) {
+        if (ble.commands[i] && ble.commands[i].bytes) continue;
+        await cmd(`bledev cmd ${i} ${bytes} ${times} ${gap} ${hex(label)}`);
+      }
+      $('#bleTemplate').value = '';
+      $('#blePinField').hidden = true;
+    }
+    toast(t('bleSaved'));
+    await loadBle();
+  } catch (err) { toast(t('error') + ': ' + err.message); }
+};
+$('#bleDisconnect').onclick = async () => { try { await cmd('bledev disconnect'); setTimeout(loadBle, 1500); } catch (e) {} };
+
 // An eye on every password field, also those drawn later: show or hide what
 // is typed. Submitting a form hides them again.
 const EYE = 'M12,9A3,3 0 0,0 9,12A3,3 0 0,0 12,15A3,3 0 0,0 15,12A3,3 0 0,0 12,9M12,17A5,5 0 0,1 7,12A5,5 0 0,1 12,7A5,5 0 0,1 17,12A5,5 0 0,1 12,17M12,4.5C7,4.5 2.73,7.61 1,12C2.73,16.39 7,19.5 12,19.5C17,19.5 21.27,16.39 23,12C21.27,7.61 17,4.5 12,4.5Z';
@@ -1180,7 +1367,7 @@ document.addEventListener('submit', () => document.querySelectorAll('input[data-
 
 applyTexts();
 $('#sys').textContent = t('connecting');
-function startApp() { refresh().then(loadRules); loadMatter(); loadWifi(); loadThread(); loadAccess(); }
+function startApp() { refresh().then(loadRules); loadMatter(); loadWifi(); loadThread(); loadAccess(); loadBle(); }
 function keepToken(value) {
   token = value;
   try { localStorage.setItem('mbToken', token); } catch (err) {}

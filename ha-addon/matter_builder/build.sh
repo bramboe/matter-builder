@@ -1,6 +1,9 @@
 #!/bin/bash
-# Builds one application for the ESP32-C6 from the sources in the image:
-#   build.sh generic         the generic device   (mb_generic-<version>.bin)
+# Builds one application from the sources in the image, for the ESP32-C6
+# unless MB_CHIP says otherwise (esp32, esp32s3, esp32c3, esp32h2), on the
+# chip's own network unless MB_NETWORK says otherwise (thread|wifi):
+#   build.sh generic         the generic device   (mb_generic-<version>.bin; on
+#                            another chip or Wi-Fi mb_generic_<chip>/_wifi)
 #   build.sh bridge          the Octo bed bridge  (octo_bridge-<version>.bin)
 #   build.sh spec <file>     a device spec (tools/mb_generate.py): <name>-<version>.bin
 #   build.sh project <dir>   an ESP-IDF project of a package source, on mb_core
@@ -14,7 +17,9 @@ APP="${1:-generic}"
 DATA="${MB_DATA:-/data}"
 SRC="${MB_SRC:-/opt/octo-matter}"
 WORK="$DATA/work/octo-matter"
-BUILD="$DATA/build/$APP-esp32c6"
+CHIP="${MB_CHIP:-esp32c6}"
+NETWORK="${MB_NETWORK:-}"
+BUILD="$DATA/build/$APP-$CHIP${NETWORK:+-$NETWORK}"
 export CCACHE_DIR="$DATA/ccache"
 
 case "$APP" in
@@ -50,16 +55,18 @@ if [ "$APP" = spec ]; then
     BUILD="$DATA/build/spec-$SLUG"
     mkdir -p "$BUILD"
 fi
-PROJECT=$(sed -n 's/^project(\(.*\))/\1/p' "$PROJECT_DIR/CMakeLists.txt")
 VERSION=$(sed -n 's/^set(PROJECT_VER "\(.*\)")/\1/p' "$PROJECT_DIR/CMakeLists.txt")
-echo "== $TITLE $VERSION for the ESP32-C6"
+echo "== $TITLE $VERSION for the $CHIP${NETWORK:+ on $NETWORK}"
 # A fresh configuration from the defaults every time, so a new version number
 # or changed default always comes through (the cache keeps this fast)
 rm -f "$BUILD/sdkconfig"
-idf.py -C "$PROJECT_DIR" -B "$BUILD" -D SDKCONFIG="$BUILD/sdkconfig" -D IDF_TARGET=esp32c6 build
+idf.py -C "$PROJECT_DIR" -B "$BUILD" -D SDKCONFIG="$BUILD/sdkconfig" -D IDF_TARGET="$CHIP" \
+    ${NETWORK:+-D MB_NETWORK=$NETWORK} build
+# The project's name as built: the generic device's depends on chip and network
+PROJECT=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["project_name"])' "$BUILD/project_description.json")
 
 cp "$BUILD/$PROJECT.bin" "$DATA/firmware/$PROJECT-$VERSION.bin"
 # Bootloader, partition table and app in one image, for a new ESP32 over USB
-(cd "$BUILD" && python -m esptool --chip esp32c6 merge_bin -o "$DATA/firmware/factory/$PROJECT-$VERSION-factory.bin" @flash_args)
+(cd "$BUILD" && python -m esptool --chip "$CHIP" merge_bin -o "$DATA/firmware/factory/$PROJECT-$VERSION-factory.bin" @flash_args)
 echo "== Factory image: $PROJECT-$VERSION-factory.bin"
 echo "== Ready: $PROJECT-$VERSION.bin ($(stat -c %s "$DATA/firmware/$PROJECT-$VERSION.bin") bytes)"

@@ -3,8 +3,8 @@ name: Release
 # Ready-made firmware for users who do not build: the same toolchain and
 # scripts as the Home Assistant add-on's developer mode (ha-addon/matter_builder),
 # so a release can be rebuilt there and compared. A tag "v<version>" builds
-# the generic device and the Octo bed bridge for the ESP32-C6 (an update image and a factory image for
-# a new ESP32), writes a manifest with SHA-256 hashes, signs it (secret
+# the generic device (ESP32-C6 on Thread and on Wi-Fi, classic ESP32) and the Octo bed bridge (ESP32-C6), each an update image and a factory image for
+# a new ESP32 over USB; it writes a manifest with SHA-256 hashes, signs it (secret
 # MB_SIGNING_KEY, ECDSA P-256) and publishes everything as a GitHub release. The add-on checks the signature
 # against ha-addon/matter_builder/release-key.pem before it installs anything.
 #
@@ -60,6 +60,8 @@ jobs:
                 bash /src/ha-addon/matter_builder/toolchain.sh
               fi
               bash /src/ha-addon/matter_builder/build.sh generic
+              MB_NETWORK=wifi bash /src/ha-addon/matter_builder/build.sh generic
+              MB_CHIP=esp32 bash /src/ha-addon/matter_builder/build.sh generic
               bash /src/ha-addon/matter_builder/build.sh bridge
               chown -R '"$(id -u):$(id -g)"' /mb'
 
@@ -72,7 +74,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes "Signed firmware for the ESP32-C6" \
+          gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes "Signed firmware for the ESP32-C6 (Thread or Wi-Fi) and the classic ESP32 (Wi-Fi)" \
             /mnt/mb/firmware/*.bin /mnt/mb/firmware/factory/*.bin /mnt/mb/firmware/manifest.json /mnt/mb/firmware/manifest.json.sig
           # A release made with this token starts no other workflow by itself
           gh workflow run catalog.yml --ref main

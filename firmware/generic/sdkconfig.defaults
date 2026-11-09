@@ -1,5 +1,7 @@
-# Matter Builder generic firmware (ESP32-C6, Thread): what is connected is
-# set on the settings page, not built in. With the clusters of the standard
+# Matter Builder generic firmware: what is connected is set on the settings
+# page, not built in. These defaults hold for every chip; the chip's own file
+# (sdkconfig.defaults.<chip>) adds its flash and radio, and sdkconfig.wifi
+# turns a chip that has Thread to Wi-Fi (CMakeLists.txt, MB_NETWORK). With the clusters of the standard
 # components: switch (button, IR receive), occupancy (motion sensor, presence).
 #
 # Bluetooth for two things, each only when wanted:
@@ -15,9 +17,11 @@ CONFIG_BT_NIMBLE_ENABLED=y
 CONFIG_BT_NIMBLE_ROLE_OBSERVER=y
 CONFIG_BT_NIMBLE_ROLE_PERIPHERAL=y
 CONFIG_BT_NIMBLE_ROLE_BROADCASTER=y
-CONFIG_BT_NIMBLE_ROLE_CENTRAL=n
-CONFIG_BT_NIMBLE_MAX_CONNECTIONS=1
-CONFIG_BT_NIMBLE_GATT_CLIENT=n
+# Central and GATT client: sending commands to a Bluetooth device
+# (main/ble_device.cpp), one link next to Matter pairing
+CONFIG_BT_NIMBLE_ROLE_CENTRAL=y
+CONFIG_BT_NIMBLE_MAX_CONNECTIONS=2
+CONFIG_BT_NIMBLE_GATT_CLIENT=y
 CONFIG_ENABLE_CHIPOBLE=y
 CONFIG_USE_BLE_ONLY_FOR_COMMISSIONING=n
 CONFIG_SUPPORT_SWITCH_CLUSTER=y
@@ -26,13 +30,15 @@ CONFIG_SUPPORT_OCCUPANCY_SENSING_CLUSTER=y
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=6144
 CONFIG_LOG_DEFAULT_LEVEL_INFO=y
 
-# Two 3 MB app slots for updates, a large NVS for Matter and OpenThread
+# Two 3 MB app slots for updates, a large NVS for Matter and the network:
+# 8 MB of flash on every chip (a 4 MB chip has no room for two images)
 CONFIG_PARTITION_TABLE_CUSTOM=y
-CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions_c6.csv"
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions_8mb.csv"
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
 
 CONFIG_ESP_COEX_SW_COEXIST_ENABLE=y
 
-# Fewer pre-allocated Wi-Fi receive buffers: Wi-Fi only serves configuration mode
+# Fewer pre-allocated Wi-Fi receive buffers: the traffic is small
 CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=6
 CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=16
 CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER_NUM=16
@@ -154,37 +160,6 @@ CONFIG_SUPPORT_COMMODITY_METERING_CLUSTER=n
 CONFIG_SUPPORT_COMMODITY_TARIFF_CLUSTER=n
 CONFIG_SUPPORT_PUSH_AV_STREAM_TRANSPORT_CLUSTER=n
 CONFIG_SUPPORT_GROUPCAST_CLUSTER=n
-
-# ESP32-C6 on Thread
-CONFIG_IDF_TARGET="esp32c6"
-CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
-
-# Thread on the chip's own 802.15.4 radio, as a minimal end device. The
-# network is set on the settings page; Matter is then commissioned over
-# Thread, so CHIPoBLE stays off.
-CONFIG_OPENTHREAD_ENABLED=y
-CONFIG_OPENTHREAD_FTD=n
-CONFIG_OPENTHREAD_MTD=y
-CONFIG_OPENTHREAD_SRP_CLIENT=y
-CONFIG_OPENTHREAD_DNS_CLIENT=y
-CONFIG_OPENTHREAD_CLI=n
-CONFIG_OPENTHREAD_LOG_LEVEL_DYNAMIC=n
-CONFIG_OPENTHREAD_LOG_LEVEL_NOTE=y
-# More OpenThread message buffers (65 by default): with 65, a TCP transfer
-# ran out of them (NoBufs) and dropped frames; with 160 it ran about twice
-# as fast over Thread (page 22 KB: 19-25 s -> 9-13 s), for ~29 KB of heap
-CONFIG_OPENTHREAD_NUM_MESSAGE_BUFFERS=160
-CONFIG_ENABLE_WIFI_STATION=n
-CONFIG_ESP_COEX_SW_COEXIST_ENABLE=y
-
-# IPv6 comes from OpenThread, not from router advertisements on Wi-Fi
-CONFIG_LWIP_IPV6_AUTOCONFIG=n
-CONFIG_LWIP_IPV6_NUM_ADDRESSES=8
-CONFIG_LWIP_MULTICAST_PING=y
-CONFIG_LWIP_HOOK_IP6_ROUTE_NONE=y
-CONFIG_LWIP_HOOK_ND6_GET_GW_NONE=y
-CONFIG_USE_MINIMAL_MDNS=n
-CONFIG_ENABLE_EXTENDED_DISCOVERY=y
 
 # The setup access point of configuration mode (config_mode.h), for a new
 # device that has no Wi-Fi network yet

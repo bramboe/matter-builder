@@ -447,9 +447,14 @@ const TEXT = {
   confirmPort: n => `Install on “${n}”? Everything on that device is replaced.`, mDownloadHelp: 'Flash it yourself, for example with esptool, at address 0',
   backupFirst: 'First save a backup of the whole flash', next: 'Next', back: 'Back', close: 'Close', done: 'Done',
   wInstalling: 'Installing', usbPick: 'Choose the ESP32’s USB port in the browser window.', usbConnecting: 'Connecting…', usbChip: c => `Found: ${c}`,
-  wrongChip: c => `This is a ${c}, not an ESP32-C6.`, usbBackup: p => `Saving backup: ${p} %`, usbWriting: p => `Installing: ${p} %`,
+  wrongChip: (c, want) => `This board is an ${c}; this firmware is for the ${want}. Go back and choose the firmware for the ${c}.`,
+  smallFlash: mb => `This board has ${mb} MB of flash; the firmware needs 8 MB (room for an update next to it). Look for a module with 8 MB or more (N8, N16).`,
+  wNetwork: 'Thread or Wi-Fi?', networkHelp: 'The ESP32-C6 can run either. You can change it later by installing the other one over USB.',
+  netThread: 'Thread', netThreadHelp: 'Needs a Thread border router (Home Assistant Connect ZBT, Apple TV, Nest Hub). Low power, a mesh that reaches far, no Wi-Fi password on the device. Updates switch to Wi-Fi for a minute when it can reach your Wi-Fi; over Thread alone an update takes about half an hour (fine at night).',
+  netWifi: 'Wi-Fi', netWifiHelp: 'Only your Wi-Fi network, no border router. Updates take seconds. Uses more power and needs good Wi-Fi where the device is.',
+  chipLabel: c => ({esp32c6: 'ESP32-C6', esp32: 'Classic ESP32 (Wi-Fi)', esp32s3: 'ESP32-S3 (Wi-Fi)', esp32c3: 'ESP32-C3 (Wi-Fi)', esp32h2: 'ESP32-H2 (Thread)'}[c] || c), usbBackup: p => `Saving backup: ${p} %`, usbWriting: p => `Installing: ${p} %`,
   wSetup: 'Set it up on its own page', wSetupSteps: ['The ESP32 restarts and opens a Wi-Fi network named “Matter-Builder-…”. Join it with your phone or computer.',
-    'The device’s page opens: choose a password, then set your Wi-Fi and, for Thread, the Thread network.', 'Once it is on your network it shows up here under Discovered. Then link it.'],
+    'The device’s page opens: choose a password, then set your Wi-Fi and, for Thread, the Thread network. (On Wi-Fi you can also pair it over Bluetooth with the Home Assistant app, which brings the Wi-Fi network along.)', 'Once it is on your network it shows up here under Discovered. Then link it.'],
   downloaded: 'Downloaded. Flash it at address 0, then continue.', linkNow: 'Link it now', retry: 'Try again',
   wLink: 'Link a device', linkHelp: 'The address of the device’s page and its password. The add-on gets a key of its own; the password is not stored.',
   pagePassword: 'Password of the page', link: 'Link', wrongPassword: 'Wrong password.',
@@ -533,7 +538,12 @@ const gb = bytes => (bytes / 2 ** 30).toFixed(bytes < 10 * 2 ** 30 ? 1 : 0);
 const versionKey = v => String(v).split('.').map(x => parseInt(x, 10) || 0);
 const newer = (a, b) => { const x = versionKey(a), y = versionKey(b); for (let i = 0; i < Math.max(x.length, y.length); i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); } return false; };
 const fileVersion = f => f.replace(/\.bin$/, '').split('-').pop();
-const appTitle = app => { const p = (state.packages || []).find(x => x.app === app); return p ? p.title : (TEXT.apps[app] || app.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase())); };
+const appTitle = app => {
+  const p = (state.packages || []).find(x => x.app === baseApp(app));
+  const title = p ? p.title : (TEXT.apps[baseApp(app)] || app.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase()));
+  if (app === baseApp(app)) return title;
+  return `${title} (${/_wifi$/.test(app) ? 'Wi-Fi' : t('chipLabel', app.replace(/^mb_generic_/, ''))})`;
+};
 
 // The device's page through the add-on: quick over Thread, the page itself comes from here
 function portalUrl(p) { return `portal/${encodeURIComponent(p.id)}/`; }
@@ -599,8 +609,11 @@ function missingType(rows, drivers) {
 
 // IR and Bluetooth connections need generic firmware 0.1.3 or newer
 const MIN_NEW_TYPES = '0.1.3';
+// The generic firmware, on any chip or network (mb_generic, mb_generic_wifi, mb_generic_esp32, …)
+const isGenericApp = app => /^mb_generic(_[a-z0-9]+)?$/.test(app || '');
+const baseApp = app => isGenericApp(app) ? 'mb_generic' : app;
 function tooOld(r, rows) {
-  return r && r.app === 'mb_generic' && rows.some(x => isIr(x.type) || isBle(x.type)) && newer(MIN_NEW_TYPES, r.version);
+  return r && isGenericApp(r.app) && rows.some(x => isIr(x.type) || isBle(x.type)) && newer(MIN_NEW_TYPES, r.version);
 }
 
 // What a device or catalog item is, at a glance
@@ -1941,9 +1954,17 @@ $('#mConfirm').onclick = async () => {
 // catalog rides along and fills in the connections once the device is linked.
 let wiz = null;
 
+// One choice per firmware and chip; the C6's Wi-Fi image rides along with its
+// Thread one and is picked in the next step (network)
 function factoryChoices() {
   const out = [];
-  for (const f of state.release_factory || []) out.push({file: f.file, title: `${appTitle(f.app)} ${f.version}`, sub: t('official')});
+  const all = state.release_factory || [];
+  for (const f of all) {
+    if (f.network === 'wifi' && f.chip === 'esp32c6') continue;
+    const wifi = f.chip === 'esp32c6' && all.find(w => w.chip === 'esp32c6' && w.network === 'wifi' && w.version === f.version && baseApp(w.app) === baseApp(f.app) && w.app !== f.app);
+    out.push({file: f.file, threadFile: f.file, wifiFile: wifi ? wifi.file : null, chip: f.chip || 'esp32c6',
+      title: `${appTitle(baseApp(f.app))} ${f.version}`, sub: `${t('chipLabel', f.chip || 'esp32c6')} · ${t('official')}`});
+  }
   if (state.settings.dev_mode) for (const sp of specs || []) for (const f of sp.factory) out.push({file: f, title: f.replace(/-factory\.bin$/, ''), sub: t('ownBuilds')});
   return out;
 }
@@ -1967,7 +1988,7 @@ const choice = (on, ic, title, sub, click, attrs = '') =>
 
 function renderWizard() {
   if (!wiz) return;
-  const flow = ['firmware', 'configure', 'method', 'install', 'setup', 'link', 'done'];
+  const flow = ['firmware', 'network', 'configure', 'method', 'install', 'setup', 'link', 'done'];
   const n = flow.indexOf(wiz.step);
   $('#wStep').textContent = n >= 0 && !wiz.linkOnly ? t('stepOf', n + 1, flow.length) : '';
   let title = '', body = '';
@@ -1978,7 +1999,7 @@ function renderWizard() {
       ${choice(false, 'store', t('wCatalog'), t('wCatalogHelp'), "closeWizard(); showTab('catalog')")}</div>`;
   } else if (wiz.step === 'recipeTarget') {
     title = t('wRecipeTarget');
-    const generic = state.proxies.filter(p => { const r = running(statuses[p.id]); return r && r.app === 'mb_generic'; });
+    const generic = state.proxies.filter(p => { const r = running(statuses[p.id]); return r && isGenericApp(r.app); });
     if (!wiz.configText) wiz.configText = specYaml(wiz.recipe.title, wiz.recipe.rows);
     body = `<div class="sub">${esc(wiz.recipe.title)}</div><div class="choices">
       ${wiz.deviceOnly ? '' : choice(false, 'usb', t('recipeNew'), t('recipeNewHelp'), "go('firmware')")}
@@ -1988,9 +2009,18 @@ function renderWizard() {
     title = t('wPickFirmware');
     const list = factoryChoices();
     if (!wiz.file && list.length) wiz.file = (list.find(c => /^mb_generic-/.test(c.file)) || list[0]).file;
-    body = list.length ? `<div class="choices">${list.map(c => choice(c.file === wiz.file, 'chip', esc(c.title), esc(c.sub), `wiz.file = '${esc(c.file)}'; renderWizard()`)).join('')}</div>
-      <div class="actions end"><button class="plain" onclick="go('start')">${t('back')}</button><button class="pri" onclick="go(isGenericFile(wiz.file) ? 'configure' : 'method')">${t('next')}</button></div>`
+    const picked = list.find(c => c.file === wiz.file || c.wifiFile === wiz.file);
+    wiz.choice = picked || null;
+    body = list.length ? `<div class="choices">${list.map(c => choice(c === picked, 'chip', esc(c.title), esc(c.sub), `wiz.file = '${esc(c.file)}'; renderWizard()`)).join('')}</div>
+      <div class="actions end"><button class="plain" onclick="go('start')">${t('back')}</button><button class="pri" onclick="go(wiz.choice && wiz.choice.wifiFile ? 'network' : isGenericFile(wiz.file) ? 'configure' : 'method')">${t('next')}</button></div>`
       : `<p class="sub">${t('noFactory')}</p>`;
+  } else if (wiz.step === 'network') {
+    title = t('wNetwork');
+    const c = wiz.choice, onWifi = wiz.file === c.wifiFile;
+    body = `<div class="sub">${t('networkHelp')}</div><div class="choices">
+      ${choice(!onWifi, 'chip', t('netThread'), t('netThreadHelp'), `wiz.file = wiz.choice.threadFile; renderWizard()`)}
+      ${choice(onWifi, 'chip', t('netWifi'), t('netWifiHelp'), `wiz.file = wiz.choice.wifiFile; renderWizard()`)}</div>
+      <div class="actions end"><button class="plain" onclick="go('firmware')">${t('back')}</button><button class="pri" onclick="go(isGenericFile(wiz.file) ? 'configure' : 'method')">${t('next')}</button></div>`;
   } else if (wiz.step === 'configure') {
     title = t('wConfigure');
     const recipeList = catalogItems().filter(i => i.kind === 'recipe');
@@ -2004,7 +2034,7 @@ function renderWizard() {
       <label class="check sub"><input type="checkbox" ${wiz.saveConfig ? 'checked' : ''} onchange="wiz.saveConfig = this.checked">${t('saveToConfigs')}</label>
       ${wiz.configOk ? `<div class="notice">${esc(wiz.configOk)}</div>` : ''}
       ${wiz.error ? `<div class="error">${esc(wiz.error)}</div>` : ''}
-      <div class="actions end"><button class="plain" onclick="go('firmware')">${t('back')}</button><span class="grow"></span>
+      <div class="actions end"><button class="plain" onclick="go(wiz.choice && wiz.choice.wifiFile ? 'network' : 'firmware')">${t('back')}</button><span class="grow"></span>
         <button class="plain" onclick="wiz.configSpec = null; go('method')">${t('skip')}</button>
         <button class="pri" onclick="configureNext()">${t('next')}</button></div>`;
   } else if (wiz.step === 'method') {
@@ -2021,7 +2051,7 @@ function renderWizard() {
           <div class="sub warnText">${t('portWarning')}</div>`
         : `<div class="row"><div class="label sub">${wiz.ports ? t('noPorts') : t('checking')}</div><button class="plain" onclick="loadPorts()">${t('refresh')}</button></div>`) : ''}
       ${wiz.method !== 'download' ? `<label class="check sub"><input type="checkbox" ${wiz.backup ? 'checked' : ''} onchange="wiz.backup = this.checked">${t('backupFirst')}</label>` : ''}
-      <div class="actions end"><button class="plain" onclick="go(isGenericFile(wiz.file) ? 'configure' : 'firmware')">${t('back')}</button><button class="pri" onclick="startInstall()" ${wiz.method === 'host' && !wiz.port ? 'disabled' : ''}>${t('install')}</button></div>`;
+      <div class="actions end"><button class="plain" onclick="go(isGenericFile(wiz.file) ? 'configure' : wiz.choice && wiz.choice.wifiFile ? 'network' : 'firmware')">${t('back')}</button><button class="pri" onclick="startInstall()" ${wiz.method === 'host' && !wiz.port ? 'disabled' : ''}>${t('install')}</button></div>`;
   } else if (wiz.step === 'install') {
     title = t('wInstalling');
     body = `<p id="wStatus">${esc(wiz.status)}</p>${wiz.progress !== undefined ? `<div class="progress"><i style="width:${wiz.progress}%"></i></div>` : ''}
@@ -2068,9 +2098,17 @@ function renderWizard() {
   if (pass && !wiz.waiting) (wiz.host ? pass : $('#wHost')).focus();
 }
 
+// The chip an image is for, from its name (tools/release_manifest.py)
+function chipOfFile(file) {
+  const app = (file || '').replace(/-factory\.bin$/, '').replace(/-[^-]*$/, '');
+  if (/_wifi$/.test(app)) return 'esp32c6';
+  const m = app.match(/_(esp32c6|esp32h2|esp32s3|esp32c3|esp32)$/);
+  return m ? m[1] : 'esp32c6';
+}
+
 // Generic firmware takes a configuration: the release's or an own build of a config
 function isGenericFile(file) {
-  return /^mb_generic-/.test(file) || (specs || []).some(sp => sp.factory.includes(file));
+  return /^mb_generic(_[a-z0-9]+)?-/.test(file) || (specs || []).some(sp => sp.factory.includes(file));
 }
 
 const wizEditor = new ConfigEditor('wiz');
@@ -2205,14 +2243,20 @@ async function startInstall() {
     const quiet = {clean() {}, writeLine() {}, write() {}};
     const loader = new ESPLoader({transport, baudrate: 460800, terminal: quiet});
     const chip = await loader.main();
-    if (!/ESP32-C6/i.test(chip)) throw new Error(t('wrongChip', chip));
+    // The board must be the firmware's chip (the classic ESP32 reports its die, e.g. ESP32-D0WD-V3)
+    const want = (wiz.choice && wiz.choice.chip) || chipOfFile(wiz.file);
+    const label = {esp32c6: 'ESP32-C6', esp32h2: 'ESP32-H2', esp32s3: 'ESP32-S3', esp32c3: 'ESP32-C3', esp32: 'ESP32'}[want] || want;
+    const same = want === 'esp32' ? /^ESP32(-D|-U|-PICO|\b(?!-))/i.test(chip) : new RegExp('^' + label, 'i').test(chip);
+    if (!same) throw new Error(t('wrongChip', chip.split(' ')[0], label));
     say(t('usbChip', chip));
+    const flashMb = parseInt(await loader.detectFlashSize(), 10);
+    if (flashMb && flashMb < 8) throw new Error(t('smallFlash', flashMb));
     if (wiz.backup) {
-      const size = loader.flashSizeBytes((await loader.detectFlashSize()) || '8MB');
+      const size = loader.flashSizeBytes(flashMb ? `${flashMb}MB` : '8MB');
       const backup = await loader.readFlash(0, size, (_, got) => say(t('usbBackup', Math.round(100 * got / size)), Math.round(100 * got / size)));
       const link = document.createElement('a');
       link.href = URL.createObjectURL(new Blob([backup]));
-      link.download = `backup-esp32c6-${new Date().toISOString().slice(0, 10)}.bin`;
+      link.download = `backup-${want}-${new Date().toISOString().slice(0, 10)}.bin`;
       link.click();
     }
     const data = new Uint8Array(await (await fetch(`api/download/${encodeURIComponent(wiz.file)}`)).arrayBuffer());

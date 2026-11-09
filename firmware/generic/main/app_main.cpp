@@ -5,12 +5,16 @@
 #include <string>
 #include <vector>
 
+#include "sdkconfig.h"
 #include <platform/CHIPDeviceLayer.h>
+#if CONFIG_OPENTHREAD_ENABLED
 #include <platform/ESP32/OpenthreadLauncher.h>
+#endif
 #if CONFIG_ENABLE_CHIPOBLE
 #include <platform/internal/BLEManager.h>
 #endif
 
+#include "ble_device.h"
 #include "boot_guard.h"
 #include "commands.h"
 #include "config_mode.h"
@@ -19,7 +23,6 @@
 #include "http_api.h"
 #include "io.h"
 #include "rules.h"
-#include "io.h"
 #include "matter_device.h"
 #include "matter_info.h"
 #include "mb_core.h"
@@ -27,7 +30,9 @@
 #include "nvs.h"
 #include "nvs_flash.h"
 #include "program_access.h"
+#if CONFIG_OPENTHREAD_ENABLED
 #include "thread_dataset.h"
+#endif
 
 // The settings page (web/index.html, embedded at build time)
 extern const char page_start[] asm("_binary_generic_html_gz_start");
@@ -145,7 +150,9 @@ extern "C" void app_main() {
         ESP_LOGE("main", "NVS unavailable (%s)", esp_err_to_name(err));
     }
 
+    ble_device::register_type();  // "ble_command", like a component type
     io::register_components();  // component types, before the connections or the spec load
+    ble_device::load();
 
     mb_core::App app = {};
     app.vendor_name = "Matter Builder";
@@ -171,6 +178,8 @@ extern "C" void app_main() {
     add_command("io", "io [json|set|clear|test|simulate|apply|confirm|cancel]  connections\n", io::command);
     add_command("rule", "rule [json|set <n> ...|clear <n>|enable <n> on|off|run <n>]  rules on the device\n",
                 rules::command);
+    add_command("bledev", "bledev [json|target|service|characteristic|cmd|send|...]  a Bluetooth device to send commands to\n",
+                ble_device::command);
     add_command("time", "time [set <unix>|zone <POSIX TZ>]       the device's clock, for time rules\n",
                 rules::time_command);
     add_command("name", "name [<text>]                           the device's name\n", io::name_command);
@@ -188,6 +197,7 @@ extern "C" void app_main() {
 #endif
     rules::load();  // before Matter: which rules are switches there
 
+#if CONFIG_OPENTHREAD_ENABLED
     esp_openthread_platform_config_t thread_config = {};
     thread_config.radio_config.radio_mode = RADIO_MODE_NATIVE;
     thread_config.host_config.host_connection_mode = HOST_CONNECTION_MODE_NONE;
@@ -195,6 +205,7 @@ extern "C" void app_main() {
     thread_config.port_config.netif_queue_size = 10;
     thread_config.port_config.task_queue_size = 10;
     set_openthread_platform_config(&thread_config);
+#endif
 
     matter_device::start();
     rules::start();  // the rules run from here on, also without a controller
@@ -212,8 +223,10 @@ extern "C" void app_main() {
     net::start();
     add_command("wifi", "wifi [ssid <name>|password <pw>|clear|config [minutes]]  Wi-Fi for configuration mode\n",
                 config_mode::command);
+#if CONFIG_OPENTHREAD_ENABLED
     add_command("thread", "thread [dataset <hex>|clear|json]        Thread network, joined at the next start\n",
                 thread_dataset::command);
+#endif
     add_command("access", "access [json|revoke <n>]                programs with a token of their own\n",
                 program_access::command);
     add_command("pairing", "pairing [ble on|off]                    pairing over Bluetooth (after a restart)\n",

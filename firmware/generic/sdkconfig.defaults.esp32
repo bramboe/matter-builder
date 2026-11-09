@@ -1,0 +1,8 @@
+# The classic ESP32 (Wi-Fi and Bluetooth, no Thread): Matter over Wi-Fi.
+# It needs 8 MB of flash (an ESP32-WROOM-32E-N8, WROVER-E-N8 and the like):
+# the firmware is about 2.5 MB and an update needs room for two.
+CONFIG_BTDM_CTRL_MODE_BLE_ONLY=y
+CONFIG_BTDM_CTRL_MODE_BR_EDR_ONLY=n
+CONFIG_BTDM_CTRL_MODE_BTDM=n
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+CONFIG_BTDM_CTRL_BLE_MAX_CONN=2

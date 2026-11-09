@@ -1,5 +1,7 @@
 #include "http_api.h"
 
+#include "sdkconfig.h"
+
 #include <cstdio>
 #include <cstring>
 #include <memory>
@@ -125,12 +127,20 @@ esp_err_t handle_info(httpd_req_t* req) {
     const esp_app_desc_t* app = esp_app_get_description();
     uint8_t mac[6] = {};
     esp_read_mac(mac, ESP_MAC_BASE);
-    char out[192];
+    char out[256];
+    // The chip and the network it runs on: the add-on picks updates by them
+    // and sends them straight over Wi-Fi to a Wi-Fi device
     std::snprintf(out, sizeof(out),
                   "{\"kind\":\"matter-builder\",\"app\":\"%s\",\"version\":\"%s\",\"id\":\"%02X%02X%02X%02X%02X%02X\","
-                  "\"spec\":%s}",
+                  "\"spec\":%s,\"chip\":\"%s\",\"network\":\"%s\"}",
                   app->project_name, app->version, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
-                  mb_core::app().spec_start != nullptr ? "true" : "false");
+                  mb_core::app().spec_start != nullptr ? "true" : "false", CONFIG_IDF_TARGET,
+#if CONFIG_OPENTHREAD_ENABLED
+                  "thread"
+#else
+                  "wifi"
+#endif
+    );
     httpd_resp_set_type(req, "application/json");
     return httpd_resp_sendstr(req, out);
 }

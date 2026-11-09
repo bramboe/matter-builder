@@ -92,7 +92,8 @@ esp_timer_handle_t trial_timer = nullptr;
 int64_t trial_end_us = 0;
 char device_name[33] = {};
 char last_ir[24] = "";  // the last infrared code received, for learning codes
-bool bluetooth = false;   // a connection listens to Bluetooth
+bool bluetooth = false;   // a connection uses Bluetooth (listens, or sends commands)
+bool listening = false;   // a connection listens to advertisements
 bool ble_pairing = false;
 Slot factory[SLOTS] = {};
 const char* factory_name = nullptr;
@@ -952,7 +953,8 @@ void start() {
         ESP_LOGE(TAG, "New connections keep crashing: back to the previous ones");
         set_trial_boots(0);
     }
-    bluetooth = false;
+    bluetooth = listening = false;
+    const Type ble_command = type_named("ble_command");
     for (int i = 0; i < SLOTS; ++i) {
         const Type t = running[i].type;
         if (t != Type::none && static_cast<int>(t) >= TYPE_COUNT && driver_of(t) == nullptr) {
@@ -965,7 +967,9 @@ void start() {
             problem += (problem.empty() ? "" : " ") + std::string("Connection ") + std::to_string(i) + " (" +
                        running[i].name + ") is left out: its pin is not safe to use.";
         }
-        bluetooth = bluetooth || is_ble(running[i].type);
+        listening = listening || is_ble(running[i].type);
+        bluetooth = bluetooth || is_ble(running[i].type) ||
+                    (ble_command != Type::none && running[i].type == ble_command);
     }
     setup_pins();
     const bool power_cut = esp_reset_reason() == ESP_RST_POWERON;
@@ -1003,7 +1007,8 @@ bool climate(int index, int16_t& centi_celsius, uint16_t& centi_percent) {
 bool needs_bluetooth() { return bluetooth; }
 
 void start_bluetooth(bool shared_with_pairing) {
-    if (bluetooth) ble_scan::start(on_ble_advert, shared_with_pairing);  // only when a connection needs it
+    // Only when a connection needs it; scanning only when one listens
+    if (bluetooth) ble_scan::start(on_ble_advert, shared_with_pairing, listening);
 }
 
 void set_ble_pairing(bool on) { ble_pairing = on; }

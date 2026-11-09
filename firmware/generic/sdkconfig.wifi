@@ -1,0 +1,16 @@
+# Matter over Wi-Fi instead of Thread, on a chip that has both (the
+# ESP32-C6). Chips without Thread get this always (CMakeLists.txt). Updates
+# then go straight over Wi-Fi, in seconds instead of half an hour.
+CONFIG_OPENTHREAD_ENABLED=n
+CONFIG_ENABLE_WIFI_STATION=y
+CONFIG_ENABLE_WIFI_AP=n
+# IPv6 from the router's advertisements, as Matter on Wi-Fi expects
+CONFIG_LWIP_IPV6_AUTOCONFIG=y
+CONFIG_LWIP_IPV6_NUM_ADDRESSES=6
+# One mDNS stack for Matter and for configuration mode
+CONFIG_USE_MINIMAL_MDNS=n
+CONFIG_ENABLE_EXTENDED_DISCOVERY=y
+# Wi-Fi carries Matter now: the receive buffers of a normal station
+CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=8
+CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=24
+CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER_NUM=24

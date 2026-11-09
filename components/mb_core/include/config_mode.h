@@ -1,5 +1,6 @@
 // Configuration mode of a Thread device (ESP32-C6): one boot on Wi-Fi, for
-// fast firmware updates and a fast first setup. Thread and Matter stay off;
+// fast firmware updates and a fast first setup. On a Wi-Fi device it is the
+// setup mode: its access point when it has no network or cannot reach it. Thread and Matter stay off;
 // what works without Matter keeps working (whatever the app starts in
 // mb_core::App::config_mode_start). The settings page and /ota run on http://<hostname>.local/ (the
 // app's name, mb_core::App).
@@ -39,5 +40,11 @@ std::string command(const std::vector<std::string>& args);
 // with `setup_ap` (recovery), it opens the setup access point. False when
 // storing failed.
 bool request(int minutes, bool setup_ap = false);
+
+// The Wi-Fi network set on the page (false: none). On a Wi-Fi device it is
+// also the network it runs on; net_wifi.cpp keeps the two the same, also
+// when pairing over Bluetooth brought another one.
+bool page_network(std::string& ssid, std::string& password);
+bool store_network(const std::string& ssid, const std::string& password);
 
 }  // namespace config_mode

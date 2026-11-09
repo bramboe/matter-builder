@@ -233,4 +233,17 @@ std::string describe() {
     return out;
 }
 
+std::string health_json() {
+    wifi_ap_record_t ap = {};
+    const bool up = connected && esp_wifi_sta_get_ap_info(&ap) == ESP_OK;
+    std::string out = std::string("{\"kind\":\"wifi\",\"attached\":") + (up ? "true" : "false") +
+                      ",\"disconnects\":" + std::to_string(disconnects);
+    if (up) {
+        out += ",\"rssi\":" + std::to_string(ap.rssi) + ",\"channel\":" + std::to_string(ap.primary);
+    } else if (last_reason != 0) {
+        out += ",\"last_reason\":" + std::to_string(last_reason);
+    }
+    return out + "}";
+}
+
 }  // namespace net

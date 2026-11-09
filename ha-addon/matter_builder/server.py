@@ -1465,6 +1465,219 @@ def night_loop():
         # a job already running: tried again in five minutes, still within the hour
 
 
+# ---------------------------------------------------------------- network health
+# Every 5 minutes each linked device is asked how its network is doing
+# ("system json": its "net" object). A day of these, per device, says where a
+# problem is: the device and its mesh, the way out to the home network (the
+# border router), or the way from there to here. A Thread device that
+# drops out is often the border router's fault, not the device's.
+
+HEALTH = DATA / "health"
+HEALTH_EVERY = 300
+HEALTH_KEEP = 86400
+health_samples = {}  # device id -> samples of the last day, oldest first
+health_lock = threading.Lock()
+
+
+def health_file(proxy_id):
+    return HEALTH / f"{re.sub(r'[^A-Za-z0-9_-]', '', proxy_id)}.json"
+
+
+def health_get(proxy_id):
+    with health_lock:
+        if proxy_id not in health_samples:
+            try:
+                health_samples[proxy_id] = json.loads(health_file(proxy_id).read_text())
+            except (OSError, ValueError):
+                health_samples[proxy_id] = []
+        return list(health_samples[proxy_id])
+
+
+def health_sample(proxy):
+    """One measurement: does it answer, how fast, and what it says about its network."""
+    health_get(proxy["id"])  # loaded from disk first
+    started = time.time()
+    status, text = command(proxy, "system json", timeout=20)
+    sample = {"t": int(started), "ok": False}
+    if status == 200:
+        try:
+            info = json.loads(text)
+            sample.update(ok=True, rtt=int((time.time() - started) * 1000), uptime=info.get("uptime"),
+                          net=info.get("net") if isinstance(info.get("net"), dict) else None)
+        except ValueError:
+            sample["error"] = "no answer it understands"
+    else:
+        sample["error"] = text.strip()[:120] or f"HTTP {status}"
+    with health_lock:
+        samples = [x for x in health_samples.get(proxy["id"], []) if x["t"] > started - HEALTH_KEEP] + [sample]
+        health_samples[proxy["id"]] = samples
+        HEALTH.mkdir(parents=True, exist_ok=True)
+        health_file(proxy["id"]).write_text(json.dumps(samples))
+    return sample
+
+
+def health_loop():
+    while True:
+        time.sleep(HEALTH_EVERY)
+        with lock:
+            busy = job["running"]
+        if busy:  # an update or install talks to devices: not in between
+            continue
+        for proxy in load_proxies():
+            try:
+                health_sample(proxy)
+            except Exception as err:  # one device must not stop the others
+                print(f"health {proxy.get('name')}: {err}", flush=True)
+
+
+def grown(samples, key, parent=None):
+    """How much a counter of the device grew over the samples (restarts reset it)."""
+    total, previous, previous_up = 0, None, None
+    for sample in samples:
+        net = sample.get("net") or {}
+        value = (net.get(parent) or {}).get(key) if parent else net.get(key)
+        up = sample.get("uptime")
+        if not isinstance(value, (int, float)):
+            continue
+        if previous is not None and up is not None and previous_up is not None and up >= previous_up:
+            total += max(0, value - previous)
+        previous, previous_up = value, up
+    return total
+
+
+def restarts(samples):
+    ups = [s["uptime"] for s in samples if s.get("ok") and isinstance(s.get("uptime"), (int, float))]
+    return sum(1 for a, b in zip(ups, ups[1:]) if b < a)
+
+
+def clock_text(t):
+    return time.strftime("%H:%M", time.localtime(t))
+
+
+def health_verdict(samples, others_down=False):
+    """Per link: "ok", "warn" or "bad" with a sentence; and one summary up top."""
+    if not samples:
+        return {"summary": "No measurements yet: the first one comes within five minutes.", "state": "unknown",
+                "links": []}
+    ok = [s for s in samples if s.get("ok")]
+    latest, last_ok = samples[-1], (ok[-1] if ok else None)
+    net = (last_ok or {}).get("net") or {}
+    thread = net.get("kind", "thread") == "thread"
+    links = []
+
+    # 1. The device and its own network
+    detaches, changes = grown(ok, "detaches"), grown(ok, "parent_changes")
+    rebooted = restarts(ok)
+    if not net:
+        links.append({"name": "Device", "state": "unknown",
+                      "text": "This firmware does not report its network yet (update it for network health)."})
+    elif thread:
+        parent = net.get("parent") or {}
+        rssi = parent.get("rssi")
+        tx, retry = grown(ok, "tx"), grown(ok, "tx_retry")
+        name = "Device ↔ Thread mesh"
+        if not net.get("attached"):
+            links.append({"name": name, "state": "bad", "text": "Not connected to the Thread network."})
+        elif (isinstance(rssi, int) and rssi < -85) or parent.get("lqi_in", 3) <= 1:
+            links.append({"name": name, "state": "warn",
+                          "text": f"Weak signal to its parent ({rssi} dBm). A mains-powered Thread device closer by helps."})
+        elif detaches >= 3 or changes >= 6:
+            links.append({"name": name, "state": "warn",
+                          "text": "Unstable: " + " and ".join(x for x in (f"lost the network {detaches}×" if detaches else "",
+                                                                     f"changed parent {changes}×" if changes else "") if x)
+                                  + " in the last day."})
+        elif tx > 200 and retry / tx > 0.3:
+            links.append({"name": name, "state": "warn",
+                          "text": f"Busy radio: {round(100 * retry / tx)} % of messages needed a retry."})
+        else:
+            role = net.get("role", "")
+            detail = (f"signal to its parent {rssi} dBm" if role == "child" and isinstance(rssi, int)
+                      else f"{net.get('neighbors', 0)} neighbours" if role in ("router", "leader") else "connected")
+            links.append({"name": name, "state": "ok", "text": f"{role.capitalize() or 'Connected'}, {detail}."})
+        # 2. The way out of the mesh: the border router
+        name = "Thread mesh ↔ border router"
+        routers = net.get("border_routers", 0)
+        if net.get("attached") is False:
+            links.append({"name": name, "state": "unknown", "text": "Not known while the device is off the network."})
+        elif not net.get("route") or not net.get("omr"):
+            links.append({"name": name, "state": "bad",
+                          "text": "No border router offers a way to your home network. Check your Apple TV, HomePod, Nest Hub or Home Assistant's border router."})
+        elif net.get("srp") not in (None, "Registered"):
+            links.append({"name": name, "state": "warn",
+                          "text": f"Not registered with the border router (SRP: {net.get('srp')}): Matter controllers may not find it."})
+        else:
+            links.append({"name": name, "state": "ok",
+                          "text": f"Way out through {routers} border router{'s' if routers != 1 else ''}"
+                                  + (" (no backup if it goes down)." if routers == 1 else ".")})
+    else:
+        rssi = net.get("rssi")
+        name = "Device ↔ Wi-Fi"
+        if not net.get("attached"):
+            links.append({"name": name, "state": "bad", "text": "Not connected to Wi-Fi."})
+        elif isinstance(rssi, int) and rssi < -80:
+            links.append({"name": name, "state": "bad" if rssi < -87 else "warn",
+                          "text": f"Weak Wi-Fi signal ({rssi} dBm): move it or the access point closer."})
+        elif detaches >= 3 or grown(ok, "disconnects") >= 3:
+            links.append({"name": name, "state": "warn",
+                          "text": f"Lost Wi-Fi {grown(ok, 'disconnects')}× in the last day."})
+        else:
+            links.append({"name": name, "state": "ok",
+                          "text": f"Signal {rssi} dBm." if isinstance(rssi, int) else "Connected."})
+    if rebooted:
+        links[0] = dict(links[0], note=f"Restarted {rebooted}× in the last day.")
+
+    # 3. From there to Matter Builder
+    rtts = sorted(s["rtt"] for s in ok if "rtt" in s)
+    median = rtts[len(rtts) // 2] if rtts else None
+    ratio = len(ok) / len(samples)
+    name = ("Border router" if thread else "Wi-Fi") + " ↔ Matter Builder"
+    text = f"Answered {len(ok)} of {len(samples)} checks in the last day" + (f", typically in {median} ms." if median else ".")
+    # The longest stretch without answers (not the one going on now: the summary says that)
+    gap, run = None, []
+    for sample in samples:
+        if not sample.get("ok"):
+            run.append(sample["t"])
+            continue
+        if len(run) >= 2 and (gap is None or sample["t"] - run[0] > gap[1]):
+            gap = (run[0], sample["t"] - run[0])
+        run = []
+    if gap:
+        text += f" Unreachable for {round(gap[1] / 60)} min from {clock_text(gap[0])}."
+    links.append({"name": name, "state": "bad" if ratio < 0.8 else "warn" if ratio < 0.95 or (median or 0) > 3000 else "ok",
+                  "text": text})
+
+    # The summary: where to look first
+    if not latest.get("ok"):
+        since = latest["t"]
+        for sample in reversed(samples):
+            if sample.get("ok"):
+                break
+            since = sample["t"]
+        summary = f"Not heard from since {clock_text(since)}."
+        if others_down and thread:
+            summary += " Your other Thread devices do not answer either: most likely the border router or the Thread network, not this device."
+        elif last_ok and all(link["state"] == "ok" for link in links[:-1]):
+            summary += (" The last time it answered, its network was fine: most likely it has no power"
+                        + (", or the border router is down." if thread else ", or Wi-Fi is down."))
+        state = "bad"
+    else:
+        worst = next((link for level in ("bad", "warn") for link in links if link["state"] == level), None)
+        summary = worst["text"] if worst else (
+            f"Fine now. It was unreachable for {round(gap[1] / 60)} min from {clock_text(gap[0])}." if gap else "All fine.")
+        state = worst["state"] if worst else "ok"
+    return {"summary": summary, "state": state, "links": links, "kind": "thread" if thread else "wifi"}
+
+
+def health_reply(proxy):
+    samples = health_get(proxy["id"])
+    others = [p for p in load_proxies() if p["id"] != proxy["id"]]
+    latest = [health_get(p["id"])[-1:] for p in others]
+    thread_others = [x[0] for x in latest if x and ((x[0].get("net") or {}).get("kind") == "thread" or not x[0].get("ok"))]
+    others_down = bool(thread_others) and all(not x.get("ok") for x in thread_others)
+    return {"samples": [{"t": x["t"], "ok": x.get("ok"), "rtt": x.get("rtt")} for x in samples],
+            "verdict": health_verdict(samples, others_down), "every": HEALTH_EVERY}
+
+
 # ---------------------------------------------------------------- links
 
 def link_start(host, password):
@@ -1817,6 +2030,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                              (query.get("boot") or [""])[0]))
             if parts[3] == "token":
                 return self.reply({"token": proxy["token"]})
+            if parts[3] == "health":
+                return self.reply(health_reply(proxy))
         if len(parts) == 3 and parts[:2] == ["api", "link"]:
             return self.reply(link_poll(parts[2]))
         self.reply({"error": "not found"}, 404)
@@ -1930,6 +2145,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             proxy = find_proxy(parts[2])
             if not proxy:
                 return self.reply({"error": "unknown proxy"}, 404)
+            if parts[3] == "health":  # measure now
+                health_sample(proxy)
+                return self.reply(health_reply(proxy))
             if parts[3] == "auto":
                 remember(proxy, auto_update=bool(data.get("on")))
                 return self.reply({"ok": True, "auto_update": proxy.get("auto_update")})
@@ -1983,6 +2201,7 @@ if __name__ == "__main__":
     discovery.start()
     threading.Thread(target=releases_loop, daemon=True).start()
     threading.Thread(target=night_loop, daemon=True).start()
+    threading.Thread(target=health_loop, daemon=True).start()
     fetch_server = Server(("::", FETCH_PORT), FetchHandler)
     threading.Thread(target=fetch_server.serve_forever, daemon=True).start()
     print(f"Matter Builder on port {PORT}, updates fetched from port {FETCH_PORT}", flush=True)

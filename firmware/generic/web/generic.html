@@ -1114,6 +1114,14 @@ async function loadMatter() {
   $('#pageUrl').textContent = deviceHome;
 }
 
+// How its network is doing (firmware's "net"): Thread role, signal to its
+// parent, a way out through a border router, SRP registration, drops
+const netDetail = n => n.kind === 'thread'
+  ? [n.attached ? (n.role || 'attached') : 'not attached',
+     n.parent && n.parent.rssi !== undefined ? `parent ${n.parent.rssi} dBm` : n.neighbors !== undefined ? `${n.neighbors} neighbours` : '',
+     n.role ? `route ${n.route && n.omr ? '✓' : '✗'} (${n.border_routers} BR)` : '', n.srp ? `SRP ${n.srp}` : '',
+     `drops ${n.detaches}`].filter(Boolean).join(' · ')
+  : [n.attached ? `${n.rssi} dBm` : 'not connected', `drops ${n.disconnects}`].join(' · ');
 // Technical details ("system json"), loaded when opened
 async function loadTech() {
   let s;
@@ -1124,7 +1132,7 @@ async function loadTech() {
   const rows = [
     [t('techFirmware'), `${s.app} ${s.version} · ${s.built}`],
     [t('techChip'), `${chips[s.chip] || s.chip} ${s.revision} · ${s.cores}× ${s.mhz} MHz`],
-    [t('techNetwork'), s.network === 'thread' ? 'Thread' : 'Wi-Fi'],
+    [t('techNetwork'), (s.network === 'thread' ? 'Thread' : 'Wi-Fi') + (s.net ? '\n' + netDetail(s.net) : '')],
     [t('techFlash'), Math.round(s.flash / 1048576) + ' MB'],
     [t('techMac'), s.mac],
     [t('techMemory'), `${kb(s.heap)} · ${kb(s.heap_min)} · ${kb(s.heap_block)}`],

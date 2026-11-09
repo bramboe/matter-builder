@@ -323,6 +323,27 @@ device, or it cannot connect) or for older firmware: roughly 1 KB per
 second, about half an hour for a 2 MB image, with the progress shown in the
 task bar. The device keeps working meanwhile.
 
+## Network health
+
+Every 5 minutes the add-on asks each linked device how its network is
+doing, and keeps a day of the answers. A device's **Network** tab shows where
+a problem is, link by link:
+
+- **Device ↔ Thread mesh** (or **Device ↔ Wi-Fi**): connected or not, its role,
+  the signal to its parent, how often it lost the network or changed parent,
+  busy radio (many retries).
+- **Thread mesh ↔ border router**: whether a border router offers a way to
+  your home network, whether the device is registered with it (SRP, how
+  Matter controllers find it), and how many border routers there are.
+- **Border router ↔ Matter Builder** (or **Wi-Fi ↔ Matter Builder**): how many
+  checks it answered in the last day, how fast, and the longest gap.
+
+On top a summary in plain words, e.g. *Not heard from since 22:42. Your other
+Thread devices do not answer either: most likely the border router or the
+Thread network, not this device.* **Check now** measures at once. The device's
+own page shows the same figures in short under Technical details. Older
+firmware answers without network figures: update it to see them.
+
 ## Without Home Assistant
 
 The same program also runs without Home Assistant, in Docker or with Python

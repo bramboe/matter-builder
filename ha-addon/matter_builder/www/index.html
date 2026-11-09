@@ -154,6 +154,14 @@ textarea.yaml{width:100%;min-height:280px;font:12px/1.5 ui-monospace,Menlo,monos
 .taskbar .bar{min-height:52px}
 .taskbar .progress{width:120px;margin:0}
 .taskbar pre{margin:0 12px 12px;max-width:1176px}
+.health{border-radius:var(--radius);padding:12px 14px;margin:14px 0 6px;background:var(--fill)}
+.health.ok{background:var(--okchip)}.health.warn{background:var(--warnchip)}.health.bad{background:var(--badchip)}
+.hdot{width:10px;height:10px;border-radius:50%;flex:none;background:var(--mute);margin-top:5px}
+.hdot.ok{background:var(--ok)}.hdot.warn{background:var(--warn)}.hdot.bad{background:var(--bad)}
+.hrow{align-items:flex-start}
+.hbars{display:block;width:100%;height:36px;margin-top:6px}
+.hbars .ok{fill:var(--ok)}.hbars .bad{fill:var(--bad)}
+.hscale{display:flex;justify-content:space-between}
 .auth{flex:1;display:flex;align-items:center;justify-content:center;padding:24px 16px}
 .auth .card{width:100%;max-width:380px;padding:24px}
 .auth h2{margin:0 0 4px;font-size:22px;font-weight:400}
@@ -267,8 +275,9 @@ textarea.yaml{width:100%;min-height:280px;font:12px/1.5 ui-monospace,Menlo,monos
   <div class="dlg">
     <div class="dlg-head"><span class="ico" id="dIcon"></span><div class="info"><h2 id="dName"></h2><div class="sub mono" id="dHost"></div></div>
       <span id="dChip"></span><button class="icon" onclick="closeDevice()" aria-label="Close" id="dClose"></button></div>
-    <div class="tabs"><button data-dtab="connections" data-t="configuration"></button><button data-dtab="firmware" data-t="firmware"></button><button data-dtab="info" data-t="info"></button></div>
+    <div class="tabs"><button data-dtab="connections" data-t="configuration"></button><button data-dtab="firmware" data-t="firmware"></button><button data-dtab="network" data-t="networkTab"></button><button data-dtab="info" data-t="info"></button></div>
     <div class="dlg-body">
+      <div id="dNetwork" hidden></div>
       <div id="dConnections">
         <div id="noIo" hidden style="margin-top:14px"></div>
         <div id="ioEditor">
@@ -387,6 +396,9 @@ const TEXT = {
   applyingConfig: 'Applying the configuration…', configOnTrial: s => `The new connections run on trial: keep them within ${s} s, or the device goes back.`,
   configKept: 'Kept. The device is ready.', configFailed: e => `The configuration was not applied: ${e}`,
   emptyTitle: 'Set up your first device',
+  networkTab: 'Network', checkNow: 'Check now', last24: 'Last 24 hours', hAgo: '24 h ago', hNow: 'now',
+  hEvery: (m, last) => `Checked every ${m} minutes${last ? ` · last at ${last}` : ''}`,
+  hHelp: 'Where a problem is: the device and its own network, the way out (on Thread: the border router), or the way from there to Matter Builder.',
   signIn: 'Sign in', signInHelp: 'Matter Builder on its own, without Home Assistant.', password: 'Password', passwordAgain: 'Password again',
   firstTitle: 'Choose a password', firstHelp: 'Matter Builder runs on its own here, so it has a password of its own. Anyone on your network can open this page: this password keeps them out.',
   firstHelpCode: 'Matter Builder runs on its own here, so it has a password of its own. To show that this is your installation, enter the setup code from its log (docker logs matter-builder, or the terminal it runs in).',
@@ -1796,8 +1808,43 @@ function setDtab(name) {
   $('#dConnections').hidden = name !== 'connections';
   $('#dFirmware').hidden = name !== 'firmware';
   $('#dInfo').hidden = name !== 'info';
+  $('#dNetwork').hidden = name !== 'network';
+  if (name === 'network') loadHealth(openId);
 }
 $$('[data-dtab]').forEach(b => { b.onclick = () => { setDtab(b.dataset.dtab); renderDevicePanel(); }; });
+
+// ---------------------------------------------------------------- network health
+// The add-on asks every device how its network is doing every 5 minutes
+// (server.py, "network health"); here per link, with a day of answers
+let health = {id: null, data: null};
+async function loadHealth(id, now) {
+  if (!id) return;
+  if (health.id !== id) health = {id, data: null};
+  drawHealth();
+  try {
+    const data = now ? await api(`api/proxy/${id}/health`, {}) : await api(`api/proxy/${id}/health`);
+    if (health.id === id) { health.data = data; drawHealth(); }
+  } catch (e) {}
+}
+function drawHealth() {
+  const box = $('#dNetwork'), d = health.data;
+  if (!d) { setHtml(box, `<div class="sub" style="margin-top:14px">${t('checking')}</div>`); return; }
+  const v = d.verdict, samples = d.samples || [];
+  const rows = v.links.map(l => `<div class="row hrow"><span class="hdot ${l.state}"></span><div class="label">${esc(l.name)}
+    <div class="sub">${esc(l.text)}${l.note ? ' ' + esc(l.note) : ''}</div></div></div>`).join('');
+  // One bar per check over the last day: green answered, red did not
+  const end = Date.now() / 1000, start = end - 86400, width = 288;
+  const bars = samples.map(x => `<rect class="${x.ok ? 'ok' : 'bad'}" x="${Math.max(0, (x.t - start) / 86400 * width - 0.5).toFixed(1)}" y="${x.ok ? 8 : 0}" width="1" height="${x.ok ? 28 : 36}" rx="0.5"/>`).join('');
+  const last = samples.length ? new Date(samples[samples.length - 1].t * 1000).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : '';
+  setHtml(box, `<div class="health ${v.state}">${esc(v.summary)}</div>
+    <div class="sub" style="margin-bottom:4px">${t('hHelp')}</div>
+    <div>${rows}</div>
+    ${samples.length ? `<h3 style="margin-top:16px">${t('last24')}</h3>
+      <svg class="hbars" viewBox="0 0 ${width} 36" preserveAspectRatio="none" role="img" aria-label="${t('last24')}">${bars}</svg>
+      <div class="hscale sub"><span>${t('hAgo')}</span><span>${t('hNow')}</span></div>` : ''}
+    <div class="actions"><span class="sub">${t('hEvery', Math.round((d.every || 300) / 60), last)}</span><span class="grow"></span>
+      <button onclick="loadHealth('${health.id}', true)">${t('checkNow')}</button></div>`);
+}
 
 function renderDevicePanel() {
   const p = state.proxies.find(x => x.id === openId);

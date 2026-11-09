@@ -21,6 +21,10 @@ component of your own and build it in Home Assistant.
 - **Shows what a device needs.** Every firmware and package states whether
   it needs Thread, Wi-Fi or Bluetooth; the add-on checks it against the board
   before installing.
+- **Network health.** Per device, link by link: its own Thread or Wi-Fi
+  connection, the way out through the border router, and the way to Matter
+  Builder, with a day of history. When a Thread device drops out, it says
+  whether to look at the device or at the border router.
 - **Matter pairing over Bluetooth, optional.** Off by default (it costs about
   30 KB of RAM); devices pair with a code over the network instead.
 - **Components.** A connection type of your own, linked from a GitHub
@@ -201,6 +205,7 @@ before it installs anything.
 | Generic device 0.1.12 (C6 Thread or Wi-Fi, classic ESP32 4 MB), Octo bridge 1.0.22 (released) | Tested on an ESP32-C6: pairing over Bluetooth (stable with two controllers and Bluetooth presence next to it; 174 KB free with pairing on, 199 KB off), components build; the bed bridge added to Home Assistant with both beds, its number of beds changed from the add-on |
 | Add-on 0.26.1 | Devices, Catalog and Configs tabs; visual and YAML editor; settings form per firmware; flashing on the Home Assistant host; adding a device to Home Assistant; updates over Thread when Wi-Fi is out of reach |
 | Matter Builder 0.27.0 on its own | Without Home Assistant (Python on macOS tested: own login, setup code from another computer, sign out, lockout after 5 wrong passwords, discovery); Docker build and start tested in CI |
+| Network health (add-on 0.28.0) | Thread and Wi-Fi diagnosis per link with a day of history; verdicts tested on recorded scenarios, the page against mock devices; the firmware side is in the next release |
 | Catalog | Built nightly on GitHub Pages from repositories with the topic `matter-builder-package` |
 
 ## License

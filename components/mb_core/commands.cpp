@@ -123,6 +123,7 @@ std::string system_json() {
                       ",\"running\":" + slot_json(esp_ota_get_running_partition()) +
                       ",\"other\":" + slot_json(esp_ota_get_next_update_partition(nullptr)) +
                       ",\"nvs_used\":" + std::to_string(nvs.used_entries) + ",\"nvs_total\":" + std::to_string(nvs.total_entries) +
+                      ",\"net\":" + net::health_json() +
                       ",\"network\":\"" +
 #if CONFIG_OPENTHREAD_ENABLED
                       "thread"

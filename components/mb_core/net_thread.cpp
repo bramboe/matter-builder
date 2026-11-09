@@ -14,6 +14,8 @@
 #include <esp_openthread_lock.h>
 #include <lib/support/ThreadOperationalDataset.h>
 #include <openthread/ip6.h>
+#include <openthread/link.h>
+#include <openthread/netdata.h>
 #include <openthread/srp_client.h>
 #include <openthread/thread.h>
 #include <platform/CHIPDeviceLayer.h>
@@ -34,7 +36,32 @@ namespace {
 const char* TAG = "net";
 
 bool attached = false;
+bool started = false;  // net::start() ran: OpenThread is up (not in configuration mode)
 int detaches = 0;
+int64_t last_detach_s = -1;   // uptime of the last detach
+int64_t attached_since_s = -1;
+// The parent (as a child), looked at every 10 s: how often it changed
+otExtAddress parent_address = {};
+bool have_parent = false;
+int parent_changes = 0;
+int64_t last_parent_change_s = -1;
+
+int64_t uptime_s() { return esp_timer_get_time() / 1000000; }
+
+void watch_parent(void*) {
+    if (!esp_openthread_lock_acquire(pdMS_TO_TICKS(200))) return;
+    otInstance* instance = esp_openthread_get_instance();
+    otRouterInfo parent = {};
+    if (otThreadGetDeviceRole(instance) == OT_DEVICE_ROLE_CHILD && otThreadGetParentInfo(instance, &parent) == OT_ERROR_NONE) {
+        if (have_parent && std::memcmp(&parent.mExtAddress, &parent_address, sizeof(parent_address)) != 0) {
+            parent_changes++;
+            last_parent_change_s = uptime_s();
+        }
+        parent_address = parent.mExtAddress;
+        have_parent = true;
+    }
+    esp_openthread_lock_release();
+}
 
 // Not attached by then: the network is wrong or away, so go to
 // configuration mode, where the page can fix it
@@ -63,6 +90,7 @@ void on_attach_limit(void*) {
 
 void on_attached() {
     attached = true;
+    attached_since_s = uptime_s();
     ESP_LOGI(TAG, "Attached to the Thread network");
     http_api::start(mb_core::app().http_token_fallback);
 }
@@ -76,6 +104,7 @@ void on_device_event(const chip::DeviceLayer::ChipDeviceEvent* event, intptr_t) 
     } else if (event->ThreadConnectivityChange.Result == chip::DeviceLayer::kConnectivity_Lost) {
         attached = false;
         detaches++;
+        last_detach_s = uptime_s();
         ESP_LOGW(TAG, "Detached from the Thread network");
     }
 }
@@ -119,6 +148,7 @@ void provision(intptr_t) {
 
 // Call after matter_bridge::start(): the Matter stack has set up OpenThread.
 void start() {
+    started = true;
     chip::DeviceLayer::PlatformMgr().AddEventHandler(on_device_event, 0);
     (void) chip::DeviceLayer::PlatformMgr().ScheduleWork(provision, 0);
     esp_timer_create_args_t timer_args = {};
@@ -127,6 +157,13 @@ void start() {
     esp_timer_handle_t timer = nullptr;
     if (esp_timer_create(&timer_args, &timer) == ESP_OK) {
         esp_timer_start_once(timer, ATTACH_LIMIT_US);
+    }
+    esp_timer_create_args_t watch_args = {};
+    watch_args.callback = watch_parent;
+    watch_args.name = "watch_parent";
+    esp_timer_handle_t watch = nullptr;
+    if (esp_timer_create(&watch_args, &watch) == ESP_OK) {
+        esp_timer_start_periodic(watch, 10 * 1000000LL);
     }
 }
 
@@ -156,6 +193,77 @@ std::string describe() {
         out += "\n";
     }
     return out;
+}
+
+std::string health_json() {
+    std::string out = "{\"kind\":\"thread\",\"attached\":" + std::string(attached ? "true" : "false") +
+                      ",\"detaches\":" + std::to_string(detaches) +
+                      ",\"last_detach\":" + std::to_string(last_detach_s) +
+                      ",\"attached_since\":" + std::to_string(attached_since_s) +
+                      ",\"parent_changes\":" + std::to_string(parent_changes) +
+                      ",\"last_parent_change\":" + std::to_string(last_parent_change_s);
+    if (!started || !esp_openthread_lock_acquire(pdMS_TO_TICKS(1000))) {
+        return out + "}";
+    }
+    otInstance* instance = esp_openthread_get_instance();
+    const otDeviceRole role = otThreadGetDeviceRole(instance);
+    out += std::string(",\"role\":\"") + otThreadDeviceRoleToString(role) + "\"";
+    out += ",\"channel\":" + std::to_string(otLinkGetChannel(instance));
+    // As a child: the signal to its parent (a router or the border router)
+    otRouterInfo parent = {};
+    if (role == OT_DEVICE_ROLE_CHILD && otThreadGetParentInfo(instance, &parent) == OT_ERROR_NONE) {
+        int8_t average = 0, last = 0;
+        out += ",\"parent\":{\"lqi_in\":" + std::to_string(parent.mLinkQualityIn) +
+               ",\"lqi_out\":" + std::to_string(parent.mLinkQualityOut) + ",\"age\":" + std::to_string(parent.mAge);
+        if (otThreadGetParentAverageRssi(instance, &average) == OT_ERROR_NONE) out += ",\"rssi\":" + std::to_string(average);
+        if (otThreadGetParentLastRssi(instance, &last) == OT_ERROR_NONE) out += ",\"rssi_last\":" + std::to_string(last);
+        out += "}";
+    }
+    // As a router: how many neighbours it hears
+    if (role == OT_DEVICE_ROLE_ROUTER || role == OT_DEVICE_ROLE_LEADER) {
+        otNeighborInfoIterator it = OT_NEIGHBOR_INFO_ITERATOR_INIT;
+        otNeighborInfo neighbor;
+        int neighbors = 0;
+        while (otThreadGetNextNeighborInfo(instance, &it, &neighbor) == OT_ERROR_NONE) neighbors++;
+        out += ",\"neighbors\":" + std::to_string(neighbors);
+    }
+    // The way out of the mesh, from the network data the border routers
+    // publish: an on-mesh prefix for addresses on the home network (OMR) and
+    // a route out; each border router counted once
+    uint16_t routers[8] = {};
+    int router_count = 0;
+    auto count_router = [&](uint16_t rloc16) {
+        for (int i = 0; i < router_count; ++i) if (routers[i] == rloc16) return;
+        if (router_count < 8) routers[router_count++] = rloc16;
+    };
+    bool omr = false, route = false;
+    otNetworkDataIterator it = OT_NETWORK_DATA_ITERATOR_INIT;
+    otBorderRouterConfig prefix;
+    while (otNetDataGetNextOnMeshPrefix(instance, &it, &prefix) == OT_ERROR_NONE) {
+        if (prefix.mOnMesh && prefix.mSlaac) { omr = true; count_router(prefix.mRloc16); }
+        if (prefix.mDefaultRoute) { route = true; count_router(prefix.mRloc16); }
+    }
+    it = OT_NETWORK_DATA_ITERATOR_INIT;
+    otExternalRouteConfig external;
+    while (otNetDataGetNextRoute(instance, &it, &external) == OT_ERROR_NONE) {
+        route = true;
+        count_router(external.mRloc16);
+    }
+    out += std::string(",\"omr\":") + (omr ? "true" : "false") + ",\"route\":" + (route ? "true" : "false") +
+           ",\"border_routers\":" + std::to_string(router_count);
+    // Registered with the border router's SRP server: how Matter controllers find it
+    const otSrpClientHostInfo* host = otSrpClientGetHostInfo(instance);
+    out += std::string(",\"srp\":\"") +
+           (otSrpClientIsRunning(instance) && host != nullptr ? otSrpClientItemStateToString(host->mState) : "Off") + "\"";
+    // Radio counters since boot: retries and failures say how busy or bad the air is
+    const otMacCounters* mac = otLinkGetCounters(instance);
+    if (mac != nullptr) {
+        out += ",\"tx\":" + std::to_string(mac->mTxTotal) + ",\"tx_retry\":" + std::to_string(mac->mTxRetry) +
+               ",\"tx_fail\":" + std::to_string(mac->mTxDirectMaxRetryExpiry + mac->mTxIndirectMaxRetryExpiry) +
+               ",\"tx_cca\":" + std::to_string(mac->mTxErrCca) + ",\"rx\":" + std::to_string(mac->mRxTotal);
+    }
+    esp_openthread_lock_release();
+    return out + "}";
 }
 
 }  // namespace net

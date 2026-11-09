@@ -59,8 +59,10 @@ From then on the add-on keeps it up to date, at night or when you choose.
 
 - **One device, every smart home.** Matter is a standard: the device works in
   Home Assistant, Apple Home and Google Home at the same time.
-- **Works on its own.** Its connections and rules run on the device itself,
-  also when Home Assistant is off or the internet is down.
+- **Fully standalone once installed.** Its connections and rules run on the
+  device itself: it needs no Home Assistant at all, and no internet. Set it up
+  on its own page, pair it straight with Apple Home or Google Home, or use it
+  with nothing else; when Home Assistant is there, it is one more controller.
 - **No code, no toolchain.** You set a device up in a form; firmware comes
   ready-made and signed.
 - **Nothing personal in the firmware.** Passwords and networks are set on the

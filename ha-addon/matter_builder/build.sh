@@ -63,6 +63,13 @@ VERSION=$(sed -n 's/^set(PROJECT_VER "\(.*\)")/\1/p' "$PROJECT_DIR/CMakeLists.tx
 echo "== $TITLE $VERSION for the $CHIP${NETWORK:+ on $NETWORK}"
 # A fresh configuration from the defaults every time, so a new version number
 # or changed default always comes through (the cache keeps this fast)
+# A build folder made with ESP-IDF elsewhere (an older add-on had it in its
+# image) cannot be reused: CMake refuses its cache
+if [ -f "$BUILD/CMakeCache.txt" ] && ! grep -q "$IDF_PATH/" "$BUILD/CMakeCache.txt"; then
+    echo "== Build folder from another ESP-IDF: starting it again"
+    rm -rf "$BUILD"
+    mkdir -p "$BUILD"
+fi
 rm -f "$BUILD/sdkconfig"
 idf.py -C "$PROJECT_DIR" -B "$BUILD" -D SDKCONFIG="$BUILD/sdkconfig" -D IDF_TARGET="$CHIP" \
     ${NETWORK:+-D MB_NETWORK=$NETWORK} build

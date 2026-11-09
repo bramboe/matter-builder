@@ -13,13 +13,18 @@
 [hidden]{display:none!important}
 body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 Roboto,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
 svg{width:24px;height:24px;fill:currentColor;flex:none}
-header{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:12px;min-height:56px;max-width:720px;margin:0 auto;padding:0 4px 0 16px;background:var(--bg)}
+header{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:12px;min-height:56px;max-width:1120px;margin:0 auto;padding:0 4px 0 16px;background:var(--bg)}
 header h1{flex:1;margin:0;font-size:20px;font-weight:400}
 header .sub{font-size:12px}
-main{max-width:720px;margin:0 auto;padding:4px 16px 96px}
+main{max-width:1120px;margin:0 auto;padding:4px 16px 96px}
+/* Two columns on a wide screen: what you use on the left, the device's
+   settings on the right; one column on a phone or a narrow window */
+.cols{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:24px;align-items:start}
+.cols > div{min-width:0}
+@media (max-width:900px){.cols{grid-template-columns:minmax(0,1fr);gap:0}}
 .sub{color:var(--mute)}
 .section{margin:20px 0 8px}
-.section-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 4px 10px}
+.section-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-height:40px;margin:0 4px 10px}
 .section-head h2{margin:0;font-size:20px;font-weight:400}
 .badge{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 12px;border-radius:14px;background:var(--card);border:1px solid var(--line);font-size:12px}
 .badge i{width:8px;height:8px;border-radius:50%;background:var(--bad)}
@@ -176,7 +181,9 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
   </div>
 </div>
 <div id="discovered"></div>
+<div class="cols"><div class="col-main">
 <div id="beds"></div>
+</div><div class="col-side">
 
 <div class="section">
   <div class="section-head"><h2 data-t="settings"></h2></div>
@@ -236,6 +243,7 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
     </div></details>
   </div>
 </div>
+</div></div>
 </div>
 </main>
 <div id="toast"></div>

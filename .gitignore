@@ -29,5 +29,11 @@ firmware/*/main/secrets.h
 dist/
 
 # Firmware sources copied into the add-on by tools/addon_sync.sh
-ha-addon/matter_builder/src/
+# The add-on's copy of the sources: the firmware (developer mode only) is
+# fetched by the add-on when needed; the generator and the examples, which
+# every user needs, are committed (kept equal to the originals by the Build
+# workflow)
+ha-addon/matter_builder/src/components/
+ha-addon/matter_builder/src/firmware/
+ha-addon/matter_builder/src/LICENSE
 __pycache__/

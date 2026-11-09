@@ -1,0 +1,5 @@
+# Home Assistant's own Debian base image for each architecture: glibc, which
+# the ESP32 compilers of developer mode need (they do not run on Alpine)
+build_from:
+  amd64: ghcr.io/home-assistant/amd64-base-debian:bookworm
+  aarch64: ghcr.io/home-assistant/aarch64-base-debian:bookworm

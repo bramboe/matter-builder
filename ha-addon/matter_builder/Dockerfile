@@ -1,14 +1,18 @@
-# ESP-IDF v5.5.5 from Espressif, the same version the firmware is built with
-# (not BUILD_FROM: Home Assistant would put its own base image there)
-FROM espressif/idf:v5.5.5
+# A light image on Home Assistant's Debian base (build.yaml), for amd64 and
+# aarch64: what every user needs to install, link and update devices. The
+# ESP32 build tools (ESP-IDF and esp-matter, several GB) are downloaded into
+# /data by toolchain.sh only when developer mode is turned on.
+ARG BUILD_FROM
+FROM $BUILD_FROM
 
-# What the Matter bootstrap (connectedhomeip) needs to build its Python
-# packages, as listed in its Linux build guide; tzdata gives devices with
-# time rules Home Assistant's time zone, summer time included
+# Python for the add-on; git, cmake, ninja, ccache and the libraries the
+# Matter bootstrap (connectedhomeip) builds its Python packages against, for
+# developer mode; tzdata gives devices with time rules Home Assistant's zone
 RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3 python3-pip python3-venv python3-dev git wget unzip openssl ca-certificates \
+        cmake ninja-build ccache flex bison gperf libusb-1.0-0 \
         build-essential pkg-config libffi-dev libssl-dev libdbus-1-dev libglib2.0-dev \
         libavahi-client-dev libgirepository1.0-dev libcairo2-dev libreadline-dev \
-        python3-dev python3-venv python3-pip unzip openssl \
         tzdata \
     && rm -rf /var/lib/apt/lists/*
 
@@ -16,9 +20,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # esptool for installing over USB on the Home Assistant machine
 RUN python3 -m pip install --no-cache-dir --break-system-packages zeroconf==0.149.16 esptool==4.8.1
 
-# esp-matter at a fixed commit (release/v1.6), downloaded once into /data
-# (±6 GB) by toolchain.sh, together with the Python packages: the IDF
-# Python environment lives there too, so it survives restarts and updates
+# Developer mode's toolchain lives in /data, so it survives restarts and
+# updates: ESP-IDF at the firmware's version, its tools and Python
+# environment, and esp-matter at a fixed commit (release/v1.6)
+ENV ESP_IDF_VERSION=v5.5.5
 ENV ESP_MATTER_COMMIT=fe1efc6cdf62f19b5ca44213900333a6aad7a8b2
 ENV IDF_PYTHON_ENV_PATH=/data/toolchain/python_env
 # Components of configs, fetched from GitHub once per tag or commit
@@ -26,7 +31,7 @@ ENV MB_COMPONENT_CACHE=/data/component-cache
 
 # The firmware sources this version builds (copied in by tools/addon_sync.sh)
 COPY src /opt/octo-matter
-COPY server.py toolchain.sh build.sh release-key.pem /opt/matter-builder/
+COPY server.py toolchain.sh build.sh idf_env.sh release-key.pem /opt/matter-builder/
 COPY www /opt/matter-builder/www
 
 WORKDIR /opt/matter-builder

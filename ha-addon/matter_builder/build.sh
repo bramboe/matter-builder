@@ -16,6 +16,9 @@ set -eo pipefail
 APP="${1:-generic}"
 DATA="${MB_DATA:-/data}"
 SRC="${MB_SRC:-/opt/octo-matter}"
+# An add-on installed from GitHub has only the generator and the examples in
+# the image; toolchain.sh fetched the firmware sources into /data
+[ -d "$SRC/components" ] || SRC="${MB_DATA:-/data}/sources"
 WORK="$DATA/work/octo-matter"
 CHIP="${MB_CHIP:-esp32c6}"
 NETWORK="${MB_NETWORK:-}"
@@ -30,7 +33,8 @@ case "$APP" in
     *) echo "unknown application: $APP"; exit 2 ;;
 esac
 
-. /opt/esp/idf/export.sh > /dev/null
+. "$(dirname "$0")/idf_env.sh"
+. "$IDF_PATH/export.sh" > /dev/null
 . "$DATA/toolchain/esp-matter/export.sh"
 
 # A copy that keeps the image's timestamps, so unchanged files are not rebuilt

@@ -277,12 +277,15 @@ firmware (GET /spec), so adopting the device recovers it.
 
 ## Developer mode
 
-Developer mode builds firmware inside Home Assistant, with fixed versions of
+The add-on runs on amd64 and aarch64 (a Raspberry Pi 4 or 5, Home Assistant
+Green or Yellow). Developer mode builds firmware inside Home Assistant, with fixed versions of
 ESP-IDF (v5.5.5) and esp-matter (release/v1.6):
 
-1. *Install toolchain* downloads esp-matter and the parts of connectedhomeip
-   the ESP32 build needs: about 6 GB, 15 minutes or more. It is not included
-   in backups.
+1. *Install toolchain* downloads ESP-IDF with the ESP32 compilers, esp-matter
+   and the parts of connectedhomeip the build needs, and the firmware sources:
+   about 7 GB, 20 minutes or more. Nothing of it is in the add-on itself, so
+   installing the add-on stays small for everyone who does not build. It is
+   not included in backups.
 2. *Build* compiles the firmware. The first build for a chip takes half an
    hour or more, depending on the processor cores and memory of your host;
    later builds reuse the cache and take minutes.

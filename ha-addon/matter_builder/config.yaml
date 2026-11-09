@@ -1,11 +1,12 @@
 # Matter Builder: builds, links and updates the Matter/Thread proxies
 # (ESP32) of this repo from Home Assistant.
 name: Matter Builder
-version: "0.25.1"
+version: "0.26.0"
 slug: matter_builder
 description: Build, link and update ESP32 Matter/Thread proxies
 arch:
   - amd64
+  - aarch64
 init: false
 startup: application
 boot: auto

@@ -13,10 +13,10 @@
 [hidden]{display:none!important}
 body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 Roboto,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
 svg{width:24px;height:24px;fill:currentColor;flex:none}
-header{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:12px;min-height:56px;padding:0 4px 0 16px;background:var(--bg)}
+header{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:12px;min-height:56px;max-width:720px;margin:0 auto;padding:0 4px 0 16px;background:var(--bg)}
 header h1{flex:1;margin:0;font-size:20px;font-weight:400}
 header .sub{font-size:12px}
-main{max-width:1000px;margin:0 auto;padding:4px 16px 96px}
+main{max-width:720px;margin:0 auto;padding:4px 16px 96px}
 .sub{color:var(--mute)}
 .section{margin:20px 0 8px}
 .section-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 4px 10px}
@@ -76,6 +76,49 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
 .menu button{width:100%;justify-content:flex-start;border-radius:0;background:none;min-height:44px;font-weight:400}
 .field input.saved::placeholder{color:inherit;opacity:1;letter-spacing:2px}
 .passState{color:var(--ok,#2e7d32);font-weight:500}
+/* Lists: connections, rules and settings as rows, each with its own actions */
+.list{background:var(--card);border:1px solid var(--line);border-radius:var(--radius)}
+.lrow{position:relative;display:flex;align-items:center;gap:12px;min-height:60px;padding:8px 8px 8px 12px;border-top:1px solid var(--line)}
+.lrow:first-child{border-top:0}
+.lrow .info{flex:1;min-width:0}
+.lrow .name{font-weight:500}
+.lrow .state{color:var(--mute);font-size:12px}
+.lrow .icon{display:grid;place-items:center;width:36px;height:36px;border-radius:50%;background:var(--chip);color:var(--primary);flex:none}
+.lrow .icon.off{background:var(--fill);color:var(--mute)}
+.lrow .icon svg{width:20px;height:20px}
+.lrow .reading{color:var(--mute);font-size:13px;text-align:right;max-width:40%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lrow .pending{flex:none;font-size:12px;padding:2px 8px;border-radius:10px;background:rgba(255,152,0,.18);color:#b26a00}
+.lrow.empty{color:var(--mute);justify-content:center;text-align:center;padding:20px}
+.section-head .grow{flex:1}
+.section-head button{min-height:36px}
+.switch{appearance:none;-webkit-appearance:none;position:relative;flex:none;width:40px;height:22px;margin:0 4px;border-radius:11px;background:var(--line);cursor:pointer;transition:background .15s}
+.switch::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .15s}
+.switch:checked{background:var(--primary)}
+.switch:checked::after{left:21px}
+.pop{position:absolute;right:8px;top:48px;z-index:4;min-width:180px;background:var(--card);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.25);padding:6px 0;display:none}
+.pop.open{display:block}
+.pop button{width:100%;justify-content:flex-start;border-radius:0;background:none;min-height:42px;font-weight:400}
+.pop button.warn{color:var(--bad)}
+/* Adding and editing in a dialog, full screen on a phone */
+dialog{border:0;padding:0;border-radius:16px;background:var(--card);color:var(--fg);width:min(480px,calc(100% - 32px));max-height:calc(100% - 32px);box-shadow:0 8px 32px rgba(0,0,0,.3)}
+dialog::backdrop{background:rgba(0,0,0,.45)}
+dialog > .card{border:0;padding:16px 20px}
+@media (max-width:600px){dialog{width:100%;max-width:100%;height:100%;max-height:100%;border-radius:0}}
+.typegrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px}
+.typegrid button{flex-direction:column;gap:4px;min-height:72px;padding:8px 4px;border:1px solid var(--line);background:none;font-weight:400;font-size:12px;text-align:center}
+.typegrid button.on{border:2px solid var(--primary);color:var(--primary)}
+.typegrid svg{width:22px;height:22px}
+/* Changes waiting to be applied: a bar that stays in view */
+.applybar{position:sticky;bottom:12px;z-index:1;margin-top:16px;box-shadow:0 4px 16px rgba(0,0,0,.18)}
+/* Settings: one list, each setting opens in place */
+.settings details.set{border-top:1px solid var(--line);margin:0}
+.settings details.set:first-child{border-top:0}
+.settings details.set > summary{gap:12px;padding:0 12px;min-height:56px;font-weight:400}
+.settings details.set > summary .val{margin-left:auto;color:var(--mute);font-size:13px;text-align:right;max-width:55%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.settings details.set > summary::after{margin-left:8px}
+.settings details.set > .body{padding:0 12px 12px}
+.clockline{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:8px 4px 0;font-size:13px;color:var(--mute)}
+.clockline select{font:inherit;background:none;border:1px solid var(--line);border-radius:6px;color:var(--fg);padding:2px 6px}
 #toast{position:fixed;left:50%;bottom:16px;transform:translate(-50%,140px);max-width:calc(100% - 32px);background:#323232;color:#f1f1f1;border-radius:4px;padding:12px 16px;box-shadow:0 3px 6px rgba(0,0,0,.3);transition:transform .2s;white-space:pre-wrap;z-index:3}
 #toast.show{transform:translate(-50%,0)}
 </style>
@@ -87,6 +130,14 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
 <symbol id="i-stop" viewBox="0 0 24 24"><path d="M18,18H6V6H18V18Z"/></symbol>
 <symbol id="i-light" viewBox="0 0 24 24"><path d="M12,2A7,7 0 0,0 5,9C5,11.38 6.19,13.47 8,14.74V17A1,1 0 0,0 9,18H15A1,1 0 0,0 16,17V14.74C17.81,13.47 19,11.38 19,9A7,7 0 0,0 12,2M9,21A1,1 0 0,0 10,22H14A1,1 0 0,0 15,21V20H9V21Z"/></symbol>
 <symbol id="i-bt" viewBox="0 0 24 24"><path d="M14.88,16.29L13,18.17V14.41M13,5.83L14.88,7.71L13,9.58M17.71,7.71L12,2H11V9.58L6.41,5L5,6.41L10.59,12L5,17.58L6.41,19L11,14.41V22H12L17.71,16.29L13.41,12L17.71,7.71Z"/></symbol>
+<symbol id="i-plug" viewBox="0 0 24 24"><path d="M16,7V3H14V7H10V3H8V7C7,7 6,8 6,9V14.5L9.5,18V21H14.5V18L18,14.5V9C18,8 17,7 16,7Z"/></symbol>
+<symbol id="i-button" viewBox="0 0 24 24"><path d="M12,20A8,8 0 0,1 4,12A8,8 0 0,1 12,4A8,8 0 0,1 20,12A8,8 0 0,1 12,20M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,7A5,5 0 0,0 7,12A5,5 0 0,0 12,17A5,5 0 0,0 17,12A5,5 0 0,0 12,7Z"/></symbol>
+<symbol id="i-door" viewBox="0 0 24 24"><path d="M8,3C6.89,3 6,3.89 6,5V21H18V5C18,3.89 17.11,3 16,3H8M8,5H16V19H8V5M13,11V13H15V11H13Z"/></symbol>
+<symbol id="i-motion" viewBox="0 0 24 24"><path d="M13.5,5.5C14.59,5.5 15.5,4.58 15.5,3.5C15.5,2.38 14.59,1.5 13.5,1.5C12.39,1.5 11.5,2.38 11.5,3.5C11.5,4.58 12.39,5.5 13.5,5.5M9.89,19.38L10.89,15L13,17V23H15V15.5L12.89,13.5L13.5,10.5C14.79,12 16.79,13 19,13V11C17.09,11 15.5,10 14.69,8.58L13.69,7C13.29,6.38 12.69,6 12,6C11.69,6 11.5,6.08 11.19,6.08L6,8.28V13H8V9.58L9.79,8.88L8.19,17L3.29,16L2.89,18L9.89,19.38Z"/></symbol>
+<symbol id="i-temp" viewBox="0 0 24 24"><path d="M15 13V5A3 3 0 0 0 9 5V13A5 5 0 1 0 15 13M12 4A1 1 0 0 1 13 5V8H11V5A1 1 0 0 1 12 4Z"/></symbol>
+<symbol id="i-ir" viewBox="0 0 24 24"><path d="M7.05,6.05L8.46,7.46C9.37,6.56 10.62,6 12,6C13.38,6 14.63,6.56 15.54,7.46L16.95,6.05C15.68,4.78 13.93,4 12,4C10.07,4 8.32,4.78 7.05,6.05M12,15A2,2 0 0,1 10,13A2,2 0 0,1 12,11A2,2 0 0,1 14,13A2,2 0 0,1 12,15M15,9H9A1,1 0 0,0 8,10V22A1,1 0 0,0 9,23H15A1,1 0 0,0 16,22V10A1,1 0 0,0 15,9Z"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24"><path d="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z"/></symbol>
+<symbol id="i-rule" viewBox="0 0 24 24"><path d="M7,2V13H10V22L17,10H13L17,2H7Z"/></symbol>
 <symbol id="i-menu" viewBox="0 0 24 24"><path d="M12,16A2,2 0 0,1 14,18A2,2 0 0,1 12,20A2,2 0 0,1 10,18A2,2 0 0,1 12,16M12,10A2,2 0 0,1 14,12A2,2 0 0,1 12,14A2,2 0 0,1 10,12A2,2 0 0,1 12,10M12,4A2,2 0 0,1 14,6A2,2 0 0,1 12,8A2,2 0 0,1 10,6A2,2 0 0,1 12,4Z"/></symbol>
 </svg>
 
@@ -152,24 +203,17 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
   </div>
 </div>
 <div class="section" id="ioSection">
-  <div class="section-head"><h2 data-t="connections"></h2></div>
+  <div class="section-head"><h2 data-t="connections"></h2><span class="grow"></span>
+    <button type="button" id="ioAdd"><svg><use href="#i-plus"/></svg><span data-t="addConnectionShort"></span></button></div>
   <div class="card" id="ioProblem" hidden style="margin-bottom:8px;color:var(--bad)"></div>
-  <div class="card" id="ioTrial" hidden style="margin-bottom:8px">
-    <div id="ioTrialText"></div>
-    <div class="features"><button class="pri" type="button" id="ioConfirm" data-t="keep"></button>
-      <button type="button" id="ioRevert" data-t="undo"></button></div>
-  </div>
-  <div class="card" id="ioChanged" hidden style="margin-bottom:8px">
-    <div data-t="ioChanged"></div>
-    <div class="features"><button class="pri" type="button" id="ioApply" data-t="apply"></button>
-      <button type="button" id="ioCancel" data-t="discard"></button></div>
-  </div>
-  <div class="grid">
-    <div id="ioSlots" style="display:contents"></div>
+  <div class="list" id="ioSlots"></div>
+  <dialog id="ioDlg">
     <div class="card" id="ioFormCard">
       <h3 id="ioFormTitle"></h3>
       <form id="ioForm" class="form" style="grid-template-columns:1fr">
-        <label class="field"><span data-t="ioType"></span><select id="ioType"></select></label>
+        <div class="sub" data-t="ioWhat"></div>
+        <div class="typegrid" id="ioTypes"></div>
+        <select id="ioType" hidden></select>
         <div class="sub" id="ioTypeHelp"></div>
         <label class="field" id="ioPinField"><span id="ioPinLabel"></span><select id="ioPin"></select></label>
         <label class="field" id="ioPin2Field"><span>SCL</span><select id="ioPin2"></select></label>
@@ -177,29 +221,30 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
         <label class="field" id="ioNumberField"><span id="ioNumberLabel"></span><input id="ioNumber" type="number" min="0" max="65535" value="0"></label>
         <label class="field" id="ioCodeField"><span data-t="irCode"></span><input id="ioCode" maxlength="13" placeholder="nec:00FF:A25D" autocomplete="off" spellcheck="false"></label>
         <button type="button" class="text" id="ioUseLast" hidden></button>
+        <details id="ioMore"><summary data-t="moreOptions"></summary><div class="form" style="grid-template-columns:1fr;margin-top:0">
         <label class="field" id="ioPowerField"><span data-t="powerOn"></span><select id="ioPower">
           <option value="off"></option><option value="on"></option><option value="last"></option><option value="toggle"></option></select></label>
         <label class="field" id="ioOffAfterField"><span data-t="offAfter"></span><input id="ioOffAfter" type="number" min="0" max="65535" value="0"></label>
         <label class="field" id="ioControlsField"><span data-t="controls"></span><select id="ioControls"></select></label>
         <div class="sub" id="ioOptionsHelp" data-t="optionsHelp"></div>
         <label class="row" id="ioInvertedRow" style="min-height:40px;border:0"><input type="checkbox" id="ioInverted"><span class="label" data-t="inverted"></span></label>
+        </div></details>
         <label class="field"><span data-t="name"></span><input id="ioName" maxlength="23" autocomplete="off"></label>
-        <div class="features" style="margin-top:0"><button class="pri" type="submit" data-t="save"></button>
-          <button type="button" id="ioFormCancel" data-t="cancel" hidden></button></div>
+        <div class="features" style="margin-top:0"><button type="button" id="ioFormCancel" data-t="cancel"></button>
+          <button class="pri" type="submit" id="ioSave" data-t="save"></button></div>
       </form>
     </div>
-  </div>
+  </dialog>
 </div>
 
 <div class="section" id="rulesSection" hidden>
-  <div class="section-head"><h2 data-t="rules"></h2></div>
+  <div class="section-head"><h2 data-t="rules"></h2><span class="grow"></span>
+    <button type="button" id="ruleAdd"><svg><use href="#i-plus"/></svg><span data-t="addRuleShort"></span></button></div>
   <div class="sub" style="margin:-4px 0 8px" data-t="rulesHelp"></div>
-  <div class="card" id="clockCard" style="margin-bottom:8px">
-    <div class="row" style="border:0;min-height:40px"><span class="label" id="clockText"></span>
-      <select id="clockZone" style="max-width:45%"></select><button type="button" class="text" id="clockSet" data-t="clockSet"></button></div>
-  </div>
-  <div class="grid">
-    <div id="ruleCards" style="display:contents"></div>
+  <div class="list" id="ruleCards"></div>
+  <div class="clockline" id="clockCard"><span id="clockText"></span>
+    <select id="clockZone"></select><button type="button" class="text" id="clockSet" data-t="clockSet" style="min-height:28px;padding:0 6px"></button></div>
+  <dialog id="ruleDlg">
     <div class="card" id="ruleFormCard">
       <h3 id="ruleFormTitle"></h3>
       <form id="ruleForm" class="form" style="grid-template-columns:1fr">
@@ -217,48 +262,18 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
         <div id="ruleSteps"></div>
         <button type="button" class="text" id="ruleAddStep" data-t="addStep" style="justify-self:start"></button>
         <label class="row" style="min-height:40px;border:0"><input type="checkbox" id="ruleMatter"><span class="label" data-t="ruleMatterHelp"></span></label>
-        <div class="features" style="margin-top:0"><button class="pri" type="submit" data-t="save"></button>
-          <button type="button" id="ruleFormCancel" data-t="cancel" hidden></button></div>
+        <div class="features" style="margin-top:0"><button type="button" id="ruleFormCancel" data-t="cancel"></button>
+          <button class="pri" type="submit" data-t="save"></button></div>
       </form>
     </div>
-  </div>
-</div>
-
-<div class="section" id="bleSection" hidden>
-  <div class="section-head"><h2 data-t="bleTitle"></h2></div>
-  <div class="sub" style="margin:-4px 0 8px" data-t="bleHelp"></div>
-  <div class="grid">
-    <div class="card">
-      <h3 data-t="bleDevice"></h3>
-      <form id="bleForm" class="form" style="grid-template-columns:1fr">
-        <label class="field"><span data-t="bleTemplate"></span><select id="bleTemplate"></select></label>
-        <label class="field"><span data-t="mac"></span><input id="bleMac" maxlength="17" placeholder="AA:BB:CC:DD:EE:FF" autocomplete="off" spellcheck="false"></label>
-        <label class="row" style="min-height:36px;border:0"><input type="checkbox" id="bleRandom"><span class="label" data-t="bleRandom"></span></label>
-        <label class="field"><span data-t="bleService"></span><input id="bleService" placeholder="FFE0" autocomplete="off" spellcheck="false"></label>
-        <label class="field"><span data-t="bleChr"></span><input id="bleChr" placeholder="FFE1" autocomplete="off" spellcheck="false"></label>
-        <label class="field"><span data-t="bleWrite"></span><select id="bleWrite"><option value="response"></option><option value="no-response"></option></select></label>
-        <label class="field"><span data-t="bleHello"></span><input id="bleHello" placeholder="4020430004190000000040" autocomplete="off" spellcheck="false"></label>
-        <label class="field" id="blePinField" hidden><span data-t="blePin"></span><input id="blePin" inputmode="numeric" maxlength="4" autocomplete="off"></label>
-        <label class="field"><span data-t="bleIdle"></span><input id="bleIdle" type="number" min="0" max="3600" value="30"></label>
-        <div class="sub" id="bleState"></div>
-        <div class="features" style="margin-top:0"><button class="pri" type="submit" data-t="save"></button>
-          <button type="button" id="bleDisconnect" data-t="bleDisconnectBtn"></button></div>
-      </form>
-    </div>
-    <div class="card">
-      <h3 data-t="bleCommands"></h3>
-      <div class="sub" data-t="bleCommandsHelp"></div>
-      <div id="bleRows"></div>
-      <button type="button" class="text" id="bleAdd" data-t="bleAdd" style="justify-self:start;margin-top:8px"></button>
-    </div>
-  </div>
+  </dialog>
 </div>
 
 <div class="section">
   <div class="section-head"><h2 data-t="settings"></h2></div>
-  <div class="grid">
-    <div class="card" id="matterCard">
-      <h3>Matter</h3>
+  <div class="list settings">
+    <details class="set" id="matterCard">
+      <summary><span>Matter</span><span class="val"></span></summary><div class="body">
       <div class="sub" id="pairLater" data-t="pairLater" hidden></div>
       <div id="pairing" hidden>
       <div class="qrwrap"><div id="qr"></div>
@@ -276,9 +291,9 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
         <div class="row"><div class="label"><span data-t="vidPid"></span><div class="sub" data-t="testIds"></div></div><div id="ids" class="sub">–</div></div>
         <pre id="network"></pre>
       </details>
-    </div>
-    <div class="card" id="cfgCard">
-      <h3 id="cfgCardTitle"></h3>
+    </div></details>
+    <details class="set" id="cfgCard">
+      <summary><span id="cfgCardTitle"></span><span class="val"></span></summary><div class="body">
       <div class="sub" id="cfgCardHelp" data-t="configHelp"></div>
       <form id="wifiForm" class="form" style="grid-template-columns:1fr">
         <label class="field"><span data-t="wifiNetwork"></span><input id="wifiSsid" autocomplete="off" maxlength="32"></label>
@@ -288,9 +303,38 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
         <div class="features" style="margin-top:0"><button type="submit" data-t="save"></button>
           <button type="button" class="pri" id="cfgStart" data-t="configStart"></button></div>
       </form>
+    </div></details>
+    <details class="set" id="bleSection" hidden>
+      <summary><span data-t="bleTitle"></span><span class="val"></span></summary><div class="body">
+  <div class="sub" style="margin:0 0 8px" data-t="bleHelp"></div>
+  <div class="grid" style="grid-template-columns:1fr">
+    <div class="card" style="border:0;padding:0">
+      <h3 data-t="bleDevice"></h3>
+      <form id="bleForm" class="form" style="grid-template-columns:1fr">
+        <label class="field"><span data-t="bleTemplate"></span><select id="bleTemplate"></select></label>
+        <label class="field"><span data-t="mac"></span><input id="bleMac" maxlength="17" placeholder="AA:BB:CC:DD:EE:FF" autocomplete="off" spellcheck="false"></label>
+        <label class="row" style="min-height:36px;border:0"><input type="checkbox" id="bleRandom"><span class="label" data-t="bleRandom"></span></label>
+        <label class="field"><span data-t="bleService"></span><input id="bleService" placeholder="FFE0" autocomplete="off" spellcheck="false"></label>
+        <label class="field"><span data-t="bleChr"></span><input id="bleChr" placeholder="FFE1" autocomplete="off" spellcheck="false"></label>
+        <label class="field"><span data-t="bleWrite"></span><select id="bleWrite"><option value="response"></option><option value="no-response"></option></select></label>
+        <label class="field"><span data-t="bleHello"></span><input id="bleHello" placeholder="4020430004190000000040" autocomplete="off" spellcheck="false"></label>
+        <label class="field" id="blePinField" hidden><span data-t="blePin"></span><input id="blePin" inputmode="numeric" maxlength="4" autocomplete="off"></label>
+        <label class="field"><span data-t="bleIdle"></span><input id="bleIdle" type="number" min="0" max="3600" value="30"></label>
+        <div class="sub" id="bleState"></div>
+        <div class="features" style="margin-top:0"><button class="pri" type="submit" data-t="save"></button>
+          <button type="button" id="bleDisconnect" data-t="bleDisconnectBtn"></button></div>
+      </form>
     </div>
-    <div class="card" id="threadCard" hidden>
-      <h3 data-t="threadTitle"></h3>
+    <div class="card" style="border:0;padding:0">
+      <h3 data-t="bleCommands"></h3>
+      <div class="sub" data-t="bleCommandsHelp"></div>
+      <div id="bleRows"></div>
+      <button type="button" class="text" id="bleAdd" data-t="bleAdd" style="justify-self:start;margin-top:8px"></button>
+    </div>
+  </div>
+    </div></details>
+    <details class="set" id="threadCard" hidden>
+      <summary><span data-t="threadTitle"></span><span class="val"></span></summary><div class="body">
       <div class="sub" id="threadNow"></div>
       <details id="threadEdit" style="margin-top:8px"><summary data-t="threadChange"></summary>
         <div class="sub" data-t="threadHelp"></div>
@@ -299,30 +343,40 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
           <div class="features" style="margin-top:0"><button class="pri" type="submit" data-t="save"></button></div>
         </form>
       </details>
-    </div>
-    <div class="card" id="accessCard" hidden>
-      <h3 data-t="accessTitle"></h3>
+    </div></details>
+    <details class="set" id="accessCard" hidden>
+      <summary><span data-t="accessTitle"></span><span class="val"></span></summary><div class="body">
       <div class="sub" data-t="accessHelp"></div>
       <div class="sub" id="accessPending" style="margin-top:8px;color:var(--primary)" hidden></div>
       <div id="accessList" style="margin-top:4px"></div>
-    </div>
-    <div class="card">
-      <h3 data-t="deviceNameTitle"></h3>
+    </div></details>
+    <details class="set" id="nameCard">
+      <summary><span data-t="deviceNameTitle"></span><span class="val"></span></summary><div class="body">
       <div class="sub" data-t="deviceNameHelp"></div>
       <form id="nameForm" class="form" style="grid-template-columns:1fr">
         <label class="field"><span data-t="name"></span><input id="deviceName" maxlength="32" autocomplete="off"></label>
         <div class="features" style="margin-top:0"><button type="submit" data-t="save"></button></div>
       </form>
-    </div>
-    <div class="card">
-      <h3 data-t="system"></h3>
+    </div></details>
+    <details class="set" id="systemCard">
+      <summary><span data-t="system"></span><span class="val"></span></summary><div class="body">
       <div class="row"><div class="label"><span data-t="network"></span><div class="sub" id="pageUrl"></div></div><div id="netKind">–</div></div>
       <div class="row"><div class="label" data-t="freeMemory"></div><div id="heap">–</div></div>
       <div class="row"><div class="label" data-t="uptime"></div><div id="uptime">–</div></div>
       <details id="techDetails"><summary data-t="techTitle"></summary><div id="techRows"></div></details>
-    </div>
+    </div></details>
   </div>
 </div>
+  <div class="card applybar" id="ioTrial" hidden>
+    <div id="ioTrialText"></div>
+    <div class="features"><button class="pri" type="button" id="ioConfirm" data-t="keep"></button>
+      <button type="button" id="ioRevert" data-t="undo"></button></div>
+  </div>
+  <div class="card applybar" id="ioChanged" hidden>
+    <div data-t="ioChanged"></div>
+    <div class="features"><button class="pri" type="button" id="ioApply" data-t="apply"></button>
+      <button type="button" id="ioCancel" data-t="discard"></button></div>
+  </div>
 </div>
 </main>
 <div id="toast"></div>
@@ -446,6 +500,11 @@ const TEXT = {
   keep: 'Keep', undo: 'Back now', full: 'All 8 connections are in use.',
   deviceNameTitle: 'Name', deviceNameHelp: 'What Home Assistant and Apple Home call this device. Takes effect after a restart.',
   nameSaved: 'Name saved',
+  addConnectionShort: 'Add connection', addRuleShort: 'Add rule', ioWhat: 'What is connected?', moreOptions: 'More options',
+  more: 'More', emptyConnections: 'Nothing connected yet. Add a relay, LED, button or sensor to get started.',
+  emptyRules: 'No rules yet. A rule makes the device act by itself, also without Home Assistant.',
+  valControllers: n => n === 1 ? '1 controller' : `${n} controllers`, valNotPaired: 'Not paired yet', valPrograms: n => n === 1 ? '1 program' : `${n} programs`,
+  pendingShort: 'Pending', valNoPrograms: 'None', valNotSet: 'Not set', ruleRunNow: 'Run now',
 };
 const t = (key, ...args) => { const v = TEXT[key]; return typeof v === 'function' ? v(...args) : v; };
 
@@ -580,7 +639,11 @@ function roleOf(d) {
 }
 const slotsFor = role => (state ? state.io.draft : []).filter(d => d.type !== 'none' && (!role || roleOf(d) === role));
 const slotName = n => { const d = state && state.io.draft[n]; return d && d.type !== 'none' ? d.name : '#' + n; };
-const fill = (el, items, value) => { el.innerHTML = items.map(([v, label]) => `<option value="${v}">${esc(label)}</option>`).join(''); if (value !== undefined) el.value = String(value); };
+const fill = (el, items, value) => {
+  el.innerHTML = items.map(([v, label]) => `<option value="${v}">${esc(label)}</option>`).join('');
+  if (value !== undefined) el.value = String(value);
+  if (el.selectedIndex < 0 && el.options.length) el.selectedIndex = 0;  // a value that is not (or no longer) there: the first
+};
 
 async function loadRules() {
   try {
@@ -607,20 +670,30 @@ function renderRules() {
     const match = Object.keys(ZONES).find(z => ZONES[z] === c.zone) || (ZONES[here] ? here : 'UTC');
     $('#clockZone').value = ZONES[match] + '|' + match;
   }
-  $('#ruleCards').innerHTML = rulesState.rules.map(r => `<div class="card"><div class="tile"><div class="icon">${icon('bt')}</div>
-      <div class="info"><div class="name">${esc(r.name)}</div><div class="state">${esc(ruleSummary(r))}</div></div></div>
-    <div class="features">
-      <button onclick="ruleToggle(${r.index}, ${!r.enabled})">${r.enabled ? t('ruleOn') : t('ruleOff')}</button>
-      <button onclick="ruleRun(${r.index})">${t('ruleRun')}</button>
-      <button class="text" onclick="ruleEdit(${r.index})">${t('edit')}</button>
-      <button class="warn" onclick="ruleRemove(${r.index})">${t('remove')}</button></div></div>`).join('');
-  const full = rulesState.rules.length >= rulesState.max && ruleEditing === null;
-  $('#ruleForm').hidden = full;
-  $('#ruleFormTitle').textContent = full ? t('rulesFull') : ruleEditing === null ? t('addRule') : t('editRule', (rulesState.rules.find(x => x.index === ruleEditing) || {}).name || '');
-  $('#ruleFormCancel').hidden = ruleEditing === null;
+  if (!document.querySelector('#ruleCards .pop.open')) {
+    $('#ruleCards').innerHTML = rulesState.rules.length ? rulesState.rules.map(r => `<div class="lrow"><div class="icon ${r.enabled ? '' : 'off'}">${icon('rule')}</div>
+        <div class="info"><div class="name">${esc(r.name)}</div><div class="state">${esc(ruleSummary(r))}</div></div>
+        <input type="checkbox" class="switch" aria-label="${esc(r.name)}" ${r.enabled ? 'checked' : ''} onchange="ruleToggle(${r.index}, this.checked)">
+        ${rowMenu([[t('ruleRunNow'), `ruleRun(${r.index})`], [t('edit'), `ruleEdit(${r.index})`], [t('remove'), `ruleRemove(${r.index})`, true]])}</div>`).join('')
+      : `<div class="lrow empty">${esc(t('emptyRules'))}</div>`;
+  }
+  $('#ruleAdd').hidden = rulesState.rules.length >= rulesState.max;
+  if ($('#ruleDlg').open) return;
   if (!$('#ruleWhen').options.length) resetRuleForm();
   updateRuleForm();
 }
+function openRuleDialog() {
+  $('#ruleFormTitle').textContent = ruleEditing === null ? t('addRule') : t('editRule', (rulesState.rules.find(x => x.index === ruleEditing) || {}).name || '');
+  $('#ruleDlg').showModal();
+}
+$('#ruleAdd').onclick = () => {
+  ruleEditing = null;
+  $('#ruleName').value = '';
+  $('#ruleMatter').checked = false;
+  ruleSteps = [];
+  resetRuleForm();
+  openRuleDialog();
+};
 function resetRuleForm() {
   fill($('#ruleWhen'), TRIGGERS.map(k => [k, t('kind_' + k)]), slotsFor('button').length ? 'press' : 'active');
   fill($('#ruleIf'), [['', t('ifNone')], ...CONDS.map(k => [k, t('cond_' + k)])], '');
@@ -683,8 +756,8 @@ function ruleEdit(index) {
   if (r.if && ROLE[r.if.kind]) $('#ruleIfSlot').value = r.if.slot;
   if (r.if) { $('#ruleIfValue').value = r.if.value / 100; $('#ruleIfFrom').value = hm(r.if.value); $('#ruleIfTo').value = hm(r.if.value2); }
   ruleSteps = r.do.map(st => ({...st}));
-  renderRules();
-  $('#ruleFormCard').scrollIntoView({behavior: 'smooth', block: 'center'});
+  updateRuleForm();
+  openRuleDialog();
 }
 async function ruleToggle(index, on) { await run(`rule enable ${index} ${on ? 'on' : 'off'}`); loadRules(); }
 async function ruleRun(index) { const reply = await cmd(`rule run ${index}`); toast(reply.trim() === 'ok' ? t('ruleRan') : reply.trim()); }
@@ -697,7 +770,8 @@ async function ruleRemove(index) {
 $('#ruleWhen').onchange = () => { $('#ruleWhenValue').value = $('#ruleWhen').value === 'press' ? 1 : $('#ruleWhen').value.startsWith('humid') ? 60 : 25; updateRuleForm(); };
 $('#ruleIf').onchange = () => { $('#ruleIfValue').value = $('#ruleIf').value.startsWith('humid') ? 60 : 20; updateRuleForm(); };
 $('#ruleAddStep').onclick = () => { ruleSteps.push({kind: 'wait', target: 0, value: 60}); updateRuleForm(); };
-$('#ruleFormCancel').onclick = () => { ruleEditing = null; resetRuleForm(); renderRules(); };
+$('#ruleFormCancel').onclick = () => $('#ruleDlg').close();
+$('#ruleDlg').addEventListener('close', () => { ruleEditing = null; renderRules(); });
 $('#ruleForm').onsubmit = async e => {
   e.preventDefault();
   const index = ruleEditing !== null ? ruleEditing : [...Array(rulesState.max).keys()].find(i => !rulesState.rules.some(r => r.index === i));
@@ -718,7 +792,7 @@ $('#ruleForm').onsubmit = async e => {
   if (!reply.startsWith('ok')) { toast(reply.trim()); return; }
   toast(reply.trim() === 'ok' ? t('saved') : reply.trim().replace(/^ok: /, ''));
   ruleEditing = null;
-  resetRuleForm();
+  $('#ruleDlg').close();
   loadRules();
 };
 $('#clockSet').onclick = async () => {
@@ -741,18 +815,42 @@ function optionsText(d) {
   return parts.map(p => ' · ' + esc(p)).join('');
 }
 
+// What each type looks like in the list and in the type choice
+const TYPE_ICON = {relay: 'plug', led: 'light', button: 'button', contact: 'door', motion: 'motion', sht4x: 'temp',
+  ir_send: 'ir', ir_receive: 'ir', ble_sensor: 'temp', ble_presence: 'bt', ble_command: 'bt'};
+const typeIcon = type => TYPE_ICON[type] || 'plug';
+const typeTitle = type => driverOf(type) ? driverOf(type).title : t(type);
+const isMomentary = type => type === 'ir_send' || type === 'ble_command';
+
+// A row's ⋮ menu: the less frequent actions, removing last and in red
+function rowMenu(items) {
+  return `<button class="icon-btn" type="button" aria-label="${t('more')}" onclick="togglePop(event, this)">${icon('menu')}</button>
+    <div class="pop">${items.map(([label, call, warn]) => `<button type="button" class="${warn ? 'warn' : ''}" onclick="closePops(); ${call}">${esc(label)}</button>`).join('')}</div>`;
+}
+function togglePop(e, button) {
+  e.stopPropagation();
+  const pop = button.nextElementSibling, open = !pop.classList.contains('open');
+  closePops();
+  pop.classList.toggle('open', open);
+}
+function closePops() { document.querySelectorAll('.pop.open').forEach(p => p.classList.remove('open')); }
+document.addEventListener('click', closePops);
+
 function ioCard(d) {
   const r = state.io.slots[d.index];
   const running = r && r.type === d.type && (isBle(d.type) || r.pin === d.pin);
-  const pins = isBle(d.type) ? d.mac : d.type === 'sht4x' ? `SDA ${d.pin} · SCL ${d.pin2}` : `${t('pin')} ${d.pin}`;
-  return `<div class="card"><div class="tile"><div class="icon">${icon(isOutput(d.type) ? 'light' : 'bt')}</div>
-      <div class="info"><div class="name">${esc(d.name)}</div><div class="state">${driverOf(d.type) ? esc(driverOf(d.type).title) : t(d.type)} · ${pins}${d.inverted ? ' · ⇅' : ''}${optionsText(d)}</div></div>
-      <div class="sub">${esc(liveText(d, r))}</div></div>
-    <div class="features">
-      ${isOutput(d.type) && running ? `<button onclick="ioTest(${d.index}, ${!r.on})">${r.on ? t('testOff') : t('testOn')}</button>` : ''}
-      ${d.type === 'ir_send' && running ? `<button onclick="ioTest(${d.index}, true)">${t('send')}</button>` : ''}
-      <button class="text" onclick="ioEdit(${d.index})">${t('edit')}</button>
-      <button class="warn" onclick="ioRemove(${d.index}, '${quote(d.name)}')">${t('remove')}</button></div></div>`;
+  const pins = isBle(d.type) ? d.mac : d.type === 'sht4x' ? `SDA ${d.pin} · SCL ${d.pin2}`
+    : driverOf(d.type) && driverOf(d.type).pins === 0 ? (d.number ? `#${d.number}` : '') : `${t('pin')} ${d.pin}`;
+  const output = isOutput(d.type) && !isMomentary(d.type);
+  // On/off acts at once: a switch. A momentary one is a button; inputs and sensors show their reading
+  const control = output && running ? `<input type="checkbox" class="switch" aria-label="${esc(d.name)}" ${r.on ? 'checked' : ''} onchange="ioTest(${d.index}, this.checked)">`
+    : isMomentary(d.type) && running ? `<button type="button" class="text" onclick="ioTest(${d.index}, true)">${t('send')}</button>`
+    : !running ? `<span class="pending">${esc(t('pendingShort'))}</span>`
+    : `<span class="reading">${esc(liveText(d, r))}</span>`;
+  const state2 = [typeTitle(d.type), pins].filter(Boolean).join(' · ') + (d.inverted ? ' · ⇅' : '') + optionsText(d);
+  return `<div class="lrow"><div class="icon ${output && running && !r.on ? 'off' : ''}">${icon(typeIcon(d.type))}</div>
+      <div class="info"><div class="name">${esc(d.name)}</div><div class="state">${state2}</div></div>
+      ${control}${rowMenu([[t('edit'), `ioEdit(${d.index})`], [t('remove'), `ioRemove(${d.index}, '${quote(d.name)}')`, true]])}</div>`;
 }
 
 // Pins: the safe ones, minus those other connections of the draft use
@@ -794,6 +892,8 @@ function updateIoForm() {
   fillTypes();
   for (const o of $('#ioType').options) o.textContent = driverOf(o.value) ? driverOf(o.value).title : t(o.value);
   const type = $('#ioType').value;
+  $('#ioTypes').innerHTML = [...$('#ioType').options].map(o => `<button type="button" class="${o.value === type ? 'on' : ''}"
+      onclick="pickType('${o.value}')">${icon(typeIcon(o.value))}<span>${esc(o.textContent)}</span></button>`).join('');
   const d = driverOf(type);
   $('#ioTypeHelp').textContent = d ? '' : t(type + 'Help');
   $('#ioNumberField').hidden = !(d && d.number);
@@ -814,6 +914,7 @@ function updateIoForm() {
   $('#ioControls').innerHTML = `<option value="">${esc(t('controlsNone'))}</option>` +
     targets.map(x => `<option value="${x.index}">${esc(x.name)}</option>`).join('');
   $('#ioControls').value = targets.some(x => String(x.index) === keep) ? keep : '';
+  $('#ioMore').hidden = $('#ioPowerField').hidden && !canControl(type) && $('#ioInvertedRow').hidden;
   const last = state && state.io && state.io.ir_last;
   $('#ioUseLast').hidden = !isIr(type) || !last;
   if (last) $('#ioUseLast').textContent = t('useLast', last);
@@ -827,16 +928,38 @@ function renderIo() {
   $('#ioProblem').textContent = io.problem || '';
   if (io.trial) $('#ioTrialText').textContent = t('trialText', io.trial);
   $('#ioChanged').hidden = !io.changed || !!io.trial;
-  // Keep the form as it is while it is being filled in
-  if ($('#ioFormCard').contains(document.activeElement)) return;
-  $('#ioSlots').innerHTML = io.draft.filter(d => d.type !== 'none').map(ioCard).join('');
-  const full = editing === null && io.draft.every(d => d.type !== 'none');
-  $('#ioForm').hidden = full;
-  $('#ioFormTitle').textContent = full ? t('full') : editing === null ? t('addConnection') : t('editConnection', io.draft[editing].name);
-  $('#ioFormCancel').hidden = editing === null;
+  // Not while a row's menu is open: the click would land on a new row
+  if (!document.querySelector('#ioSlots .pop.open')) {
+    const rows = io.draft.filter(d => d.type !== 'none');
+    $('#ioSlots').innerHTML = rows.length ? rows.map(ioCard).join('') : `<div class="lrow empty">${esc(t('emptyConnections'))}</div>`;
+  }
+  $('#ioAdd').hidden = io.draft.every(d => d.type !== 'none');
+  // Keep the dialog as it is while it is being filled in
+  if ($('#ioDlg').open) return;
   fillPins(true);
   updateIoForm();
 }
+
+function openIoDialog() {
+  $('#ioFormTitle').textContent = editing === null ? t('addConnection') : t('editConnection', state.io.draft[editing].name);
+  $('#ioMore').open = editing !== null && !!(state.io.draft[editing].power !== 'off' || state.io.draft[editing].off_after
+    || state.io.draft[editing].inverted || (state.io.draft[editing].controls !== null && state.io.draft[editing].controls !== undefined));
+  $('#ioDlg').showModal();
+}
+function resetIoForm() {
+  $('#ioName').value = '';
+  $('#ioInverted').checked = false;
+  $('#ioPower').value = 'off';
+  $('#ioOffAfter').value = 0;
+  $('#ioControls').value = '';
+}
+$('#ioAdd').onclick = () => {
+  editing = null;
+  resetIoForm();
+  fillPins(true);
+  updateIoForm();
+  openIoDialog();
+};
 
 function ioEdit(index) {
   editing = index;
@@ -855,8 +978,7 @@ function ioEdit(index) {
   $('#ioPin').value = d.pin;
   if (d.type === 'sht4x') $('#ioPin2').value = d.pin2;
   updateIoForm();
-  renderIo();
-  $('#ioFormCard').scrollIntoView({behavior: 'smooth', block: 'center'});
+  openIoDialog();
 }
 
 async function ioRemove(index, name) {
@@ -872,6 +994,7 @@ async function ioTest(index, on) {
 
 $('#ioType').innerHTML = TYPES.map(type => `<option value="${type}"></option>`).join('');
 $('#ioType').onchange = () => { fillPins(true); updateIoForm(); };
+function pickType(type) { $('#ioType').value = type; fillPins(true); updateIoForm(); }
 $('#ioUseLast').onclick = () => { $('#ioCode').value = state.io.ir_last; };
 $('#blePairing').onchange = async () => {
   const on = $('#blePairing').checked;
@@ -900,15 +1023,12 @@ $('#ioForm').onsubmit = async e => {
   const reply = await cmd(`io set ${index} ${type} ${pins}${inverted ? ' inverted' : ''}${options.map(o => ' ' + o).join('')} ${name}`);
   if (!reply.startsWith('ok')) { toast(reply.trim()); return; }
   editing = null;
-  $('#ioName').value = '';
-  $('#ioInverted').checked = false;
-  $('#ioPower').value = 'off';
-  $('#ioOffAfter').value = 0;
-  $('#ioControls').value = '';
-  document.activeElement.blur();
+  resetIoForm();
+  $('#ioDlg').close();
   refresh();
 };
-$('#ioFormCancel').onclick = () => { editing = null; $('#ioName').value = ''; document.activeElement.blur(); renderIo(); };
+$('#ioFormCancel').onclick = () => $('#ioDlg').close();
+$('#ioDlg').addEventListener('close', () => { editing = null; renderIo(); });
 $('#ioApply').onclick = async () => { await run('io apply'); };
 $('#ioCancel').onclick = async () => { await run('io cancel'); refresh(); };
 $('#ioConfirm').onclick = async () => { await run('io confirm'); refresh(); };
@@ -934,6 +1054,8 @@ async function refresh() {
     const used = state.io.slots.filter(c => c.type !== 'none').length;
     $('#sys').textContent = state.io.name + ' · ' + (used ? t('connectionCount', used) : t('noConnections'));
     $('#deviceName').placeholder = state.io.name;
+    $('#nameCard .val').textContent = state.io.name;
+    $('#systemCard .val').textContent = $('#netKind').textContent;
     $('#heap').textContent = Math.round(state.heap / 1024) + ' KB';
     $('#uptime').textContent = state.uptime < 3600 ? Math.floor(state.uptime / 60) + ' min'
       : Math.floor(state.uptime / 3600) + ' ' + t('hours') + ' ' + Math.floor(state.uptime % 3600 / 60) + ' min';
@@ -960,6 +1082,7 @@ async function loadMatter() {
   try { m = JSON.parse(await cmd('matter json')); } catch (e) { return; }
   finally { loadingMatter = false; }
   matter = m;
+  $('#matterCard .val').textContent = m.config_mode ? '' : m.fabrics.length ? t('valControllers', m.fabrics.length) : t('valNotPaired');
   updatePairing();
   $('#manual').textContent = m.manual.replace(/^(\d{4})(\d{3})(\d{4})$/, '$1-$2-$3') || '–';
   const n = m.qr_size;
@@ -1015,6 +1138,7 @@ async function loadAccess() {
   $('#accessList').innerHTML = access.clients.length ? access.clients.map(c => `<div class="row"><div class="label">${esc(c.name)}</div>
       <button class="warn" onclick="revokeAccess(${c.index}, '${quote(c.name)}')">${t('revoke')}</button></div>`).join('')
     : `<div class="sub" style="margin-top:6px">${t('accessNone')}</div>`;
+  $('#accessCard .val').textContent = access.clients.length ? t('valPrograms', access.clients.length) : t('valNoPrograms');
 }
 async function revokeAccess(index, name) {
   if (!confirm(t('confirmRevoke', name))) return;
@@ -1099,6 +1223,7 @@ async function loadWifi() {
     const key = {password: 'resultPassword', notfound: 'resultNotFound', noconnect: 'resultNoConnect'}[why];
     document.querySelectorAll('.wifiResult').forEach(el => { el.hidden = !key; el.textContent = key ? t(key, code) : ''; });
     wifiInfo = w;
+    $('#cfgCard .val').textContent = w.ssid ? `Wi-Fi “${w.ssid}”` : '–';
     if ((w.network === 'wifi') !== wifiDevice) { wifiDevice = w.network === 'wifi'; showConfigMode(configMode); }
     updateWizard(w);
   } catch (e) {}
@@ -1112,6 +1237,7 @@ async function loadThread() {
   try { th = JSON.parse(await cmd('thread json')); } catch (e) { return; }
   $('#threadCard').hidden = false;
   $('#threadNow').textContent = th.source === 'none' ? t('threadNone') : t('threadNow', th.name, th.channel, th.source);
+  $('#threadCard .val').textContent = th.source === 'none' ? '–' : th.name;
   if (th.source === 'none') $('#threadEdit').open = true;
 }
 $('#threadForm').onsubmit = async e => {
@@ -1279,6 +1405,7 @@ async function loadBle() {
   try { r = JSON.parse(await cmd('bledev json')).bledev; } catch (e) { return; }  // older firmware: no Bluetooth device
   ble = r;
   $('#bleSection').hidden = false;
+  $('#bleSection .val').textContent = r.mac ? (r.connected ? t('bleConnected') : r.mac) : t('valNotSet');
   if (!$('#bleTemplate').options.length) {
     $('#bleTemplate').innerHTML = `<option value="">${esc(t('bleTemplateNone'))}</option>` +
       Object.entries(BLE_TEMPLATES).map(([k, v]) => `<option value="${k}">${esc(v.title)}</option>`).join('');
@@ -1459,7 +1586,7 @@ setInterval(() => { if (!document.hidden && signedIn) loadMatter(); }, 30000);
 setInterval(() => { if (!document.hidden && signedIn && access && access.pending) loadAccess(); }, 3000);
 setInterval(() => { if (!document.hidden && signedIn) loadAccess(); }, 15000);
 // Rules: their on/off and the clock; not while one is being edited
-setInterval(() => { if (!document.hidden && signedIn && ruleEditing === null && !$('#ruleForm').contains(document.activeElement)) loadRules(); }, 20000);
+setInterval(() => { if (!document.hidden && signedIn && !$('#ruleDlg').open) loadRules(); }, 20000);
 </script>
 </body>
 </html>

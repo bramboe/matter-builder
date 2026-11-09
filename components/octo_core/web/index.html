@@ -13,10 +13,10 @@
 [hidden]{display:none!important}
 body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 Roboto,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
 svg{width:24px;height:24px;fill:currentColor;flex:none}
-header{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:12px;min-height:56px;padding:0 4px 0 16px;background:var(--bg)}
+header{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:12px;min-height:56px;max-width:720px;margin:0 auto;padding:0 4px 0 16px;background:var(--bg)}
 header h1{flex:1;margin:0;font-size:20px;font-weight:400}
 header .sub{font-size:12px}
-main{max-width:1000px;margin:0 auto;padding:4px 16px 96px}
+main{max-width:720px;margin:0 auto;padding:4px 16px 96px}
 .sub{color:var(--mute)}
 .section{margin:20px 0 8px}
 .section-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 4px 10px}
@@ -73,6 +73,29 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
 .menu button{width:100%;justify-content:flex-start;border-radius:0;background:none;min-height:44px;font-weight:400}
 .field input.saved::placeholder{color:inherit;opacity:1;letter-spacing:2px}
 .passState{color:var(--ok,#2e7d32);font-weight:500}
+/* Lists: the beds' controls and the settings as rows */
+.list{background:var(--card);border:1px solid var(--line);border-radius:var(--radius)}
+.lrow{position:relative;display:flex;align-items:center;gap:12px;min-height:60px;padding:8px 8px 8px 12px;border-top:1px solid var(--line)}
+.lrow:first-child{border-top:0}
+.lrow .info{flex:1;min-width:0}
+.lrow .name{font-weight:500}
+.lrow .state{color:var(--mute);font-size:12px}
+.lrow .icon{display:grid;place-items:center;width:36px;height:36px;border-radius:50%;background:var(--chip);color:var(--primary);flex:none}
+.lrow .icon.light{background:rgba(255,152,0,.18);color:var(--light)}
+.lrow .icon svg{width:20px;height:20px}
+.seg{display:flex;gap:4px;flex:none}
+.seg button{min-height:36px;min-width:44px;padding:0 10px}
+.seg button svg{width:20px;height:20px}
+.lrow .chips{flex:1;justify-content:flex-end}
+.lrow details{border:0;margin:0;flex:1}
+.lrow details > summary{min-height:44px}
+/* Settings: one list, each setting opens in place */
+.settings details.set{border-top:1px solid var(--line);margin:0}
+.settings details.set:first-child{border-top:0}
+.settings details.set > summary{gap:12px;padding:0 12px;min-height:56px;font-weight:400}
+.settings details.set > summary .val{margin-left:auto;color:var(--mute);font-size:13px;text-align:right;max-width:55%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.settings details.set > summary::after{margin-left:8px}
+.settings details.set > .body{padding:0 12px 12px}
 #toast{position:fixed;left:50%;bottom:16px;transform:translate(-50%,140px);max-width:calc(100% - 32px);background:#323232;color:#f1f1f1;border-radius:4px;padding:12px 16px;box-shadow:0 3px 6px rgba(0,0,0,.3);transition:transform .2s;white-space:pre-wrap;z-index:3}
 #toast.show{transform:translate(-50%,0)}
 </style>
@@ -157,9 +180,9 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
 
 <div class="section">
   <div class="section-head"><h2 data-t="settings"></h2></div>
-  <div class="grid">
-    <div class="card" id="matterCard">
-      <h3>Matter</h3>
+  <div class="list settings">
+    <details class="set" id="matterCard">
+      <summary><span>Matter</span><span class="val"></span></summary><div class="body">
       <div class="sub" id="pairLater" data-t="pairLater" hidden></div>
       <div id="pairing" hidden>
       <div class="qrwrap"><div id="qr"></div>
@@ -174,9 +197,9 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
         <div class="row"><div class="label"><span data-t="vidPid"></span><div class="sub" data-t="testIds"></div></div><div id="ids" class="sub">–</div></div>
         <pre id="network"></pre>
       </details>
-    </div>
-    <div class="card" id="cfgCard">
-      <h3 id="cfgCardTitle"></h3>
+    </div></details>
+    <details class="set" id="cfgCard">
+      <summary><span id="cfgCardTitle"></span><span class="val"></span></summary><div class="body">
       <div class="sub" id="cfgCardHelp" data-t="configHelp"></div>
       <form id="wifiForm" class="form" style="grid-template-columns:1fr">
         <label class="field"><span data-t="wifiNetwork"></span><input id="wifiSsid" autocomplete="off" maxlength="32"></label>
@@ -186,9 +209,9 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
         <div class="features" style="margin-top:0"><button type="submit" data-t="save"></button>
           <button type="button" class="pri" id="cfgStart" data-t="configStart"></button></div>
       </form>
-    </div>
-    <div class="card" id="threadCard" hidden>
-      <h3 data-t="threadTitle"></h3>
+    </div></details>
+    <details class="set" id="threadCard" hidden>
+      <summary><span data-t="threadTitle"></span><span class="val"></span></summary><div class="body">
       <div class="sub" id="threadNow"></div>
       <details id="threadEdit" style="margin-top:8px"><summary data-t="threadChange"></summary>
         <div class="sub" data-t="threadHelp"></div>
@@ -197,20 +220,20 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
           <div class="features" style="margin-top:0"><button class="pri" type="submit" data-t="save"></button></div>
         </form>
       </details>
-    </div>
-    <div class="card" id="accessCard" hidden>
-      <h3 data-t="accessTitle"></h3>
+    </div></details>
+    <details class="set" id="accessCard" hidden>
+      <summary><span data-t="accessTitle"></span><span class="val"></span></summary><div class="body">
       <div class="sub" data-t="accessHelp"></div>
       <div class="sub" id="accessPending" style="margin-top:8px;color:var(--primary)" hidden></div>
       <div id="accessList" style="margin-top:4px"></div>
-    </div>
-    <div class="card">
-      <h3 data-t="system"></h3>
+    </div></details>
+    <details class="set" id="systemCard">
+      <summary><span data-t="system"></span><span class="val"></span></summary><div class="body">
       <div class="row"><div class="label"><span data-t="network"></span><div class="sub" id="pageUrl"></div></div><div id="netKind">–</div></div>
       <div class="row"><div class="label" data-t="freeMemory"></div><div id="heap">–</div></div>
       <div class="row"><div class="label" data-t="uptime"></div><div id="uptime">–</div></div>
       <details id="techDetails"><summary data-t="techTitle"></summary><div id="techRows"></div></details>
-    </div>
+    </div></details>
   </div>
 </div>
 </div>
@@ -517,27 +540,26 @@ async function run(line) {
 // Shown the Home Assistant way: 0 % flat, 100 % fully raised
 const pos = v => typeof v !== 'number' ? '' : v === 0 ? t('flat') : v >= 100 ? t('fullyRaised') : t('raised', v);
 
+// One row per motor: where it is, and up / stop / down
 function motorTile(b, part, label, value) {
   const i = b.index, dis = b.state === 'ready' ? '' : 'disabled';
-  return `<div class="card">
-    <div class="tile"><div class="icon">${icon('bed')}</div>
-      <div class="info"><div class="name">${label}</div><div class="state">${pos(value)}</div></div></div>
-    <div class="features">
-      <button ${dis} title="${t('up')}" onclick="run('move ${i} ${part} up 2')">${icon('up')}</button>
-      <button ${dis} title="${t('stop')}" onclick="run('stop ${i}')">${icon('stop')}</button>
-      <button ${dis} title="${t('down')}" onclick="run('move ${i} ${part} down 2')">${icon('down')}</button>
-    </div></div>`;
+  return `<div class="lrow"><div class="icon">${icon('bed')}</div>
+      <div class="info"><div class="name">${label}</div><div class="state">${pos(value)}</div></div>
+      <div class="seg">
+        <button ${dis} title="${t('up')}" aria-label="${t('up')}" onclick="run('move ${i} ${part} up 2')">${icon('up')}</button>
+        <button ${dis} title="${t('stop')}" aria-label="${t('stop')}" onclick="run('stop ${i}')">${icon('stop')}</button>
+        <button ${dis} title="${t('down')}" aria-label="${t('down')}" onclick="run('move ${i} ${part} down 2')">${icon('down')}</button>
+      </div></div>`;
 }
 
+// The bed does not report its light, so two buttons rather than a switch
+// that could show the wrong state
 function lightTile(b) {
   const i = b.index, dis = b.state === 'ready' ? '' : 'disabled';
-  return `<div class="card">
-    <div class="tile"><div class="icon light">${icon('light')}</div>
-      <div class="info"><div class="name">${t('light')}</div><div class="state">${t('underBed')}</div></div></div>
-    <div class="features">
-      <button ${dis} onclick="run('light ${i} off')">${t('off')}</button>
-      <button ${dis} onclick="run('light ${i} on')">${t('on')}</button>
-    </div></div>`;
+  return `<div class="lrow"><div class="icon light">${icon('light')}</div>
+      <div class="info"><div class="name">${t('light')}</div><div class="state">${t('underBed')}</div></div>
+      <div class="seg"><button ${dis} onclick="run('light ${i} off')">${t('off')}</button>
+        <button ${dis} onclick="run('light ${i} on')">${t('on')}</button></div></div>`;
 }
 
 // Presets come from the bridge ("preset list"); hidden when that fails
@@ -549,13 +571,12 @@ function presetCard(b, p) {
     const s = p.presets[n - 1];
     return `<button ${dis || (s ? '' : 'disabled')} title="${s ? t('headLegs', s.head, s.legs) : t('notSaved')}" onclick="run('preset ${i} ${n}')">${t('preset', n)}</button>`;
   };
-  return `<div class="card">
-    <h3>${t('presets')}</h3>
-    <div class="chips">
+  return `<div class="lrow" style="flex-wrap:wrap"><div class="info" style="flex-basis:100%"><div class="name">${t('presets')}</div></div>
+    <div class="chips" style="justify-content:flex-start">
       <button ${dis} onclick="run('preset ${i} flat')">${t('flat')}</button>${slot(1)}${slot(2)}${slot(3)}
       ${other && other.configured ? `<button ${dis} onclick="run('preset ${i} match')">${t('match', esc(other.name))}</button>` : ''}
     </div>
-    <div class="row" style="margin-top:8px"><div class="label">${t('saveCurrent')}<div class="sub">${t('headLegs', p.head, p.legs)}</div></div>
+    <div class="row" style="flex-basis:100%;min-height:44px"><div class="label">${t('saveCurrent')}<div class="sub">${t('headLegs', p.head, p.legs)}</div></div>
       ${[1, 2, 3].map(n => `<button class="text" onclick="if (confirm('${quote(t('confirmSave', n))}')) run('preset ${i} save ${n}')">${n}</button>`).join('')}
     </div></div>`;
 }
@@ -573,11 +594,9 @@ function calibrationCard(b) {
     </div>`;
   // Keep the panel open across redraws, and open it while measuring
   const open = cal || (document.getElementById('cal' + i) || {}).open ? 'open' : '';
-  return `<div class="card">
-    <h3>${t('calibration')}</h3>
-    <div class="sub">${t('calibrationHelp')}</div>
-    ${cal ? `<div class="measure">${t('measuring', t(cal === 'head' ? 'head' : 'legs').toLowerCase(), b.calibrate_elapsed.toFixed(1))}</div>` : ''}
-    <details id="cal${i}" ${open}><summary>${t('travelsAndMeasure')}</summary>
+  return `<div class="lrow"><details id="cal${i}" ${open}><summary>${t('calibration')}</summary>
+      <div class="sub">${t('calibrationHelp')}</div>
+      ${cal ? `<div class="measure">${t('measuring', t(cal === 'head' ? 'head' : 'legs').toLowerCase(), b.calibrate_elapsed.toFixed(1))}</div>` : ''}
       ${motor('head', t('head'), b.head_travel)}${motor('legs', t('legs'), b.legs_travel)}
     </details></div>`;
 }
@@ -601,7 +620,7 @@ function bedSection(b) {
         <div class="info"><div class="name">${t('waiting')}</div><div class="state">${esc(b.mac)}</div></div></div>
       <div class="sub" style="margin-top:10px">${b.pin_rejects ? t('pinRefused') : t('waitingHelp')}</div>
       ${b.rssi && b.rssi < -88 ? `<div class="sub" style="margin-top:6px;color:var(--bad)">${t('weakSignal')}</div>` : ''}
-    </div></div></div>` : `<div class="grid">
+    </div></div></div>` : `<div class="list">
       ${motorTile(b, 'head', t('head'), p && p.head)}${motorTile(b, 'legs', t('legs'), p && p.legs)}${lightTile(b)}
       ${presetCard(b, p)}${calibrationCard(b)}
     </div></div>`}`;
@@ -708,6 +727,7 @@ async function loadMatter() {
   try { m = JSON.parse(await cmd('matter json')); } catch (e) { return; }
   finally { loadingMatter = false; }
   matter = m;
+  $('#matterCard .val').textContent = m.config_mode ? '' : m.fabrics.length ? '✓ ' + m.fabrics.length : '–';
   updatePairing();
   $('#manual').textContent = m.manual.replace(/^(\d{4})(\d{3})(\d{4})$/, '$1-$2-$3') || '–';
   const n = m.qr_size;
@@ -727,6 +747,7 @@ async function loadMatter() {
   const role = (net.match(/role (\w+)/) || [])[1], rssi = (net.match(/rssi (-?\d+)/) || [])[1];
   $('#netKind').textContent = net.startsWith('thread') ? t('thread') + (role ? ' · ' + role : '')
     : net.startsWith('wifi') ? t('wifi') + (rssi ? ` · ${rssi} dBm` : '') : '–';
+  $('#systemCard .val').textContent = $('#netKind').textContent;
   $('#pageUrl').textContent = deviceHome;
 }
 
@@ -763,6 +784,7 @@ async function loadAccess() {
   $('#accessList').innerHTML = access.clients.length ? access.clients.map(c => `<div class="row"><div class="label">${esc(c.name)}</div>
       <button class="warn" onclick="revokeAccess(${c.index}, '${quote(c.name)}')">${t('revoke')}</button></div>`).join('')
     : `<div class="sub" style="margin-top:6px">${t('accessNone')}</div>`;
+  $('#accessCard .val').textContent = String(access.clients.length);
 }
 async function revokeAccess(index, name) {
   if (!confirm(t('confirmRevoke', name))) return;
@@ -860,6 +882,7 @@ async function loadWifi() {
     const key = {password: 'resultPassword', notfound: 'resultNotFound', noconnect: 'resultNoConnect'}[why];
     document.querySelectorAll('.wifiResult').forEach(el => { el.hidden = !key; el.textContent = key ? t(key, code) : ''; });
     wifiInfo = w;
+    $('#cfgCard .val').textContent = w.ssid ? `Wi-Fi “${w.ssid}”` : '–';
     updateWizard(w);
   } catch (e) {}
 }
@@ -871,6 +894,7 @@ async function loadThread() {
   try { th = JSON.parse(await cmd('thread json')); } catch (e) { return; }
   $('#threadCard').hidden = false;
   $('#threadNow').textContent = th.source === 'none' ? t('threadNone') : t('threadNow', th.name, th.channel, th.source);
+  $('#threadCard .val').textContent = th.source === 'none' ? '–' : th.name;
   if (th.source === 'none') $('#threadEdit').open = true;
 }
 $('#threadForm').onsubmit = async e => {

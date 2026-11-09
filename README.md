@@ -6,11 +6,16 @@ ESP32 devices as standard **Matter** devices, over Thread or Wi-Fi: they work
 in Home Assistant, Apple Home and Google Home at the same time, and keep
 working when Home Assistant is off.
 
-- **Ready-made, signed firmware.** Ordinary users do not build. The standard
-  firmware, the *generic device*, covers relays, LEDs, buttons, contacts,
-  motion and SHT4x sensors on free pins of an ESP32-C6, plus infrared
-  (NEC send and receive) and Bluetooth LE listening (BTHome v2, pvvx and
-  ATC1441 thermometers, presence of a tag).
+It grows with what you want to do: install ready-made firmware and set it up
+in your browser, pick a recipe or package from the catalog, or write a
+component of your own and build it in Home Assistant.
+
+- **Ready-made, signed firmware.** Installed and set up from the browser, no
+  toolchain involved. The standard firmware, the *generic device*, covers
+  relays, LEDs, buttons, contacts, motion and SHT4x sensors on free pins of an
+  ESP32-C6 or a classic ESP32, plus infrared (NEC send and receive) and
+  Bluetooth LE listening (BTHome v2, pvvx and ATC1441 thermometers, presence
+  of a tag).
 - **Shows what a device needs.** Every firmware and package states whether
   it needs Thread, Wi-Fi or Bluetooth; the add-on checks it against the board
   before installing.
@@ -30,11 +35,11 @@ working when Home Assistant is off.
 
 ## Layers
 
-| Layer | What | Needs building |
+| Layer | What | Built by |
 |---|---|---|
-| Standard firmware (`generic`) | General building blocks, configured on the device | No |
-| Packages | Firmware with code of its own (e.g. a Bluetooth protocol), built and signed by its source; the official source has the Octo bed bridge | No, for the user |
-| Developer mode | Your own code, built in Home Assistant | Yes |
+| Standard firmware (`generic`) | General building blocks, configured on the device | The project, released signed |
+| Packages | Firmware with code of its own (e.g. a Bluetooth protocol); the official source has the Octo bed bridge | Its source, released signed |
+| Developer mode | Your own code | You, in Home Assistant |
 
 See [docs/matter-builder-design.md](docs/matter-builder-design.md) for the
 design, including package sources and the catalog.

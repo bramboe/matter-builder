@@ -17,14 +17,25 @@ if [ ! -f "$IDF_PATH/export.sh" ]; then
     git clone -q --depth 1 --branch "${ESP_IDF_VERSION:-v5.5.5}" --recursive --shallow-submodules \
         https://github.com/espressif/esp-idf.git "$IDF_PATH"
 fi
-if [ "$IDF_PATH" != /opt/esp/idf ]; then
-    echo "== ESP-IDF tools ($IDF_TOOLS_PATH)"
-    "$IDF_PATH/install.sh" esp32c6,esp32 > /dev/null
+# A Python environment made by another Python (an older add-on image) cannot
+# be reused: ESP-IDF removes it and then fails on the missing folder
+if [ -x "$IDF_PYTHON_ENV_PATH/bin/python" ] && \
+   [ "$("$IDF_PYTHON_ENV_PATH/bin/python" -c 'import sys; print(sys.version_info[:2])' 2>/dev/null)" != \
+     "$(python3 -c 'import sys; print(sys.version_info[:2])')" ]; then
+    echo "== Python environment from another Python: made again"
+    rm -rf "$IDF_PYTHON_ENV_PATH"
 fi
 
-echo "== ESP-IDF Python environment ($IDF_PYTHON_ENV_PATH)"
-mkdir -p "$IDF_PYTHON_ENV_PATH"
-python3 "$IDF_PATH/tools/idf_tools.py" install-python-env
+if [ "$IDF_PATH" != /opt/esp/idf ]; then
+    # The compilers and the Python environment in one go
+    echo "== ESP-IDF tools ($IDF_TOOLS_PATH) and Python environment ($IDF_PYTHON_ENV_PATH)"
+    mkdir -p "$IDF_PYTHON_ENV_PATH"  # ESP-IDF lists it before it creates it
+    "$IDF_PATH/install.sh" esp32c6,esp32 > /dev/null
+else
+    echo "== ESP-IDF Python environment ($IDF_PYTHON_ENV_PATH)"
+    mkdir -p "$IDF_PYTHON_ENV_PATH"
+    python3 "$IDF_PATH/tools/idf_tools.py" install-python-env
+fi
 
 mkdir -p "$DIR"
 cd "$DIR"

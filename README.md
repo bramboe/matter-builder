@@ -33,6 +33,44 @@ component of your own and build it in Home Assistant.
   press of its BOOT button. Firmware updates are only accepted when they are
   signed; new connections run on trial and are rolled back automatically.
 
+## From a new ESP32 to a working device
+
+1. **Install the add-on.** Add this repository to Home Assistant's app store
+   and install *Matter Builder*.
+2. **Plug in the ESP32.** Over USB, into the Home Assistant machine or the
+   computer you are working on.
+3. **Install the firmware.** In the add-on, *New device*: choose the generic
+   device, and on an ESP32-C6 whether it runs on Thread or Wi-Fi. The add-on
+   checks the chip and its flash, saves a backup and installs the signed
+   firmware.
+4. **Set it up.** The ESP32 opens a Wi-Fi network *Matter-Builder-…*. Join it
+   with your phone; on the page that opens, choose a password and your Wi-Fi
+   (and, for Thread, the Thread network).
+5. **Link it.** In the add-on: the device's address and password, then a short
+   press of its BOOT button.
+6. **Connect things.** Say what is wired to which pin: a relay, an LED, a
+   button, a sensor. It starts on trial; keep it, or it goes back by itself.
+7. **Add it to Home Assistant.** One click. The same device can join Apple
+   Home or Google Home with its pairing code.
+
+From then on the add-on keeps it up to date, at night or when you choose.
+
+### Why this way
+
+- **One device, every smart home.** Matter is a standard: the device works in
+  Home Assistant, Apple Home and Google Home at the same time.
+- **Works on its own.** Its connections and rules run on the device itself,
+  also when Home Assistant is off or the internet is down.
+- **No code, no toolchain.** You set a device up in a form; firmware comes
+  ready-made and signed.
+- **Nothing personal in the firmware.** Passwords and networks are set on the
+  device, so one firmware fits everyone and can be shared.
+- **Safe to change.** New connections run on trial, updates are checked
+  against their signature, and a device that fails to start goes back to its
+  previous firmware.
+- **Thread or Wi-Fi.** Thread for low power and range through a mesh, Wi-Fi
+  when there is no Thread network; on the C6 you choose.
+
 ## Layers
 
 | Layer | What | Built by |

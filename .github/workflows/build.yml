@@ -53,7 +53,10 @@ jobs:
           mkdir -p /tmp/mbdata
           docker run -d --name mb --platform ${{ matrix.platform }} -e MB_ALLOW_ANY=1 -e MB_PORT=8099 -e MB_DATA=/data \
             -v /tmp/mbdata:/data -p 8099:8099 matter-builder:${{ matrix.arch }}
-          for i in $(seq 1 60); do curl -sf -o /dev/null http://127.0.0.1:8099/ && break; sleep 2; done
+          # Emulated aarch64 is slow: give it up to five minutes
+          for i in $(seq 1 150); do curl -sf -o /dev/null http://127.0.0.1:8099/ && break; sleep 2; done
           curl -sf http://127.0.0.1:8099/api/state | python3 -c "import json,sys; s=json.load(sys.stdin); print('add-on up:', s['release'] or 'no release yet', '| toolchain', s['toolchain'])"
           docker exec mb python3 -m esptool version
-          docker logs mb | tail -20
+      - name: Log
+        if: always()
+        run: docker logs mb 2>&1 | tail -40 || true

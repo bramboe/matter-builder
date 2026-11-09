@@ -28,8 +28,7 @@ ESP32 (Wi-Fi); see *Chips and networks*.
   page's requests to the device unchanged. You sign in with the device's own
   password, as on the device itself. *Open on the device* (the ⋮ menu) opens
   the page directly, at the device's fixed `.local` name.
-- **Logs**: the device's log, live, like ESPHome's Logs but without a USB
-  cable. The device keeps its last 16 KB in RAM (from its boot on), and the
+- **Logs**: the device's log, live, without a USB cable. The device keeps its last 16 KB in RAM (from its boot on), and the
   dialog adds new lines every 2 seconds; warnings are orange, errors red.
   *Download* saves what is shown. Chatter (Matter's message-by-message
   lines, the Bluetooth stack's writes) stays on the serial port only.
@@ -152,7 +151,7 @@ connections:
   - { slot: 6, type: ble_presence, mac: "C8:4F:0E:00:11:22", name: Keys }
 ```
 
-- **IR** (NEC codes, written like ESPHome: `nec:<address>:<command>`): an IR
+- **IR** (NEC codes, written `nec:<address>:<command>`): an IR
   LED through a transistor sends a code (a switch that turns itself off), an
   IR receiver turns a code into a button press. Several codes may share one
   LED or receiver; at most two pins of each. To learn a code, point a remote
@@ -177,8 +176,8 @@ typing the name; on Thread the radio pauses for those few seconds.
 
 ## Rules on the device
 
-A generic device runs rules of its own, like HAA's actions or ESPHome's
-automations, but set as data instead of compiled: **when** something happens,
+A generic device runs rules of its own, set as data instead of compiled:
+**when** something happens,
 **only if** something holds, **then** up to six steps. They keep working when
 Home Assistant is off. Set them in the device's *Configuration* (Rules), in
 YAML, or on the device's own page.

@@ -66,8 +66,8 @@ set(EXTRA_COMPONENT_DIRS
 # Shown to controllers as the software version. PROJECT_VER_NUMBER goes into
 # the Matter OTA image header and must equal CONFIG_DEVICE_SOFTWARE_VERSION_NUMBER,
 # the version the device reports: an update is only taken when it is higher.
-set(PROJECT_VER "0.1.10")
-set(PROJECT_VER_NUMBER 110)
+set(PROJECT_VER "0.1.11")
+set(PROJECT_VER_NUMBER 111)
 # Only what main needs: the other components next to mb_core stay out
 set(COMPONENTS main)
 project(${MB_PROJECT})

@@ -1,4 +1,5 @@
 #include "io.h"
+#include "sdkconfig.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -42,9 +43,17 @@ constexpr uint8_t SHT4X_ADDRESS = 0x44;
 constexpr int64_t PRESENCE_US = 60 * 1000 * MS;   // not seen for a minute: away
 constexpr int64_t BLE_CLIMATE_US = 60 * 1000 * MS;  // a thermometer's reading at most every minute
 
+#if CONFIG_IDF_TARGET_ESP32
+// Pins a connection may use on the classic ESP32: not the flash (6-11), the
+// serial console (1, 3), the strapping pins that decide how it boots (0, 12,
+// 15) or the input-only pins (34-39). GPIO 2 is a strapping pin too, but only
+// matters while flashing: it is the on-board LED of most boards.
+constexpr uint8_t SAFE_PINS[] = {2, 4, 5, 13, 14, 16, 17, 18, 19, 21, 22, 23, 25, 26, 27, 32, 33};
+#else
 // Pins a connection may use on the ESP32-C6: not the strapping pins (8, 9,
 // 15), USB (12, 13), the serial console (16, 17) or the flash (24-30)
 constexpr uint8_t SAFE_PINS[] = {0, 1, 2, 3, 4, 5, 6, 7, 10, 11, 18, 19, 20, 21, 22, 23};
+#endif
 
 const char* TYPE_NAMES[] = {"none", "relay", "led", "button", "contact", "motion", "sht4x",
                             "ir_send", "ir_receive", "ble_sensor", "ble_presence"};

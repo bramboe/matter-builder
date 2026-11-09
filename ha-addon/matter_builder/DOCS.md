@@ -74,7 +74,8 @@ Each firmware in a release also has a **factory image** for a new ESP32.
 The ESP32 then opens its setup network, where you choose its password and
 network; link it afterwards, and the wizard continues with its connections.
 Before installing, the wizard checks that the board is the firmware's chip
-and has 8 MB of flash, and says so when it is not.
+and has flash enough (8 MB for the C6, 4 MB for the classic ESP32), and says
+so when it is not.
 
 ## Chips and networks
 
@@ -83,10 +84,10 @@ and has 8 MB of flash, and says so when it is not.
 | ESP32-C6 | Thread or Wi-Fi, chosen in the wizard | `mb_generic` (Thread), `mb_generic_wifi` (Wi-Fi) |
 | Classic ESP32 | Wi-Fi | `mb_generic_esp32` |
 
-Every chip needs **8 MB of flash**: the firmware is about 2.5 MB and an
-update needs room for a second copy. A classic ESP32 module usually says so
-in its name (ESP32-WROOM-32E-**N8**, WROVER-E-N8 or N16); the common 4 MB
-boards cannot be used.
+The flash must hold the firmware twice (an update goes into the second
+copy): the **ESP32-C6 needs 8 MB**, the **classic ESP32 4 MB** (the common
+boards; its firmware is made smaller to fit). The wizard checks it before
+installing.
 
 **Thread** needs a Thread border router (Home Assistant Connect ZBT-1/ZBT-2,
 an Apple TV or HomePod, a Nest Hub). It uses little power, forms a mesh that

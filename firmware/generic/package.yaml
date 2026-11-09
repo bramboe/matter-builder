@@ -9,6 +9,6 @@ description: Relays, LEDs, buttons, contacts, motion and SHT4x sensors, infrared
 # Bluetooth is optional: it starts only for a Bluetooth connection
 requires: []
 # Thread or Wi-Fi on the ESP32-C6 (chosen when installing); Wi-Fi on the
-# classic ESP32. Every chip needs 8 MB of flash.
+# classic ESP32. The C6 needs 8 MB of flash, the classic ESP32 4 MB.
 network: [thread, wifi]
 chips: [esp32c6, esp32]

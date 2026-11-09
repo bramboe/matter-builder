@@ -125,6 +125,7 @@ esp_err_t handle_unknown(httpd_req_t* req, httpd_err_code_t) {
 // manage: no names or settings, those need the password
 esp_err_t handle_info(httpd_req_t* req) {
     const esp_app_desc_t* app = esp_app_get_description();
+    const esp_partition_t* slot = esp_ota_get_next_update_partition(nullptr);
     uint8_t mac[6] = {};
     esp_read_mac(mac, ESP_MAC_BASE);
     char out[256];
@@ -132,15 +133,16 @@ esp_err_t handle_info(httpd_req_t* req) {
     // and sends them straight over Wi-Fi to a Wi-Fi device
     std::snprintf(out, sizeof(out),
                   "{\"kind\":\"matter-builder\",\"app\":\"%s\",\"version\":\"%s\",\"id\":\"%02X%02X%02X%02X%02X%02X\","
-                  "\"spec\":%s,\"chip\":\"%s\",\"network\":\"%s\"}",
+                  "\"spec\":%s,\"chip\":\"%s\",\"network\":\"%s\",\"slot\":%lu}",
                   app->project_name, app->version, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
                   mb_core::app().spec_start != nullptr ? "true" : "false", CONFIG_IDF_TARGET,
 #if CONFIG_OPENTHREAD_ENABLED
-                  "thread"
+                  "thread",
 #else
-                  "wifi"
+                  "wifi",
 #endif
-    );
+                  // The update slot's size: the add-on refuses a larger image before sending it
+                  static_cast<unsigned long>(slot != nullptr ? slot->size : 0));
     httpd_resp_set_type(req, "application/json");
     return httpd_resp_sendstr(req, out);
 }

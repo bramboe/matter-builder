@@ -1,8 +1,18 @@
 # The classic ESP32 (Wi-Fi and Bluetooth, no Thread): Matter over Wi-Fi.
-# It needs 8 MB of flash (an ESP32-WROOM-32E-N8, WROVER-E-N8 and the like):
-# the firmware is about 2.5 MB and an update needs room for two.
+# It fits 4 MB of flash, the common boards: two 1984 KB app slots
+# (partitions_4mb.csv), with the firmware made smaller to fit them.
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=n
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions_4mb.csv"
 CONFIG_BTDM_CTRL_MODE_BLE_ONLY=y
 CONFIG_BTDM_CTRL_MODE_BR_EDR_ONLY=n
 CONFIG_BTDM_CTRL_MODE_BTDM=n
-CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
 CONFIG_BTDM_CTRL_BLE_MAX_CONN=2
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+# Smaller: assertions without their text, error names without the lookup
+# table, the common root certificates (GitHub and the usual sites are in
+# it) instead of all of them, Bluetooth logging only for warnings
+CONFIG_COMPILER_OPTIMIZATION_ASSERTIONS_SILENT=y
+CONFIG_ESP_ERR_TO_NAME_LOOKUP=n
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_CMN=y
+CONFIG_BT_NIMBLE_LOG_LEVEL_WARNING=y

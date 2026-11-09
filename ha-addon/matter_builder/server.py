@@ -639,6 +639,13 @@ def update_proxy(proxy, image):
     # A Wi-Fi device (the classic ESP32, or a C6 set up on Wi-Fi) is on Wi-Fi
     # already: straight to /ota, no detour
     info = device_info(resolve(proxy["host"]) or proxy["host"]) or {}
+    # Firmware 0.1.10 / 1.0.20 on report their update slot: a larger image is
+    # refused here instead of after the whole upload
+    size = image.stat().st_size
+    if info.get("slot") and size > info["slot"]:
+        log(f"!! {image.name} ({size // 1024} KB) is larger than this device's firmware slot "
+            f"({info['slot'] // 1024} KB): this image is not for this board")
+        return False
     if info.get("network") == "wifi":
         status, text = upload_over_thread(proxy, image, wifi=True)
         log(text.strip() or f"HTTP {status}")
@@ -1070,7 +1077,10 @@ def serial_ports():
 
 CHIP_NAMES = {"esp32c6": "ESP32-C6", "esp32h2": "ESP32-H2", "esp32s3": "ESP32-S3", "esp32c3": "ESP32-C3",
               "esp32": "ESP32"}
-MIN_FLASH_MB = 8  # two 3 MB app slots (firmware/generic/partitions_8mb.csv)
+# Flash for two app slots: 3 MB each on the C6 (partitions_8mb.csv), 1984 KB
+# each on the classic ESP32 (partitions_4mb.csv)
+MIN_FLASH_MB = {"esp32": 4}
+DEFAULT_MIN_FLASH_MB = 8
 
 
 def chip_and_network(app):
@@ -1109,16 +1119,18 @@ def check_board(port, chip):
     if name and not same:
         return f"this board is an {name}, the firmware is for the {wanted}: choose the firmware for the {name}"
     size = re.search(r"Detected flash size:\s*(\d+)MB", text)
-    if size and int(size.group(1)) < MIN_FLASH_MB:
-        return (f"this board has {size.group(1)} MB of flash; the firmware needs {MIN_FLASH_MB} MB "
-                "(room for an update next to it): look for an 8 MB or larger module (N8, N16)")
+    need = MIN_FLASH_MB.get(chip, DEFAULT_MIN_FLASH_MB)
+    if size and int(size.group(1)) < need:
+        return (f"this board has {size.group(1)} MB of flash; the firmware needs {need} MB "
+                f"(room for an update next to it): look for a module with {need} MB or more")
     return None
 
 
 def flash_on_host(port, image, backup):
     """A factory image at 0 with esptool, after a backup of the whole flash."""
     chip, _ = chip_and_network(image.name.removesuffix("-factory.bin").rpartition("-")[0])
-    log(f"== Checking the board ({CHIP_NAMES.get(chip, chip)} with {MIN_FLASH_MB} MB of flash needed)")
+    log(f"== Checking the board ({CHIP_NAMES.get(chip, chip)} with "
+        f"{MIN_FLASH_MB.get(chip, DEFAULT_MIN_FLASH_MB)} MB of flash needed)")
     problem = check_board(port, chip)
     if problem:
         log(f"!! {problem}")

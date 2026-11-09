@@ -47,7 +47,7 @@ APPS = {app: folder for app, folder in {"generic": "firmware/generic", "octo_bri
 # What an application needs beyond its connections: the beds take their
 # commands over Bluetooth
 APP_REQUIRES = {"octo_bridge": ["bluetooth"]}
-BOARDS = {"esp32-c6"}
+BOARDS = {"esp32-c6", "esp32"}
 # What a board offers; a config or package may only ask for what its board has.
 # Only the C6 is built for now; the others are here for the add-on's checks.
 BOARD_CAPS = {
@@ -78,7 +78,8 @@ OUTPUT_TYPES = {"relay", "led"}
 CONTROL_TYPES = {"button", "contact", "motion", "ble_presence"}
 IR_CODE = re.compile(r"^nec:[0-9A-Fa-f]{1,4}:[0-9A-Fa-f]{1,4}$")
 MAC = re.compile(r"^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$")
-SAFE_PINS = {0, 1, 2, 3, 4, 5, 6, 7, 10, 11, 18, 19, 20, 21, 22, 23}  # see firmware/generic/main/io.cpp
+SAFE_PINS = {0, 1, 2, 3, 4, 5, 6, 7, 10, 11, 18, 19, 20, 21, 22, 23}  # ESP32-C6, see firmware/generic/main/io.cpp
+SAFE_PINS_ESP32 = {2, 4, 5, 13, 14, 16, 17, 18, 19, 21, 22, 23, 25, 26, 27, 32, 33}  # classic ESP32
 
 
 class SpecError(Exception):
@@ -457,7 +458,7 @@ def check(spec):
         for pin in used:
             # IR codes of the same kind share their LED or receiver
             shared = kind in IR_TYPES and any(x["type"] == kind and x["pin"] == pin for x in clean)
-            if pin not in SAFE_PINS or (pin in pins and not shared):
+            if pin not in (SAFE_PINS_ESP32 if board == "esp32" else SAFE_PINS) or (pin in pins and not shared):
                 raise SpecError(f"connection {slot}: pin {pin} is not usable or already in use")
             pins.add(pin)
         if kind in IR_TYPES and len({x["pin"] for x in clean if x["type"] == kind} | {c.get("pin")}) > 2:

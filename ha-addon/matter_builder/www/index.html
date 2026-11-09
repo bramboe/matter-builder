@@ -448,7 +448,7 @@ const TEXT = {
   backupFirst: 'First save a backup of the whole flash', next: 'Next', back: 'Back', close: 'Close', done: 'Done',
   wInstalling: 'Installing', usbPick: 'Choose the ESP32’s USB port in the browser window.', usbConnecting: 'Connecting…', usbChip: c => `Found: ${c}`,
   wrongChip: (c, want) => `This board is an ${c}; this firmware is for the ${want}. Go back and choose the firmware for the ${c}.`,
-  smallFlash: mb => `This board has ${mb} MB of flash; the firmware needs 8 MB (room for an update next to it). Look for a module with 8 MB or more (N8, N16).`,
+  smallFlash: (mb, need) => `This board has ${mb} MB of flash; the firmware needs ${need} MB (room for an update next to it). Look for a module with ${need} MB or more.`,
   wNetwork: 'Thread or Wi-Fi?', networkHelp: 'The ESP32-C6 can run either. You can change it later by installing the other one over USB.',
   netThread: 'Thread', netThreadHelp: 'Needs a Thread border router (Home Assistant Connect ZBT, Apple TV, Nest Hub). Low power, a mesh that reaches far, no Wi-Fi password on the device. Updates switch to Wi-Fi for a minute when it can reach your Wi-Fi; over Thread alone an update takes about half an hour (fine at night).',
   netWifi: 'Wi-Fi', netWifiHelp: 'Only your Wi-Fi network, no border router. Updates take seconds. Uses more power and needs good Wi-Fi where the device is.',
@@ -2250,7 +2250,8 @@ async function startInstall() {
     if (!same) throw new Error(t('wrongChip', chip.split(' ')[0], label));
     say(t('usbChip', chip));
     const flashMb = parseInt(await loader.detectFlashSize(), 10);
-    if (flashMb && flashMb < 8) throw new Error(t('smallFlash', flashMb));
+    const needMb = want === 'esp32' ? 4 : 8;  // two app slots: 1984 KB each on the classic ESP32, 3 MB on the C6
+    if (flashMb && flashMb < needMb) throw new Error(t('smallFlash', flashMb, needMb));
     if (wiz.backup) {
       const size = loader.flashSizeBytes(flashMb ? `${flashMb}MB` : '8MB');
       const backup = await loader.readFlash(0, size, (_, got) => say(t('usbBackup', Math.round(100 * got / size)), Math.round(100 * got / size)));

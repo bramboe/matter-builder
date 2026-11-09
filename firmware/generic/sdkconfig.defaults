@@ -31,7 +31,7 @@ CONFIG_ESP_MAIN_TASK_STACK_SIZE=6144
 CONFIG_LOG_DEFAULT_LEVEL_INFO=y
 
 # Two 3 MB app slots for updates, a large NVS for Matter and the network:
-# 8 MB of flash on every chip (a 4 MB chip has no room for two images)
+# 8 MB of flash; the classic ESP32 has its own 4 MB table (sdkconfig.defaults.esp32)
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions_8mb.csv"
 CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
@@ -57,8 +57,10 @@ CONFIG_CUSTOM_COMMISSIONABLE_DATA_PROVIDER=y
 # Must equal PROJECT_VER_NUMBER in CMakeLists.txt (checked there)
 CONFIG_DEVICE_SOFTWARE_VERSION_NUMBER=109
 
-# One endpoint per connection (at most 8), plus room for reserving numbers
-CONFIG_ESP_MATTER_MAX_DYNAMIC_ENDPOINT_COUNT=12
+# The root, the aggregator, one endpoint per connection (8) and one per rule
+# (12, a switch in Matter when shown there): 22. With 12, only the first two
+# rules could become a switch
+CONFIG_ESP_MATTER_MAX_DYNAMIC_ENDPOINT_COUNT=22
 
 # Optimise for size, code in flash
 CONFIG_COMPILER_OPTIMIZATION_SIZE=y

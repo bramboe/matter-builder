@@ -55,6 +55,18 @@ component of your own and build it in Home Assistant.
 
 From then on the add-on keeps it up to date, at night or when you choose.
 
+### Supported ESP32s
+
+| Chip | Network | Flash | What you get |
+|---|---|---|---|
+| ESP32-C6 | Thread or Wi-Fi, chosen when installing | 8 MB | Everything: relays, LEDs, buttons, contacts, motion, SHT4x, infrared, Bluetooth thermometers, presence and commands, 12 rules that can be Matter switches, pairing over Bluetooth. The Octo bed bridge runs on it (Thread). |
+| Classic ESP32 | Wi-Fi | 4 MB | Relays, LEDs, buttons, contacts, motion, SHT4x and infrared, and rules (2 of them as Matter switches). No Bluetooth connections: its memory is too small next to Matter. |
+| ESP32-S3, C3, H2 | | | Not yet. |
+
+Updates go over Wi-Fi in a minute or two; a Thread device switches to Wi-Fi
+for that moment when it can reach it, otherwise the update goes over Thread
+(about half an hour, fine at night).
+
 ### Why this way
 
 - **One device, every smart home.** Matter is a standard: the device works in

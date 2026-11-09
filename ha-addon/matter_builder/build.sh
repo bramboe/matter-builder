@@ -65,7 +65,9 @@ echo "== $TITLE $VERSION for the $CHIP${NETWORK:+ on $NETWORK}"
 # or changed default always comes through (the cache keeps this fast)
 # A build folder made with ESP-IDF elsewhere (an older add-on had it in its
 # image) cannot be reused: CMake refuses its cache
-if [ -f "$BUILD/CMakeCache.txt" ] && ! grep -q "$IDF_PATH/" "$BUILD/CMakeCache.txt"; then
+# (the bootloader has a cache of its own, so every cache in the folder counts)
+stale=$(find "$BUILD" -name CMakeCache.txt -exec grep -L "$IDF_PATH/" {} + 2>/dev/null | head -1)
+if [ -n "$stale" ]; then
     echo "== Build folder from another ESP-IDF: starting it again"
     rm -rf "$BUILD"
     mkdir -p "$BUILD"

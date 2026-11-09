@@ -20,6 +20,13 @@
 namespace io {
 
 constexpr int SLOTS = 8;
+// Groups: connections in the same group are one device in Matter (one Apple
+// Home accessory, one Home Assistant device), e.g. a lamp and its button.
+// The group number (1-4, 0 = none) sits in bits 4-6 of a slot's flags.
+constexpr int GROUPS = 4;
+constexpr uint8_t GROUP_SHIFT = 4;
+constexpr uint8_t GROUP_MASK = 0x70;
+inline int group_of(const Slot& s) { return (s.flags & GROUP_MASK) >> GROUP_SHIFT; }
 
 // Slot, Type and the component interface: components/mb_driver
 
@@ -83,15 +90,18 @@ Type type_named(const char* name);
 
 // The device's name, shown by controllers and on the page
 std::string name();
+// A group's name ("io group <g> <name>"); "" when none was given
+std::string group_name(int group);
 
 // The "io" command: json | set <n> <type> <pin> [<pin2>] [inverted] [options] <name> |
 // set <n> ir_send|ir_receive <pin> <code> <name> | set <n> ble_sensor|ble_presence <mac> <name> |
-// clear <n> | test <n> on|off | apply | confirm | revert | cancel
+// clear <n> | test <n> on|off | apply | confirm | revert | cancel | group <g> [<name>]
 // Options: power=off|on|last|toggle and off_after=<seconds> for outputs;
 // controls=<n> for a button (toggles output n), contact, motion or presence
 // (output n follows it; with off_after on the output it goes off that long
 // after the input went inactive). They work on the device itself, without a
-// controller.
+// controller. group=<0-4> puts a connection in a group (0: none); without
+// it a connection keeps the group it had.
 std::string command(const std::vector<std::string>& args);
 
 // The "name" command

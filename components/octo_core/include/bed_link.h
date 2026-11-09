@@ -21,6 +21,10 @@ constexpr int MAX_BEDS = 2;
 // two. Beds above the count stay stored but are not connected. Any task.
 int bed_count();
 bool set_bed_count(int count);
+// Head, legs and light under their bed as one device (Apple Home: one
+// accessory per bed), or each a device of its own. Stored; on by default.
+bool group_parts();
+bool set_group_parts(bool on);
 
 enum class Part { Head, Feet, Both };
 

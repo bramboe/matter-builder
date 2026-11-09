@@ -148,6 +148,12 @@ textarea.yaml{width:100%;min-height:280px;font:12px/1.5 ui-monospace,Menlo,monos
 .chev{width:8px;height:8px;border-right:2px solid var(--mute);border-bottom:2px solid var(--mute);transform:rotate(45deg);margin:0 8px 4px 2px;transition:transform .2s;flex:none}
 .ed-item.open .chev{transform:rotate(-135deg);margin-bottom:0}
 .ed-section{display:flex;align-items:baseline;gap:8px;margin:16px 2px 8px}
+.ed-group{border:1.5px dashed var(--line);border-radius:var(--radius);padding:8px 8px 0;margin-bottom:10px;transition:border-color .15s,background .15s}
+.ed-group.over{border-color:var(--primary);background:var(--chip)}
+.ed-group-head{display:flex;align-items:center;gap:8px;margin:0 2px 8px}
+.ed-group-head input{flex:1;min-width:0;font:inherit;font-weight:500;border:0;border-bottom:1px solid var(--line);background:none;color:var(--fg);padding:4px 2px}
+.ed-drop{display:flex;align-items:center;justify-content:center;min-height:44px;margin-bottom:8px;color:var(--mute);font-size:13px;text-align:center}
+.ed-item[draggable=true] .ed-item-head{cursor:grab}
 .ed-add{width:100%;justify-content:flex-start;background:none;border:1.5px dashed var(--line);border-radius:var(--radius);min-height:48px;color:var(--primary)}
 .ed-add:hover{border-color:var(--primary)}
 .taskbar{position:sticky;bottom:0;z-index:4;background:var(--card);border-top:1px solid var(--line);box-shadow:0 -2px 8px rgba(0,0,0,.06)}
@@ -396,6 +402,11 @@ const TEXT = {
   applyingConfig: 'Applying the configuration…', configOnTrial: s => `The new connections run on trial: keep them within ${s} s, or the device goes back.`,
   configKept: 'Kept. The device is ready.', configFailed: e => `The configuration was not applied: ${e}`,
   emptyTitle: 'Set up your first device',
+  groupsTooOld: v => `Groups need generic firmware ${v} or newer: update the device first (Firmware tab).`,
+  groups: 'Groups', groupsHelp: 'Connections in one group are one device: one accessory in Apple Home (with its parts), one device in Home Assistant. Drag them between groups, or use ⋮ → Move to.',
+  groupsOffConfirm: 'Turn groups off? Every connection becomes a device of its own again.', groupN: n => `Group ${n}`, groupName: 'Group name',
+  groupHelpShort: 'one device', notGrouped: 'Not in a group', dropHere: 'Drag connections here', dropNewGroup: 'Drag here for a new group',
+  moveTo: g => `Move to “${g}”`, moveToNew: 'Move to a new group', moveOut: 'Take out of the group', groupExists: g => `There is already a group “${g}”.`,
   networkTab: 'Network', checkNow: 'Check now', last24: 'Last 24 hours', hAgo: '24 h ago', hNow: 'now',
   hEvery: (m, last) => `Checked every ${m} minutes${last ? ` · last at ${last}` : ''}`,
   hHelp: 'Where a problem is: the device and its own network, the way out (on Thread: the border router), or the way from there to Matter Builder.',
@@ -561,6 +572,7 @@ const ICON = {
   bed: 'M19 7h-8v7H3V5H1v15h2v-3h18v3h2v-9a4 4 0 0 0-4-4M7 13a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3',
   chip: 'M6 4h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2m1 3v10h10V7H7m3 3h4v4h-4v-4M8 1h2v2H8V1m3 0h2v2h-2V1m3 0h2v2h-2V1M8 21h2v2H8v-2m3 0h2v2h-2v-2m3 0h2v2h-2v-2M1 8h2v2H1V8m0 3h2v2H1v-2m0 3h2v2H1v-2m20-6h2v2h-2V8m0 3h2v2h-2v-2m0 3h2v2h-2v-2',
   plus: 'M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z',
+  group: 'M3 3h8v8H3V3m2 2v4h4V5H5m8-2h8v8h-8V3m2 2v4h4V5h-4M3 13h8v8H3v-8m2 2v4h4v-4H5m8-2h8v8h-8v-8m2 2v4h4v-4h-4Z',
   close: 'M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z',
   dots: 'M12,16A2,2 0 0,1 14,18A2,2 0 0,1 12,20A2,2 0 0,1 10,18A2,2 0 0,1 12,16M12,10A2,2 0 0,1 14,12A2,2 0 0,1 12,14A2,2 0 0,1 10,12A2,2 0 0,1 12,10M12,4A2,2 0 0,1 14,6A2,2 0 0,1 12,8A2,2 0 0,1 10,6A2,2 0 0,1 12,4Z',
   download: 'M5,20H19V18H5M19,9H15V3H9V9H5L12,16L19,9Z',
@@ -703,6 +715,7 @@ function missingType(rows, drivers) {
 
 // IR and Bluetooth connections need generic firmware 0.1.3 or newer
 const MIN_NEW_TYPES = '0.1.3';
+const GROUPS_MAX = 4;
 // The generic firmware, on any chip or network (mb_generic, mb_generic_wifi, mb_generic_esp32, …)
 const isGenericApp = app => /^mb_generic(_[a-z0-9]+)?$/.test(app || '');
 const baseApp = app => isGenericApp(app) ? 'mb_generic' : app;
@@ -783,7 +796,7 @@ const isOutputType = type => type === 'relay' || type === 'led';
 // types here, component types by what they are in Matter
 const optOutput = (type, d) => isOutputType(type) || (d && ['on_off', 'dimmable'].includes(d.matter));
 const optControl = (type, d) => ['button', 'contact', 'motion', 'ble_presence'].includes(type) || (d && ['button', 'contact', 'occupancy'].includes(d.matter));
-const ROW_OPTIONS = {power: 'off', off_after: 0, controls: null};
+const ROW_OPTIONS = {power: 'off', off_after: 0, controls: null, group: ''};
 const EDITORS = {};
 let editorPref = 'visual';
 try { editorPref = localStorage.getItem('mbEditor') === 'yaml' ? 'yaml' : 'visual'; } catch (e) {}
@@ -862,6 +875,7 @@ class ConfigEditor {
     this.picking = false; this.live = null; this.tester = null; this.onChange = null;
     this.components = []; this.drivers = [];  // component types: from the config, or from the device
     this.rules = []; this.ruleOpen = new Set(); this.rulesSupported = true; this.clock = null;
+    this.grouping = false;  // the Groups switch: connections shown and moved by group
     EDITORS[id] = this;
   }
   get ref() { return `EDITORS['${this.id}']`; }
@@ -875,12 +889,13 @@ class ConfigEditor {
     this.name = name; this.rows = rows.map(r => ({...r})); if (pins) this.pins = pins;
     this.rules = JSON.parse(JSON.stringify(rules || [])); this.ruleOpen.clear();
     this.yaml = specYaml(name, this.rows, this.components, this.drivers, this.rules); this.error = ''; this.open.clear(); this.cardYaml = {}; this.picking = false;
+    this.grouping = this.rows.some(r => r.group);
     this.render();
   }
   // A YAML text (a config or recipe): shown as it is in the YAML mode
   async loadText(text) {
     this.yaml = text; this.cardYaml = {}; this.open.clear();
-    try { const s = await parseSpec(text); this.name = s.name; this.rows = s.rows; this.components = s.components; this.drivers = s.drivers; this.rules = s.rules; this.error = ''; }
+    try { const s = await parseSpec(text); this.name = s.name; this.rows = s.rows; this.components = s.components; this.drivers = s.drivers; this.rules = s.rules; this.error = ''; this.grouping = this.grouping || this.rows.some(r => r.group); }
     catch (e) { this.error = t('yamlError', e.message); this.mode = 'yaml'; }
     this.changed();
   }
@@ -1086,6 +1101,52 @@ class ConfigEditor {
     this.changed();
   }
   setQuiet(slot, key, value) { this.row(slot)[key] = value; this.changed(false); }
+  // Groups: connections in one group are one device in Matter (Apple Home: one
+  // accessory with its parts; Home Assistant: one device)
+  setGrouping(on) {
+    if (!on && this.rows.some(r => r.group) && !confirm(t('groupsOffConfirm'))) { this.render(); return; }
+    this.grouping = on;
+    if (!on) this.rows.forEach(r => { r.group = ''; });
+    this.changed();
+  }
+  newGroupName() {
+    const names = groupNames(this.rows);
+    for (let n = 1; ; n++) if (!names.includes(t('groupN', n))) return t('groupN', n);
+  }
+  moveTo(slot, group) {
+    if (group === null) group = this.newGroupName();
+    if (group && !groupNames(this.rows).includes(group) && groupNames(this.rows).length >= GROUPS_MAX) return;
+    this.row(slot).group = group;
+    this.changed();
+  }
+  renameGroup(from, to) {
+    to = to.trim().replace(/["\\]/g, '').slice(0, 23);
+    if (!to || to === from) { this.render(); return; }
+    if (groupNames(this.rows).includes(to)) { alert(t('groupExists', to)); this.render(); return; }
+    this.rows.forEach(r => { if (r.group === from) r.group = to; });
+    this.changed();
+  }
+  dragOver(e, el) { e.preventDefault(); el.classList.add('over'); }
+  drop(e, el, group) {
+    e.preventDefault(); el.classList.remove('over');
+    const slot = parseInt(e.dataTransfer.getData('text/plain'), 10);
+    if (Number.isInteger(slot) && this.row(slot)) this.moveTo(slot, group);
+  }
+  // The connections of the section: by group when grouping, else all of them
+  groupedCards() {
+    const ref = this.ref, names = groupNames(this.rows), zone = (group, inner, extra = '') =>
+      `<div class="ed-group" ${extra} ondragover="${ref}.dragOver(event, this)" ondragleave="this.classList.remove('over')" ondrop="${ref}.drop(event, this, ${group === null ? 'null' : `'${esc(group)}'`})">${inner}</div>`;
+    const groups = names.map(g => zone(g, `<div class="ed-group-head"><span class="ico">${icon('group')}</span>
+        <input value="${esc(g)}" maxlength="23" aria-label="${t('groupName')}" onchange="${ref}.renameGroup('${esc(g)}', this.value)">
+        <span class="sub">${t('groupHelpShort')}</span></div>
+        ${this.rows.filter(r => r.group === g).map(r => this.card(r)).join('')}
+        <div class="ed-drop">${t('dropHere')}</div>`)).join('');
+    const loose = this.rows.filter(r => !r.group);
+    return groups
+      + zone('', `<div class="ed-group-head"><b style="font-weight:500;flex:1">${t('notGrouped')}</b></div>
+          ${loose.map(r => this.card(r)).join('')}${loose.length ? '' : `<div class="ed-drop">${t('dropHere')}</div>`}`)
+      + (names.length < GROUPS_MAX ? zone(null, `<div class="ed-drop">${icon('plus')}&nbsp;${t('dropNewGroup')}</div>`) : '');
+  }
   setName(value) { this.name = value; this.changed(false); }
   setYaml(value) { this.yaml = value; this.changed(false); }
   toggle(slot) { this.open.has(slot) ? this.open.delete(slot) : this.open.add(slot); this.render(); }
@@ -1196,7 +1257,11 @@ class ConfigEditor {
         ${isIr(r.type) && this.irLast !== undefined ? (this.irLast ? `<div class="actions" style="margin-top:6px"><button class="text" onclick="${ref}.set(${r.slot}, 'code', '${esc(this.irLast)}')">${esc(t('useLastCode', this.irLast))}</button></div>`
           : `<div class="sub" style="margin-top:6px">${t('noLastCode')}</div>`) : ''}
         ${r.type !== 'sht4x' && !isIr(r.type) && !isBle(r.type) ? `<label class="switch" style="margin-top:10px"><input type="checkbox" ${r.inverted ? 'checked' : ''} onchange="${ref}.set(${r.slot}, 'inverted', this.checked)"><span class="sub">${t('invertedHelp')}</span></label>` : ''}`;
-    return `<div class="ed-item ${open ? 'open' : ''}">
+    const names = groupNames(this.rows);
+    const moves = !this.grouping ? '' : names.filter(g => g !== r.group).map(g => `<button onclick="${ref}.moveTo(${r.slot}, '${esc(g)}')">${esc(t('moveTo', g))}</button>`).join('')
+      + (names.length < GROUPS_MAX ? `<button onclick="${ref}.moveTo(${r.slot}, null)">${t('moveToNew')}</button>` : '')
+      + (r.group ? `<button onclick="${ref}.moveTo(${r.slot}, '')">${t('moveOut')}</button>` : '');
+    return `<div class="ed-item ${open ? 'open' : ''}" ${this.grouping ? `draggable="true" ondragstart="event.dataTransfer.setData('text/plain', '${r.slot}'); event.dataTransfer.effectAllowed = 'move'"` : ''}>
       <div class="ed-item-head" onclick="if (!event.target.closest('details,button')) ${ref}.toggle(${r.slot})">
         <span class="ico">${typeIcon(r.type, this.driver(r.type))}</span>
         <div class="info"><b>${esc(r.name || this.title(r.type))}</b><div class="sub">${esc(this.title(r.type))} · ${pins}${r.inverted ? ' · ' + t('invertedShort') : ''}${esc(this.optionsText(r))}</div></div>
@@ -1204,6 +1269,7 @@ class ConfigEditor {
         ${canTest ? (r.type === 'ir_send' ? `<button class="plain" onclick="${ref}.tester(${r.slot}, true)">${t('liveSend')}</button>`
           : `<button class="plain" onclick="${ref}.tester(${r.slot}, ${!l.on})">${l.on ? t('liveTurnOff') : t('liveTurnOn')}</button>`) : ''}
         <details class="more"><summary aria-label="${t('more')}">${icon('dots')}</summary><div class="pop" style="bottom:auto;top:40px">
+          ${moves}
           <button onclick="${ref}.duplicate(${r.slot})" ${this.rows.length >= 8 ? 'disabled' : ''}>${t('duplicate')}</button>
           <button onclick="${ref}.editCardYaml(${r.slot})">${t('editInYaml')}</button>
           <button class="warn" onclick="${ref}.remove(${r.slot})">${t('remove')}</button></div></details>
@@ -1233,8 +1299,11 @@ class ConfigEditor {
       ${this.components.length ? `<div class="ed-section"><h3>${t('components')}</h3></div>
         <div class="sub" style="margin:-4px 2px 6px">${t('componentsHelp')}</div>
         ${this.components.map(c => `<div class="row"><div class="label mono">${esc(c.source)}</div></div>`).join('')}` : ''}
-      <div class="ed-section"><h3>${t('connections')}</h3><span class="sub">${t('ofEight', this.rows.length)}</span></div>
-      ${this.rows.length ? this.rows.map(r => this.card(r)).join('') : `<div class="sub" style="margin:4px 2px 8px">${t('nothingConnected')}</div>`}
+      <div class="ed-section"><h3>${t('connections')}</h3><span class="sub">${t('ofEight', this.rows.length)}</span><span class="grow"></span>
+        ${this.rows.length > 1 || this.grouping ? `<label class="switch" title="${esc(t('groupsHelp'))}"><input type="checkbox" ${this.grouping ? 'checked' : ''} onchange="${ref}.setGrouping(this.checked)"><span class="sub">${t('groups')}</span></label>` : ''}</div>
+      ${this.grouping ? `<div class="sub" style="margin:-4px 2px 8px">${t('groupsHelp')}</div>` : ''}
+      ${!this.rows.length ? `<div class="sub" style="margin:4px 2px 8px">${t('nothingConnected')}</div>`
+        : this.grouping ? this.groupedCards() : this.rows.map(r => this.card(r)).join('')}
       ${this.picking ? `<div class="ed-item open"><div class="ed-item-head" style="cursor:default"><b style="flex:1;font-weight:500">${t('addConnection')}</b>
           <button class="icon" onclick="${ref}.picking = false; ${ref}.render()" aria-label="${t('close')}">${icon('close')}</button></div>
           <div class="ed-item-body"><div class="choices" style="margin:0">${this.types().map(x => `<button class="choice" onclick="${ref}.add('${x}')"><span class="ico">${typeIcon(x, this.driver(x))}</span><span><b>${esc(this.title(x))}</b><span class="sub">${esc(this.help(x))}</span></span></button>`).join('')}</div></div></div>`
@@ -1256,7 +1325,7 @@ class ConfigEditor {
 let catalogData = null, catalogError = null, catalogLoading = false, sourceFilter = 'any';
 const rowsOf = conns => (conns || []).map(x => ({slot: x.slot, type: x.type, pin: x.pin, pin2: x.scl, inverted: x.inverted, name: x.name,
   code: x.code || '', mac: x.mac || '', number: x.number || 0, power: x.power || 'off', off_after: x.off_after || 0,
-  controls: x.controls === undefined ? null : x.controls}));
+  controls: x.controls === undefined ? null : x.controls, group: x.group || ''}));
 
 function localCatalog() {
   const items = [];
@@ -1946,8 +2015,12 @@ function rowsFromIo(io) {
   return io.draft.filter(d => d.type !== 'none')
     .map(d => ({slot: d.index, type: d.type, pin: isBle(d.type) ? 0 : d.pin, pin2: d.pin2, inverted: d.inverted, name: d.name,
       code: d.code || '', mac: d.mac || '', number: d.number || 0, power: d.power || 'off', off_after: d.off_after || 0,
-      controls: d.controls === undefined ? null : d.controls}));
+      controls: d.controls === undefined ? null : d.controls,
+      group: d.group ? ((io.groups || [])[d.group - 1] || `Group ${d.group}`) : ''}));
 }
+// Groups in the order the firmware numbers them: by their first connection
+const groupNames = rows => [...new Set([...rows].sort((a, b) => a.slot - b.slot).map(r => r.group).filter(Boolean))];
+const MIN_GROUPS = '0.1.13';
 
 // One YAML format everywhere (device, config, recipe, wizard): the spec of
 // tools/mb_generate.py, checked by the add-on with the generator itself
@@ -1965,6 +2038,7 @@ function specYaml(name, rows, components = [], drivers = [], rules = []) {
     if (optOutput(r.type, d) && r.power && r.power !== 'off') lines.push(`    power: ${r.power}`);
     if (optOutput(r.type, d) && r.off_after) lines.push(`    off_after: ${r.off_after}`);
     if (optControl(r.type, d) && r.controls !== null && r.controls !== undefined) lines.push(`    controls: ${r.controls}`);
+    if (r.group) lines.push(`    group: ${r.group}`);
     lines.push(`    name: ${r.name || (d ? d.title : TEXT.types[r.type])}`);
   }
   if (components.length) lines.push('', 'components:', ...components.map(c => `  - source: ${c.source}`));
@@ -1982,7 +2056,7 @@ async function parseSpec(text) {
 // The commands that turn a device's draft into these connections and name
 function diffLines(io, rows, name, drivers = []) {
   const before = new Map(rowsFromIo(io).map(r => [r.slot, r]));
-  const lines = [];
+  const lines = [], groups = groupNames(rows);
   for (const r of rows) {
     const old = before.get(r.slot);
     before.delete(r.slot);
@@ -1992,10 +2066,12 @@ function diffLines(io, rows, name, drivers = []) {
       : isBle(r.type) ? r.mac : r.type === 'sht4x' ? `${r.pin} ${r.pin2}` : isIr(r.type) ? `${r.pin} ${r.code}` : `${r.pin}`;
     const options = [optOutput(r.type, d) && r.power && r.power !== 'off' ? `power=${r.power}` : null,
       optOutput(r.type, d) && r.off_after ? `off_after=${r.off_after}` : null,
-      optControl(r.type, d) && r.controls !== null && r.controls !== undefined ? `controls=${r.controls}` : null].filter(Boolean);
+      optControl(r.type, d) && r.controls !== null && r.controls !== undefined ? `controls=${r.controls}` : null,
+      r.group || (old && old.group) ? `group=${groups.indexOf(r.group) + 1}` : null].filter(Boolean);
     lines.push(`io set ${r.slot} ${r.type} ${where}${r.inverted && !isIr(r.type) && !isBle(r.type) ? ' inverted' : ''}${options.map(o => ' ' + o).join('')} ${(r.name || TEXT.types[r.type]).trim().replace(/\s+/g, ' ')}`);
   }
   for (const slot of before.keys()) lines.push(`io clear ${slot}`);
+  groups.forEach((g, k) => { if ((io.groups || [])[k] !== g) lines.push(`io group ${k + 1} ${g}`); });
   if (name && name !== io.name) lines.push(`name ${name}`);
   return lines;
 }
@@ -2024,6 +2100,10 @@ async function saveManage() {
   if (missing) { $('#mError').textContent = t('missingComponent', missing); $('#mError').hidden = false; return; }
   if (tooOld(running(statuses[managed.id]), spec.rows)) {
     $('#mError').textContent = t('firmwareTooOld', MIN_NEW_TYPES); $('#mError').hidden = false; return;
+  }
+  const fw = running(statuses[managed.id]);
+  if (spec.rows.some(r => r.group) && fw && newer(MIN_GROUPS, fw.version)) {
+    $('#mError').textContent = t('groupsTooOld', MIN_GROUPS); $('#mError').hidden = false; return;
   }
   const lines = diffLines(managed.io, spec.rows, spec.name, devEditor.drivers)
     .concat(managed.rules ? ruleLines(managed.rules.rules, spec.rules || []) : []);

@@ -5,6 +5,8 @@
 
 #include <app/server/CommissioningWindowManager.h>
 #include <app/server/Server.h>
+#include <app/reporting/reporting.h>
+#include <nvs.h>
 #include <platform/CHIPDeviceLayer.h>
 #include <setup_payload/OnboardingCodesUtil.h>
 
@@ -147,6 +149,27 @@ std::string matter_json() {
     out += std::string(",\"window_open\":") + (window_open ? "true" : "false");
     out += ",\"fabrics\":[" + fabrics + "],\"network\":" + json_text(net::describe()) + "}\n";
     return out;
+}
+
+void note_structure(uint32_t signature) {
+    nvs_handle_t nvs;
+    if (nvs_open("mb_core", NVS_READWRITE, &nvs) != ESP_OK) return;
+    uint32_t before = 0;
+    const bool known = nvs_get_u32(nvs, "structure", &before) == ESP_OK;
+    if (!known || before != signature) {
+        uint32_t version = 1;
+        auto& config = chip::DeviceLayer::ConfigurationMgr();
+        if (config.GetConfigurationVersion(version) != CHIP_NO_ERROR || version == 0) version = 1;
+        // The first time only records it: nothing changed for controllers yet
+        if (known && config.StoreConfigurationVersion(version + 1) == CHIP_NO_ERROR) {
+            MatterReportingAttributeChangeCallback(0, chip::app::Clusters::BasicInformation::Id,
+                                                   chip::app::Clusters::BasicInformation::Attributes::ConfigurationVersion::Id);
+            std::printf("structure changed: configuration version %" PRIu32 "\n", version + 1);
+        }
+        nvs_set_u32(nvs, "structure", signature);
+        nvs_commit(nvs);
+    }
+    nvs_close(nvs);
 }
 
 }  // namespace matter_info

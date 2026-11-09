@@ -101,6 +101,8 @@ bool in_trial = false;
 esp_timer_handle_t trial_timer = nullptr;
 int64_t trial_end_us = 0;
 char device_name[33] = {};
+char group_names[GROUPS][24] = {};
+bool group_given = false;  // the last parse_options() saw group=
 char last_ir[24] = "";  // the last infrared code received, for learning codes
 bool bluetooth = false;   // a connection uses Bluetooth (listens, or sends commands)
 bool listening = false;   // a connection listens to advertisements
@@ -534,7 +536,8 @@ std::string json_text(const char* text) {
 std::string slot_json(const Slot& s, int i, bool with_state) {
     std::string out = "{\"index\":" + std::to_string(i) + ",\"type\":\"" + type_name(s.type) +
                       "\",\"pin\":" + std::to_string(s.pin) + ",\"pin2\":" + std::to_string(s.pin2) +
-                      ",\"inverted\":" + ((s.flags & INVERTED) ? "true" : "false") + ",\"name\":" + json_text(s.name);
+                      ",\"inverted\":" + ((s.flags & INVERTED) ? "true" : "false") + ",\"name\":" + json_text(s.name) +
+                      ",\"group\":" + std::to_string(group_of(s));
     if (is_ir(s.type)) out += ",\"code\":\"" + code_text(s.data) + "\"";
     if (is_ble(s.type)) out += ",\"mac\":\"" + mac_text(s.data) + "\"";
     if (const Driver* d = driver_of(s.type); d != nullptr && d->number_label) {
@@ -607,6 +610,7 @@ int pins_of(Type type, int index, int pin) {
 // "inverted" and the options (power=, off_after=, controls=) in any order,
 // before the name; "" when they are fine, else what is wrong
 std::string parse_options(const std::vector<std::string>& args, size_t& next, Slot& s, int index) {
+    group_given = false;
     for (; next < args.size(); ++next) {
         const std::string& word = args[next];
         char* end = nullptr;
@@ -629,6 +633,11 @@ std::string parse_options(const std::vector<std::string>& args, size_t& next, Sl
             if (!can_control(s.type)) return "controls= is for buttons, contacts, motion and presence\n";
             if (*end != '\0' || value < 0 || value >= SLOTS || value == index) return "controls=<another connection 0-7>\n";
             s.data[7] = static_cast<uint8_t>(value + 1);
+        } else if (word.rfind("group=", 0) == 0) {
+            const long value = std::strtol(word.c_str() + 6, &end, 10);
+            if (*end != '\0' || value < 0 || value > GROUPS) return "group=<0-4> (0: none)\n";
+            s.flags = static_cast<uint8_t>((s.flags & ~GROUP_MASK) | (value << GROUP_SHIFT));
+            group_given = true;
         } else {
             break;
         }
@@ -664,6 +673,9 @@ std::string set_component(const std::vector<std::string>& args, int index, Type 
     std::lock_guard<std::mutex> guard(lock);
     for (int p = 0; p < d->pins; ++p) {
         if (pin_taken(pins[p], index, type)) return "pin already in use\n";
+    }
+    if (!group_given && draft[index].type != Type::none) {
+        s.flags = static_cast<uint8_t>((s.flags & ~GROUP_MASK) | (draft[index].flags & GROUP_MASK));
     }
     draft[index] = s;
     return store("draft", draft) ? "ok: 'io apply' to use it\n" : "storing failed\n";
@@ -733,6 +745,9 @@ std::string cmd_set(const std::vector<std::string>& args) {
     }
     if (label.empty()) label = TYPE_NAMES[type];
     std::strncpy(s.name, label.c_str(), sizeof(s.name) - 1);
+    if (!group_given && draft[index].type != Type::none) {
+        s.flags = static_cast<uint8_t>((s.flags & ~GROUP_MASK) | (draft[index].flags & GROUP_MASK));
+    }
     draft[index] = s;
     return store("draft", draft) ? "ok: 'io apply' to use it\n" : "storing failed\n";
 }
@@ -924,6 +939,11 @@ void start() {
     if (nvs_open(NVS_NAMESPACE, NVS_READONLY, &nvs) == ESP_OK) {
         size_t size = sizeof(device_name);
         if (nvs_get_str(nvs, "name", device_name, &size) != ESP_OK) device_name[0] = '\0';
+        for (int g = 0; g < GROUPS; ++g) {
+            char key[4] = {'g', static_cast<char>('1' + g), 0};
+            size_t length = sizeof(group_names[g]);
+            if (nvs_get_str(nvs, key, group_names[g], &length) != ESP_OK) group_names[g][0] = '\0';
+        }
         nvs_get_u8(nvs, "last", &last_on);
         nvs_close(nvs);
     }
@@ -1078,6 +1098,28 @@ void stop_outputs() {
 
 std::string name() { return device_name[0] ? device_name : factory_name ? factory_name : DEFAULT_NAME; }
 
+std::string group_name(int group) {
+    return group >= 1 && group <= GROUPS ? group_names[group - 1] : "";
+}
+
+// io group <g> [<name...>]: a group's name, the device name controllers show
+// for it (empty: the name of its first connection)
+std::string cmd_group(const std::vector<std::string>& args) {
+    const long g = args.size() >= 3 ? std::strtol(args[2].c_str(), nullptr, 10) : 0;
+    if (g < 1 || g > GROUPS) return "io group <1-4> [<name>]\n";
+    std::string label;
+    for (size_t k = 3; k < args.size(); ++k) label += (label.empty() ? "" : " ") + args[k];
+    std::strncpy(group_names[g - 1], label.c_str(), sizeof(group_names[g - 1]) - 1);
+    group_names[g - 1][sizeof(group_names[g - 1]) - 1] = '\0';
+    nvs_handle_t nvs;
+    if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs) != ESP_OK) return "storing failed\n";
+    char key[4] = {'g', static_cast<char>('0' + g), 0};
+    nvs_set_str(nvs, key, group_names[g - 1]);
+    nvs_commit(nvs);
+    nvs_close(nvs);
+    return "ok, controllers see it after the next start\n";
+}
+
 std::string name_command(const std::vector<std::string>& args) {
     if (args.size() < 2) {
         return name() + "\n";
@@ -1102,6 +1144,9 @@ std::string command(const std::vector<std::string>& args) {
     const std::string sub = args.size() >= 2 ? args[1] : "json";
     if (sub == "set") {
         return cmd_set(args);
+    }
+    if (sub == "group") {
+        return cmd_group(args);
     }
     if (sub == "clear" && args.size() == 3) {
         const int index = parse_slot(args[2]);
@@ -1212,6 +1257,8 @@ std::string state_json() {
                ",\"matter\":\"" + MATTER[static_cast<int>(d.matter)] + "\",\"pins\":" + std::to_string(d.pins) +
                ",\"number\":" + (d.number_label ? json_text(d.number_label) : std::string("null")) + "}";
     }
+    out += "],\"groups\":[";
+    for (int g = 0; g < GROUPS; ++g) out += (g ? "," : "") + json_text(group_names[g]);
     out += "],\"slots\":[";
     for (int i = 0; i < SLOTS; ++i) {
         out += (i ? "," : "") + slot_json(running[i], i, true);

@@ -224,8 +224,18 @@ std::string cmd_json(const Args&) { return state_json(); }
 std::string cmd_settings(const Args& args) {
     if (args.size() == 2 && args[1] == "json") {
         return "{\"settings\":{\"beds\":" + std::to_string(bed_link::bed_count()) +
+               ",\"group\":" + (bed_link::group_parts() ? "true" : "false") +
                "},\"schema\":{\"beds\":{\"type\":\"int\",\"min\":1,\"max\":" +
-               std::to_string(bed_link::MAX_BEDS) + ",\"default\":1,\"title\":\"Number of beds\"}}}\n";
+               std::to_string(bed_link::MAX_BEDS) + ",\"default\":1,\"title\":\"Number of beds\"}," +
+               "\"group\":{\"type\":\"bool\",\"default\":true,\"title\":\"One device per bed (head, legs and light together)\"}}}\n";
+    }
+    if (args.size() == 4 && args[1] == "set" && args[2] == "group") {
+        const std::string& v = args[3];
+        const bool on = v == "true" || v == "on" || v == "1";
+        if (!on && v != "false" && v != "off" && v != "0") return "error: group must be true or false\n";
+        if (!bed_link::set_group_parts(on)) return "error: could not store it\n";
+        // The endpoints are built at start: a restart makes it so
+        return std::string("group ") + (on ? "true" : "false") + use_beds(bed_link::bed_count()) + "\n";
     }
     if (args.size() == 4 && args[1] == "set" && args[2] == "beds") {
         char* end = nullptr;
@@ -235,7 +245,7 @@ std::string cmd_settings(const Args& args) {
         }
         return "beds " + std::to_string(count) + use_beds(static_cast<int>(count)) + "\n";
     }
-    return "error: usage: settings json | settings set beds <1|2>\n";
+    return "error: usage: settings json | settings set beds <1|2> | settings set group <true|false>\n";
 }
 
 }  // namespace
@@ -272,7 +282,8 @@ void register_all() {
     add_command("json", "json                                    state for the settings page\n", cmd_json);
     add_command("settings",
                 "settings json                           settings and their schema\n"
-                "settings set beds <1|2>                 number of beds (restarts when on Thread)\n",
+                "settings set beds <1|2>                 number of beds (restarts when on Thread)\n"
+                "settings set group <true|false>         head, legs and light as one device per bed (restarts)\n",
                 cmd_settings);
 }
 

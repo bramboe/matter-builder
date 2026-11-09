@@ -10,8 +10,12 @@ dependencies.lock
 # Host tests
 test/host/build/
 
-# Never commit flash dumps or ESPHome YAML: they contain secrets
+# Never commit flash dumps or ESPHome YAML: they contain secrets; firmware
+# images only go out as GitHub release assets (release.yml)
 *.bin
+*.elf
+*.map
+*.img
 backups/
 *.yaml.secret
 secrets.yaml

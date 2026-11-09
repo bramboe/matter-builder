@@ -1,0 +1,70 @@
+name: A device does not work
+description: Installing, starting, connections or the network of an ESP32 with Matter Builder firmware
+labels: [hardware]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Most of what is asked below is on the device's own page under **Settings → System → Technical details**, or in Matter Builder on the device's **Info** and **Network** tabs. Never paste passwords, Wi-Fi passwords or a Thread dataset.
+  - type: input
+    id: board
+    attributes:
+      label: Board
+      description: The exact board, e.g. Seeed Studio XIAO ESP32C6, ESP32-C6-DevKitC-1, NodeMCU-32S
+    validations:
+      required: true
+  - type: input
+    id: chip
+    attributes:
+      label: Chip and revision, flash size
+      description: From Technical details, e.g. "ESP32-C6 v0.1 · 8 MB"
+    validations:
+      required: true
+  - type: input
+    id: firmware
+    attributes:
+      label: Firmware and version
+      description: e.g. "mb_generic 0.1.13" or "octo_bridge 1.0.23"
+    validations:
+      required: true
+  - type: dropdown
+    id: network
+    attributes:
+      label: Network
+      options: [Thread, Wi-Fi, Not set up yet]
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How it was installed
+      options:
+        - Plugged into this computer (browser, Web Serial)
+        - Plugged into the Home Assistant / Matter Builder machine
+        - Downloaded the file and flashed it myself
+        - Updated over the network
+    validations:
+      required: true
+  - type: textarea
+    id: connections
+    attributes:
+      label: What is connected
+      description: Connections and pins, or paste the configuration YAML from Matter Builder (it holds no passwords)
+      render: yaml
+  - type: textarea
+    id: what
+    attributes:
+      label: What happens, and what you expected
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: The installer's log (USB) or the device log from Matter Builder (Logs), around the moment it goes wrong
+      render: text
+  - type: input
+    id: border-router
+    attributes:
+      label: Thread border router (for Thread)
+      description: e.g. Home Assistant Connect ZBT-1, Apple TV 4K, HomePod mini, Nest Hub

@@ -1,0 +1,35 @@
+name: Matter Builder (add-on or standalone)
+description: "Something in Matter Builder itself: the page, linking, updates, the catalog, builds"
+labels: [addon]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Matter Builder version
+      description: In Home Assistant under Settings → Add-ons, or the version in standalone/README
+    validations:
+      required: true
+  - type: dropdown
+    id: how
+    attributes:
+      label: Runs as
+      options: [Home Assistant add-on, Standalone in Docker, Standalone with Python]
+    validations:
+      required: true
+  - type: input
+    id: machine
+    attributes:
+      label: Machine
+      description: e.g. Home Assistant Green, Raspberry Pi 5 (aarch64), Intel NUC (amd64)
+  - type: textarea
+    id: what
+    attributes:
+      label: What happens, and what you expected
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log
+      description: The add-on's log (Home Assistant) or docker logs matter-builder; leave out the setup code
+      render: text

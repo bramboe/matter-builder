@@ -26,6 +26,14 @@ jobs:
           diff -u tools/mb_generate.py ha-addon/matter_builder/src/tools/mb_generate.py
           diff -ru examples ha-addon/matter_builder/src/examples
 
+  validate:
+    name: Recipes, packages and components are valid
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # The same checks the add-on and the catalog make, on every push
+      - run: python3 tools/validate.py
+
   addon-image:
     name: Add-on image (${{ matrix.arch }})
     runs-on: ubuntu-latest

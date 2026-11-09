@@ -323,6 +323,24 @@ device, or it cannot connect) or for older firmware: roughly 1 KB per
 second, about half an hour for a 2 MB image, with the progress shown in the
 task bar. The device keeps working meanwhile.
 
+## Groups
+
+Normally every connection is a device of its own in Matter. With **Groups**
+(the switch above the connections in a generic device's configuration)
+connections can be put together: a group is one device, so one accessory
+in Apple Home with its parts (a lamp and its button, a door contact and the
+light it switches) and one device in Home Assistant. Drag connections between
+the groups, or use ⋮ → *Move to*; up to 4 groups, each with a name. In YAML:
+`group: <name>` on a connection.
+
+The Octo bed bridge has the same as a setting: **One device per bed** puts
+head, legs and light under their bed (on by default).
+
+A change of groups changes how the device looks to controllers: they are
+told to read it again. In Home Assistant the entities of a grouped
+connection move to the group's device; the endpoints stay the same, so
+entity IDs and automations should stay as they are (check after the change).
+
 ## Network health
 
 Every 5 minutes the add-on asks each linked device how its network is

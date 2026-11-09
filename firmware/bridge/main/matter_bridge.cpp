@@ -21,6 +21,7 @@
 #include <setup_payload/OnboardingCodesUtil.h>
 
 #include "bed_link.h"
+#include "matter_info.h"
 #include "esp_app_desc.h"
 #include "esp_log.h"
 #include "mb_core.h"
@@ -255,6 +256,11 @@ struct BedEndpoints {
 };
 
 BedEndpoints beds[bed_link::MAX_BEDS];
+// Head, legs and light under their bed (one device, one Apple Home accessory
+// per bed) or each a bridged device of its own: the "group" setting, read at
+// start. Either way they are created in the same order, so the endpoint
+// numbers stay the same.
+bool grouped = true;
 
 void name_parts(BedEndpoints& bed);
 void set_parts_attribute(BedEndpoints& bed, uint32_t attribute_id, esp_matter_attr_val_t* value);
@@ -701,7 +707,7 @@ void make_bridged(endpoint_t* ep, const char* name) {
     bdbi::create_product_id(info, CONFIG_DEVICE_PRODUCT_ID);
 }
 
-void add_cover(node_t* node, endpoint_t* device, Cover& cover, const char* name) {
+void add_cover(node_t* node, endpoint_t* parent, Cover& cover, const char* name) {
     endpoint::window_covering::config_t config;
     config.window_covering.feature_flags =
         cluster::window_covering::feature::lift::get_id() |
@@ -710,19 +716,19 @@ void add_cover(node_t* node, endpoint_t* device, Cover& cover, const char* name)
     config.window_covering.features.position_aware_lift.target_position_lift_percent_100ths = cover.position;
     config.window_covering.delegate = &cover;
     endpoint_t* ep = endpoint::window_covering::create(node, &config, ENDPOINT_FLAG_BRIDGE, nullptr);
-    make_bridged(ep, name);
-    endpoint::set_parent_endpoint(ep, device);
+    if (!grouped) make_bridged(ep, name);
+    endpoint::set_parent_endpoint(ep, parent);
     cluster::fixed_label::config_t label_config;
     cluster::fixed_label::create(ep, &label_config, CLUSTER_FLAG_SERVER);
     cover.endpoint_id = endpoint::get_id(ep);
     cover.SetEndpoint(cover.endpoint_id);
 }
 
-uint16_t add_light(node_t* node, endpoint_t* device, const char* name) {
+uint16_t add_light(node_t* node, endpoint_t* parent, const char* name) {
     endpoint::on_off_light::config_t config;
     endpoint_t* ep = endpoint::on_off_light::create(node, &config, ENDPOINT_FLAG_BRIDGE, nullptr);
-    make_bridged(ep, name);
-    endpoint::set_parent_endpoint(ep, device);
+    if (!grouped) make_bridged(ep, name);
+    endpoint::set_parent_endpoint(ep, parent);
     cluster::fixed_label::config_t label_config;
     cluster::fixed_label::create(ep, &label_config, CLUSTER_FLAG_SERVER);
     return endpoint::get_id(ep);
@@ -735,7 +741,7 @@ void name_parts(BedEndpoints& bed) {
     const uint16_t endpoints[3] = {bed.head.endpoint_id, bed.feet.endpoint_id, bed.light_endpoint};
     for (int k = 0; k < 3; ++k) {
         std::snprintf(bed.part_names[k], sizeof(bed.part_names[k]), "%s %s", bed.label, parts[k]);
-        if (endpoints[k] == 0) continue;
+        if (endpoints[k] == 0 || grouped) continue;  // grouped: parts have no name of their own
         esp_matter_attr_val_t name = esp_matter_char_str(bed.part_names[k], std::strlen(bed.part_names[k]));
         attribute::update(endpoints[k], BridgedDeviceBasicInformation::Id,
                           BridgedDeviceBasicInformation::Attributes::NodeLabel::Id, &name);
@@ -743,6 +749,7 @@ void name_parts(BedEndpoints& bed) {
 }
 
 void set_parts_attribute(BedEndpoints& bed, uint32_t attribute_id, esp_matter_attr_val_t* value) {
+    if (grouped) return;  // only the bed is a bridged device
     for (uint16_t ep : {bed.head.endpoint_id, bed.feet.endpoint_id, bed.light_endpoint}) {
         if (ep != 0) attribute::update(ep, BridgedDeviceBasicInformation::Id, attribute_id, value);
     }
@@ -767,6 +774,7 @@ void start() {
     endpoint_t* aggregator = endpoint::aggregator::create(node, &aggregator_config, ENDPOINT_FLAG_NONE, nullptr);
     load_language();
     bed_total = bed_link::bed_count();
+    grouped = bed_link::group_parts();
 
     for (int i = 0; i < bed_total; ++i) {
         BedEndpoints& bed = beds[i];
@@ -791,9 +799,10 @@ void start() {
         std::snprintf(bed.part_names[0], sizeof(bed.part_names[0]), "%s %s", bed.label, text.head);
         std::snprintf(bed.part_names[1], sizeof(bed.part_names[1]), "%s %s", bed.label, text.legs);
         std::snprintf(bed.part_names[2], sizeof(bed.part_names[2]), "%s %s", bed.label, text.light);
-        add_cover(node, aggregator, bed.head, bed.part_names[0]);
-        add_cover(node, aggregator, bed.feet, bed.part_names[1]);
-        bed.light_endpoint = add_light(node, aggregator, bed.part_names[2]);
+        endpoint_t* parent = grouped ? device : aggregator;
+        add_cover(node, parent, bed.head, bed.part_names[0]);
+        add_cover(node, parent, bed.feet, bed.part_names[1]);
+        bed.light_endpoint = add_light(node, parent, bed.part_names[2]);
     }
 
     bed_link::run_in_host([] { bed_link::on_calibrated(on_calibrated); });
@@ -817,6 +826,8 @@ void start() {
             esp_matter_attr_val_t name = esp_matter_char_str(const_cast<char*>(mb_core::app().product_name), std::strlen(mb_core::app().product_name));
             attribute::update(0, BasicInformation::Id, BasicInformation::Attributes::NodeLabel::Id, &name);
         }
+        // Grouped or not, and how many beds: controllers read it again when it changed
+        matter_info::note_structure(static_cast<uint32_t>(bed_total * 2 + (grouped ? 1 : 0)));
         for (int i = 0; i < bed_total; ++i) {
             BedEndpoints& bed = beds[i];
             esp_matter_attr_val_t label = esp_matter_char_str(bed.label, std::strlen(bed.label));

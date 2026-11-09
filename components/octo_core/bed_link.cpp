@@ -882,6 +882,24 @@ int bed_count() {
     return count < 1 ? 1 : count > MAX_BEDS ? MAX_BEDS : count;
 }
 
+bool group_parts() {
+    nvs_handle_t nvs;
+    uint8_t on = 1;
+    if (nvs_open("octo", NVS_READONLY, &nvs) == ESP_OK) {
+        nvs_get_u8(nvs, "group", &on);
+        nvs_close(nvs);
+    }
+    return on != 0;
+}
+
+bool set_group_parts(bool on) {
+    nvs_handle_t nvs;
+    if (nvs_open("octo", NVS_READWRITE, &nvs) != ESP_OK) return false;
+    const bool ok = nvs_set_u8(nvs, "group", on ? 1 : 0) == ESP_OK && nvs_commit(nvs) == ESP_OK;
+    nvs_close(nvs);
+    return ok;
+}
+
 bool set_bed_count(int count) {
     nvs_handle_t nvs;
     if (count < 1 || count > MAX_BEDS || nvs_open("octo", NVS_READWRITE, &nvs) != ESP_OK) {

@@ -15,12 +15,14 @@
 #include <esp_matter.h>
 #include <esp_matter_providers.h>
 #include <platform/CHIPDeviceLayer.h>
+#include <platform/DeviceInfoProvider.h>
 #include <platform/ESP32/ESP32Config.h>
 #include <platform/internal/GenericDeviceInstanceInfoProvider.h>
 
 #include "esp_log.h"
 #include "io.h"
 #include "rules.h"
+#include "matter_info.h"
 #include "mb_core.h"
 #include "setup_code.h"
 
@@ -36,6 +38,69 @@ constexpr char HARDWARE[] = "ESP32-C6";
 
 node_t* node = nullptr;
 uint16_t endpoint_of[io::SLOTS] = {};  // 0: none
+// Groups (io.h): the first connection of a group (the lowest number) is the
+// device, named after the group; the others are parts of it, endpoints under
+// it without a name of their own. -1: the group is not used.
+int group_head[io::GROUPS + 1] = {-1, -1, -1, -1, -1};
+
+int group_of_slot(int i) {
+    const io::Slot& s = io::slot(i);
+    return s.type == io::Type::none ? 0 : io::group_of(s);
+}
+bool is_part(int i) {
+    const int g = group_of_slot(i);
+    return g > 0 && group_head[g] != i;
+}
+// What controllers call the device of a connection: its group's name (or,
+// without one, the connection's name) for a group, else the connection's name
+std::string device_label(int i) {
+    const int g = group_of_slot(i);
+    const std::string group = g > 0 ? io::group_name(g) : "";
+    return group.empty() ? io::slot(i).name : group;
+}
+
+// In a group every connection carries its own name as a fixed label: Home
+// Assistant adds "ha_entitylabel" to the device name ("Bedside Lamp",
+// "Bedside Button"); Apple Home shows the parts within one accessory
+class PartLabels : public chip::DeviceLayer::DeviceInfoProvider {
+public:
+    FixedLabelIterator* IterateFixedLabel(chip::EndpointId endpoint_id) override {
+        const char* value = nullptr;
+        for (int i = 0; i < io::SLOTS; ++i) {
+            if (endpoint_of[i] != 0 && endpoint_of[i] == endpoint_id && group_of_slot(i) > 0) value = io::slot(i).name;
+        }
+        return chip::Platform::New<Labels>(value);
+    }
+    UserLabelIterator* IterateUserLabel(chip::EndpointId) override { return nullptr; }
+    SupportedLocalesIterator* IterateSupportedLocales() override { return nullptr; }
+    SupportedCalendarTypesIterator* IterateSupportedCalendarTypes() override { return nullptr; }
+
+protected:
+    CHIP_ERROR SetUserLabelLength(chip::EndpointId, size_t) override { return CHIP_ERROR_NOT_IMPLEMENTED; }
+    CHIP_ERROR GetUserLabelLength(chip::EndpointId, size_t&) override { return CHIP_ERROR_NOT_IMPLEMENTED; }
+    CHIP_ERROR SetUserLabelAt(chip::EndpointId, size_t, const UserLabelType&) override { return CHIP_ERROR_NOT_IMPLEMENTED; }
+    CHIP_ERROR DeleteUserLabelAt(chip::EndpointId, size_t) override { return CHIP_ERROR_NOT_IMPLEMENTED; }
+
+private:
+    class Labels : public FixedLabelIterator {
+    public:
+        explicit Labels(const char* value) : value_(value) {}
+        size_t Count() override { return value_ != nullptr ? 1 : 0; }
+        bool Next(FixedLabelType& output) override {
+            if (value_ == nullptr || done_) return false;
+            output.label = chip::CharSpan::fromCharString("ha_entitylabel");
+            output.value = chip::CharSpan::fromCharString(value_);
+            done_ = true;
+            return true;
+        }
+        void Release() override { chip::Platform::Delete(this); }
+
+    private:
+        const char* value_;
+        bool done_ = false;
+    };
+};
+PartLabels part_labels;
 uint16_t rule_endpoint_of[rules::RULES] = {};  // 0: not a switch in Matter
 
 int rule_of(uint16_t endpoint_id) {
@@ -299,25 +364,47 @@ void create_endpoints() {
     endpoint::aggregator::config_t aggregator_config;
     endpoint_t* aggregator = endpoint::aggregator::create(node, &aggregator_config, ENDPOINT_FLAG_NONE, nullptr);
     for (int i = 0; i < io::SLOTS; ++i) {
-        endpoint::bridged_node::config_t config;
-        config.bridged_device_basic_information.reachable = true;
-        endpoint_t* ep = endpoint::bridged_node::create(node, &config, ENDPOINT_FLAG_BRIDGE, nullptr);
+        const int g = group_of_slot(i);
+        if (g > 0 && group_head[g] < 0) group_head[g] = i;
+    }
+    for (int i = 0; i < io::SLOTS; ++i) {
+        // A part of a group: a plain endpoint under its group's first connection
+        const bool part = is_part(i);
+        endpoint_t* ep = nullptr;
+        if (part) {
+            ep = endpoint::create(node, ENDPOINT_FLAG_BRIDGE, nullptr);
+            if (ep != nullptr) {
+                cluster::descriptor::config_t descriptor;
+                cluster::descriptor::create(ep, &descriptor, CLUSTER_FLAG_SERVER);
+            }
+        } else {
+            endpoint::bridged_node::config_t config;
+            config.bridged_device_basic_information.reachable = true;
+            ep = endpoint::bridged_node::create(node, &config, ENDPOINT_FLAG_BRIDGE, nullptr);
+        }
         slot_endpoint[i] = ep;
         if (ep == nullptr) {
             ESP_LOGE(TAG, "Connection %d: no endpoint", i);
             continue;
         }
-        endpoint::set_parent_endpoint(ep, aggregator);
+        endpoint::set_parent_endpoint(ep, part ? slot_endpoint[group_head[group_of_slot(i)]] : aggregator);
         const io::Slot& s = io::slot(i);
         if (s.type == io::Type::none) {
             continue;
         }
-        // The connection's name is the device name in Home Assistant and Apple Home
-        namespace bdbi = cluster::bridged_device_basic_information::attribute;
-        cluster_t* info = cluster::get(ep, BridgedDeviceBasicInformation::Id);
-        bdbi::create_node_label(info, const_cast<char*>(s.name), std::strlen(s.name));
-        bdbi::create_vendor_name(info, const_cast<char*>(mb_core::app().vendor_name),
-                                 std::strlen(mb_core::app().vendor_name));
+        if (!part) {
+            // The device name in Home Assistant and Apple Home: the connection's, or its group's
+            const std::string label = device_label(i);
+            namespace bdbi = cluster::bridged_device_basic_information::attribute;
+            cluster_t* info = cluster::get(ep, BridgedDeviceBasicInformation::Id);
+            bdbi::create_node_label(info, const_cast<char*>(label.c_str()), label.size());
+            bdbi::create_vendor_name(info, const_cast<char*>(mb_core::app().vendor_name),
+                                     std::strlen(mb_core::app().vendor_name));
+        }
+        if (group_of_slot(i) > 0) {
+            cluster::fixed_label::config_t labels;
+            cluster::fixed_label::create(ep, &labels, CLUSTER_FLAG_SERVER);
+        }
         add_device_type(ep, i);
         endpoint_of[i] = endpoint::get_id(ep);
         ESP_LOGI(TAG, "Connection %d '%s' on endpoint %u", i, s.name, endpoint_of[i]);
@@ -370,13 +457,23 @@ void after_start() {
         const std::string name = io::name();
         esp_matter_attr_val_t label = esp_matter_char_str(const_cast<char*>(name.c_str()), name.size());
         attribute::update(0, BasicInformation::Id, BasicInformation::Attributes::NodeLabel::Id, &label);
+        // The structure (types, groups, rule switches): when it changed,
+        // controllers are told to read it again
+        uint32_t signature = 2166136261u;
+        for (int i = 0; i < io::SLOTS; ++i) {
+            signature = (signature ^ (static_cast<uint32_t>(io::slot(i).type) * 8 + group_of_slot(i))) * 16777619u;
+        }
+        for (int i = 0; i < rules::RULES; ++i) signature = (signature ^ (rule_endpoint_of[i] != 0)) * 16777619u;
+        matter_info::note_structure(signature);
         for (int i = 0; i < io::SLOTS; ++i) {
             if (endpoint_of[i] == 0) continue;
-            // Stored names come back at start; the connection's name wins
-            const char* text = io::slot(i).name;
-            esp_matter_attr_val_t device_name = esp_matter_char_str(const_cast<char*>(text), std::strlen(text));
-            attribute::update(endpoint_of[i], BridgedDeviceBasicInformation::Id,
-                              BridgedDeviceBasicInformation::Attributes::NodeLabel::Id, &device_name);
+            // Stored names come back at start; the connection's (or group's) name wins
+            if (!is_part(i)) {
+                const std::string text = device_label(i);
+                esp_matter_attr_val_t device_name = esp_matter_char_str(const_cast<char*>(text.c_str()), text.size());
+                attribute::update(endpoint_of[i], BridgedDeviceBasicInformation::Id,
+                                  BridgedDeviceBasicInformation::Attributes::NodeLabel::Id, &device_name);
+            }
             const int kind = io::matter_of(i);
             if (kind == 5) update_climate(i);
             // The output as it really is after power-on (Matter keeps its own
@@ -436,6 +533,7 @@ void start() {
     rule_listener.enabled = on_rule_enabled;
     rules::set_listener(rule_listener);
     esp_matter::set_custom_device_instance_info_provider(&device_info);
+    esp_matter::set_custom_device_info_provider(&part_labels);
     create_endpoints();
     setup_code::install();
     ESP_ERROR_CHECK(esp_matter::start(on_event));

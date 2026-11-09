@@ -18,3 +18,7 @@ settings:
     max: 2
     default: 1
     title: Number of beds
+  group:
+    type: bool
+    default: true
+    title: One device per bed (head, legs and light together)

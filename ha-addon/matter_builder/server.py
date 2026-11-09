@@ -1245,7 +1245,17 @@ class Discovery:
         if Zeroconf is None:
             print("zeroconf missing: no discovery", flush=True)
             return
-        self.zc = Zeroconf(ip_version=IPVersion.All)
+        # IPv4 and IPv6, else IPv4 alone (a host or emulator without IPv6
+        # multicast), else no discovery: linking by address still works
+        for version in (IPVersion.All, IPVersion.V4Only):
+            try:
+                self.zc = Zeroconf(ip_version=version)
+                break
+            except OSError as err:
+                print(f"discovery over {version.name}: {err}", flush=True)
+        if self.zc is None:
+            print("no discovery: link devices by their address", flush=True)
+            return
         ServiceBrowser(self.zc, self.TYPES, handlers=[self.on_change])
 
     def on_change(self, zeroconf, service_type, name, state_change):

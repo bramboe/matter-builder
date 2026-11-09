@@ -2,7 +2,8 @@
 # aarch64: what every user needs to install, link and update devices. The
 # ESP32 build tools (ESP-IDF and esp-matter, several GB) are downloaded into
 # /data by toolchain.sh only when developer mode is turned on.
-ARG BUILD_FROM
+# Home Assistant passes its base image (build.yaml); standalone uses plain Debian
+ARG BUILD_FROM=debian:bookworm-slim
 FROM $BUILD_FROM
 
 # Python for the add-on; git, cmake, ninja, ccache and the libraries the

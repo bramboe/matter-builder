@@ -28,17 +28,20 @@ component of your own and build it in Home Assistant.
 - **Set up on the device.** Every device has a settings page of its own:
   password, Wi-Fi, Thread network and what is connected. Nothing personal is
   built into the firmware.
-- **Home Assistant add-on as extra.** It finds and links devices, edits their
-  connections as a form or as YAML, updates them, and installs firmware on a
-  new ESP32 over USB. In developer mode it builds firmware itself.
+- **Matter Builder: in Home Assistant or on its own.** It finds and links
+  devices, edits their connections as a form or as YAML, updates them, and
+  installs firmware on a new ESP32 over USB. In developer mode it builds
+  firmware itself. It runs as a Home Assistant add-on, or without Home
+  Assistant in Docker or with Python, with a login of its own.
 - **Safe adoption.** Linking a program needs the device's password and a
   press of its BOOT button. Firmware updates are only accepted when they are
   signed; new connections run on trial and are rolled back automatically.
 
 ## From a new ESP32 to a working device
 
-1. **Install the add-on.** Add this repository to Home Assistant's app store
-   and install *Matter Builder*.
+1. **Install Matter Builder.** In Home Assistant: add this repository to the
+   app store and install *Matter Builder*. Without Home Assistant: see
+   [Without Home Assistant](#without-home-assistant).
 2. **Plug in the ESP32.** Over USB, into the Home Assistant machine or the
    computer you are working on.
 3. **Install the firmware.** In the add-on, *New device*: choose the generic
@@ -56,6 +59,39 @@ component of your own and build it in Home Assistant.
    Home or Google Home with its pairing code.
 
 From then on the add-on keeps it up to date, at night or when you choose.
+
+### Without Home Assistant
+
+Matter Builder is one program with two ways to run it: as a Home Assistant
+add-on, or on its own. Both use the same files and the same version, so they
+update together. On its own it has a password of its own instead of Home
+Assistant's login; everything else is the same, except *Add to Home
+Assistant*.
+
+**Docker** (Linux, e.g. a home server or a Raspberry Pi):
+
+```bash
+git clone https://github.com/bramboe/matter-builder && cd matter-builder/standalone
+docker compose up -d --build
+docker logs matter-builder
+```
+
+Open `http://<that machine>:8099` and choose a password. From another computer
+the page asks for the setup code from the log, so nobody else on the network
+can claim it first. To install over USB on that machine, pass the ESP32's port
+in `docker-compose.yml`.
+
+**Python** (macOS, Linux), without Docker:
+
+```bash
+git clone https://github.com/bramboe/matter-builder && cd matter-builder
+python3 -m pip install zeroconf esptool
+sh standalone/run.sh
+```
+
+Open `http://localhost:8099`. Plugging the ESP32 into this computer and
+installing from the page works in Chrome or Edge. To update Matter Builder,
+`git pull` (and in Docker `docker compose up -d --build`).
 
 ### Supported ESP32s
 
@@ -124,7 +160,8 @@ design, including package sources and the catalog.
 | `components/mb_core` | Shared core: Matter and Thread setup, settings page API, adoption, OTA, configuration mode, boot guard |
 | `firmware/generic` | The generic device (ESP32-C6 on Thread or Wi-Fi, classic ESP32 on Wi-Fi; esp-matter release/v1.6) |
 | `firmware/bridge`, `components/octo_*` | The Octo bed bridge package: two Octo beds over Bluetooth ([README](firmware/bridge/README.md)) |
-| `ha-addon/matter_builder` | The Home Assistant add-on |
+| `ha-addon/matter_builder` | Matter Builder: the Home Assistant add-on, which also runs on its own |
+| `standalone/` | Running Matter Builder without Home Assistant: Docker Compose and a start script |
 | `tools/mb_generate.py` | Turns a device spec (YAML) into a project |
 | `tools/release_manifest.py` | Writes and signs a release manifest |
 | `examples/` | Example device specs, and `examples/components/` (a component: a connection type of its own) |
@@ -163,6 +200,7 @@ before it installs anything.
 | Generic device 0.1.3 (released) | Tested on an ESP32-C6: setup access point, linking, connections with trial and rollback, IR send, Bluetooth presence next to Thread |
 | Generic device 0.1.12 (C6 Thread or Wi-Fi, classic ESP32 4 MB), Octo bridge 1.0.22 (released) | Tested on an ESP32-C6: pairing over Bluetooth (stable with two controllers and Bluetooth presence next to it; 174 KB free with pairing on, 199 KB off), components build; the bed bridge added to Home Assistant with both beds, its number of beds changed from the add-on |
 | Add-on 0.26.1 | Devices, Catalog and Configs tabs; visual and YAML editor; settings form per firmware; flashing on the Home Assistant host; adding a device to Home Assistant; updates over Thread when Wi-Fi is out of reach |
+| Matter Builder 0.27.0 on its own | Without Home Assistant (Python on macOS tested: own login, setup code from another computer, sign out, lockout after 5 wrong passwords, discovery); Docker build and start tested in CI |
 | Catalog | Built nightly on GitHub Pages from repositories with the topic `matter-builder-package` |
 
 ## License

@@ -37,3 +37,4 @@ ha-addon/matter_builder/src/components/
 ha-addon/matter_builder/src/firmware/
 ha-addon/matter_builder/src/LICENSE
 __pycache__/
+standalone/data/

@@ -323,6 +323,16 @@ device, or it cannot connect) or for older firmware: roughly 1 KB per
 second, about half an hour for a 2 MB image, with the progress shown in the
 task bar. The device keeps working meanwhile.
 
+## Without Home Assistant
+
+The same program also runs without Home Assistant, in Docker or with Python
+(see `standalone/` in the repository and its README). It then has a password
+of its own: chosen on the page the first time (from another computer with the
+setup code from its log), changed or signed out under Settings. Sessions last
+30 days; changing the password signs out every other browser. *Add to Home
+Assistant* is not there; devices pair with Apple Home, Google Home or another
+controller with their pairing code.
+
 ## Network
 
 The add-on uses the host network: Thread addresses are routed through the

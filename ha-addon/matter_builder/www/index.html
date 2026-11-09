@@ -154,6 +154,11 @@ textarea.yaml{width:100%;min-height:280px;font:12px/1.5 ui-monospace,Menlo,monos
 .taskbar .bar{min-height:52px}
 .taskbar .progress{width:120px;margin:0}
 .taskbar pre{margin:0 12px 12px;max-width:1176px}
+.auth{flex:1;display:flex;align-items:center;justify-content:center;padding:24px 16px}
+.auth .card{width:100%;max-width:380px;padding:24px}
+.auth h2{margin:0 0 4px;font-size:22px;font-weight:400}
+.auth .actions{margin-top:16px}
+.auth .error{margin-top:10px}
 @media (max-width:640px){.bar h1{display:none}.search input{width:100px}dialog.side{border-radius:0}}
 </style>
 </head>
@@ -173,6 +178,19 @@ textarea.yaml{width:100%;min-height:280px;font:12px/1.5 ui-monospace,Menlo,monos
     <button class="icon" id="settingsBtn" aria-label="Settings"><svg viewBox="0 0 24 24"><path d="M3,17V19H9V17H3M3,5V7H13V5H3M13,21V19H21V17H13V15H11V21H13M7,9V11H3V13H7V15H9V9H7M21,13V11H11V13H21M15,9H17V7H21V5H17V3H15V9Z"/></svg></button>
   </div>
 </header>
+<section class="auth" id="authView" hidden>
+  <form class="card" id="authForm">
+    <h2 id="authTitle"></h2>
+    <div class="sub" id="authHelp"></div>
+    <div class="form" style="margin-top:12px">
+      <label class="field" id="authCodeField" hidden><span data-t="setupCode"></span><input id="authCode" autocomplete="off" spellcheck="false" placeholder="XXXX-XXXX-XXXX"></label>
+      <label class="field"><span data-t="password"></span><input id="authPass" type="password" autocomplete="current-password" required></label>
+      <label class="field" id="authPass2Field" hidden><span data-t="passwordAgain"></span><input id="authPass2" type="password" autocomplete="new-password"></label>
+    </div>
+    <div class="sub warnText error" id="authError" hidden></div>
+    <div class="actions"><span class="grow"></span><button class="pri" type="submit" id="authBtn"></button></div>
+  </form>
+</section>
 
 <main>
 <!-- Devices -->
@@ -302,6 +320,17 @@ textarea.yaml{width:100%;min-height:280px;font:12px/1.5 ui-monospace,Menlo,monos
     <div class="dlg-head"><div class="info"><h2 data-t="settings"></h2></div>
       <button class="icon" onclick="$('#settingsDlg').close()" aria-label="Close" id="sClose"></button></div>
     <div class="dlg-body">
+      <div id="accountSection" hidden>
+        <h3 data-t="accountTitle"></h3>
+        <div class="sub" data-t="accountHelp"></div>
+        <form id="passwordForm" class="form">
+          <label class="field"><span data-t="currentPassword"></span><input id="pOld" type="password" autocomplete="current-password"></label>
+          <label class="field"><span data-t="newPassword"></span><input id="pNew" type="password" autocomplete="new-password"></label>
+          <div class="actions" style="margin-top:0"><button class="plain" type="button" id="logoutBtn" data-t="signOut"></button><span class="grow"></span><button type="submit" data-t="changePassword"></button></div>
+        </form>
+        <div class="sub" id="passwordResult"></div>
+        <div style="height:12px"></div>
+      </div>
       <h3 data-t="allWifi"></h3>
       <div class="sub" data-t="bulkWifiHelp"></div>
       <form id="bulkWifi" class="form">
@@ -358,6 +387,12 @@ const TEXT = {
   applyingConfig: 'Applying the configuration…', configOnTrial: s => `The new connections run on trial: keep them within ${s} s, or the device goes back.`,
   configKept: 'Kept. The device is ready.', configFailed: e => `The configuration was not applied: ${e}`,
   emptyTitle: 'Set up your first device',
+  signIn: 'Sign in', signInHelp: 'Matter Builder on its own, without Home Assistant.', password: 'Password', passwordAgain: 'Password again',
+  firstTitle: 'Choose a password', firstHelp: 'Matter Builder runs on its own here, so it has a password of its own. Anyone on your network can open this page: this password keeps them out.',
+  firstHelpCode: 'Matter Builder runs on its own here, so it has a password of its own. To show that this is your installation, enter the setup code from its log (docker logs matter-builder, or the terminal it runs in).',
+  setupCode: 'Setup code', choose: 'Save', passwordsDiffer: 'The two passwords are not the same.',
+  accountTitle: 'Password', accountHelp: 'This Matter Builder runs without Home Assistant and has its own password. Changing it signs out every other browser.',
+  currentPassword: 'Current password', newPassword: 'New password', changePassword: 'Change password', signOut: 'Sign out', passwordChanged: 'Changed.',
   emptyText: 'Matter Builder turns an ESP32-C6 into a standard Matter device for Home Assistant, Apple Home and Google Home. Every device keeps working without Home Assistant and has a settings page of its own.',
   newDevice: 'New device', newDeviceHelp: 'Install firmware or link one', browseCatalog: 'Browse the catalog',
   discovered: (n, v) => `Discovered: ${n}${v ? ' · ' + v : ''}`, adopt: 'Adopt',
@@ -531,7 +566,54 @@ let specs = null, exampleTexts = {}, recipes = null;
 
 async function api(path, body) {
   const r = await fetch(path, body === undefined ? {} : {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+  if (r.status === 401 && !path.startsWith('api/auth')) { showAuth(); throw new Error('signed out'); }
   return r.json();
+}
+
+// ---------------------------------------------------------------- standalone login
+// Without Home Assistant the add-on has a password of its own (server.py)
+const STANDALONE_TEXT = {
+  mBrowserHelp: 'With Chrome or Edge, and this page opened over HTTPS or on this computer (localhost)',
+  mBrowserNo: 'Not available here: this needs Chrome or Edge, and this page over HTTPS or on localhost',
+  mHost: 'Plug into the machine Matter Builder runs on', mHostHelp: 'Works in any browser; the backup goes to the data folder',
+  noPorts: 'No USB device found on the machine Matter Builder runs on. Plug in the ESP32 (in Docker: pass it with --device), then refresh.',
+  devHelp: 'Build firmware on this machine, with fixed versions of ESP-IDF (v5.5.5) and esp-matter (release/v1.6). Nothing personal is built in.',
+  fewCores: 'Few cores or little memory: the first build takes an hour or more (about 1.5 GB memory per core helps).',
+};
+let auth = null;
+function showAuth() {
+  if (!$('#authView').hidden) return;
+  $$('body > header, body > main, #taskbar').forEach(el => { el.hidden = true; });
+  $$('dialog[open]').forEach(d => d.close());
+  $('#authView').hidden = false;
+  api('api/auth').then(a => { auth = a; drawAuth(); });
+}
+function drawAuth() {
+  const first = auth && !auth.password_set;
+  $('#authTitle').textContent = t(first ? 'firstTitle' : 'signIn');
+  $('#authHelp').textContent = first ? t(auth.needs_code ? 'firstHelpCode' : 'firstHelp') : t('signInHelp');
+  $('#authCodeField').hidden = !(first && auth.needs_code);
+  $('#authPass2Field').hidden = !first;
+  $('#authPass').autocomplete = first ? 'new-password' : 'current-password';
+  $('#authBtn').textContent = t(first ? 'choose' : 'signIn');
+  $('#authError').hidden = true;
+  setTimeout(() => (first && auth.needs_code ? $('#authCode') : $('#authPass')).focus(), 0);
+}
+$('#authForm').onsubmit = async e => {
+  e.preventDefault();
+  const first = auth && !auth.password_set, error = $('#authError');
+  if (first && $('#authPass').value !== $('#authPass2').value) { error.textContent = t('passwordsDiffer'); error.hidden = false; return; }
+  $('#authBtn').disabled = true;
+  try {
+    const r = await api(first ? 'api/auth/setup' : 'api/auth/login', {password: $('#authPass').value, code: $('#authCode').value});
+    if (r.error) { error.textContent = r.error; error.hidden = false; return; }
+    location.reload();
+  } finally { $('#authBtn').disabled = false; }
+};
+function standaloneSetup() {
+  Object.assign(TEXT, STANDALONE_TEXT);
+  applyTexts();
+  $('#accountSection').hidden = false;
 }
 const date = seconds => new Date(seconds * 1000).toLocaleString('en', {dateStyle: 'medium', timeStyle: 'short'});
 const gb = bytes => (bytes / 2 ** 30).toFixed(bytes < 10 * 2 ** 30 ? 1 : 0);
@@ -1771,7 +1853,7 @@ function renderDevicePanel() {
     ${s && s.io && s.io.ble_pairing !== undefined ? `<div class="row"><div class="label">${t('blePairing')}<div class="sub">${t('blePairingHelp')}</div></div>
       <label class="switch"><input type="checkbox" ${s.io.ble_pairing ? 'checked' : ''} onchange="setBlePairing('${p.id}', this.checked)"></label></div>
       <div class="row"><div class="label">Bluetooth</div><div class="sub">${esc(s.io.ble_pairing ? t('blePairingOn') + ' · ' : '')}${esc(t('ble_' + s.io.bluetooth) || s.io.bluetooth)}</div></div>` : ''}
-    ${r ? `<div class="row"><div class="label">${t('addToHa')}<div class="sub">${t('addToHaHelp')}</div></div>
+    ${r && !state.standalone ? `<div class="row"><div class="label">${t('addToHa')}<div class="sub">${t('addToHaHelp')}</div></div>
       <button onclick="addToHa('${p.id}')" ${state.job.running ? 'disabled' : ''}>${t('addToHaBtn')}</button></div>` : ''}
     <div class="actions"><button class="plain" onclick="renameProxy('${p.id}')">${t('rename')}</button><span class="grow"></span>
       <button class="warn" onclick="forgetProxy('${p.id}')">${t('forget')}</button></div>`);
@@ -2439,11 +2521,26 @@ document.addEventListener('submit', () => document.querySelectorAll('input[data-
   if (i.type === 'text') { i.type = 'password'; i.redrawEye(); }
 }), true);
 
+$('#logoutBtn').onclick = async () => { await api('api/auth/logout', {}); location.reload(); };
+$('#passwordForm').onsubmit = async e => {
+  e.preventDefault();
+  const r = await api('api/auth/password', {old: $('#pOld').value, password: $('#pNew').value});
+  $('#passwordResult').textContent = r.error || t('passwordChanged');
+  $('#passwordResult').className = 'sub' + (r.error ? ' warnText' : '');
+  if (!r.error) { $('#pOld').value = ''; $('#pNew').value = ''; }
+};
+
 applyTexts();
 showTab('devices');
-refresh().then(loadStatuses);
-setInterval(() => { if (!document.hidden) refresh(); }, 3000);
-setInterval(() => { if (!document.hidden) loadStatuses(); }, 30000);
+api('api/auth').then(a => {
+  auth = a;
+  if (a.standalone) standaloneSetup();
+  if (!a.logged_in) return showAuth();
+  refresh().then(loadStatuses);
+}).catch(() => refresh().then(loadStatuses));
+// Not behind the login screen: nothing to show there
+setInterval(() => { if (!document.hidden && $('#authView').hidden) refresh(); }, 3000);
+setInterval(() => { if (!document.hidden && $('#authView').hidden) loadStatuses(); }, 30000);
 </script>
 </body>
 </html>

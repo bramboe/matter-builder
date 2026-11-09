@@ -1,5 +1,9 @@
 """Matter Builder: the add-on's web page (Home Assistant ingress) and API.
 
+Also runs on its own, without Home Assistant (MB_STANDALONE=1): then it has
+a login of its own (a password chosen on the page, sessions in a cookie)
+instead of Home Assistant's.
+
 Proxies are linked with a token of the add-on's own (POST /link on the
 proxy: the page password plus a press of its BOOT button); the password is
 never stored. Builds and updates run one at a time as a "job" with a log.
@@ -8,6 +12,7 @@ Only the standard library: the image is Espressif's ESP-IDF image.
 
 import base64
 import gzip
+import hmac
 import hashlib
 import http.client
 import http.server
@@ -40,9 +45,12 @@ PORT = int(os.environ.get("MB_PORT", "8099"))
 # the port is also open on the LAN, so nothing else may use it
 INGRESS = "172.30.32.2"
 ALLOW_ANY = os.environ.get("MB_ALLOW_ANY") == "1"  # local testing only
+# On its own, without Home Assistant: anyone on the network may connect, so
+# everything but the login needs a session (see "standalone login" below)
+STANDALONE = os.environ.get("MB_STANDALONE") == "1"
 COMMIT = os.environ.get("ESP_MATTER_COMMIT", "")
 CONFIG_HOST = "octo-bridge.local"  # configuration mode of firmware that does not say where
-PROGRAM_NAME = "Home Assistant"
+PROGRAM_NAME = "Matter Builder" if STANDALONE else "Home Assistant"
 
 PROXIES = DATA / "proxies.json"
 PAGES = DATA / "pages"  # each device's own settings page, kept with its ETag
@@ -68,7 +76,8 @@ FACTORY = FIRMWARE / "factory"  # images for a new ESP32 (USB)
 JOB_LOG = DATA / "job.log"
 # Flash backups before installing over USB on this machine: in Home
 # Assistant's share folder, so they can be fetched over Samba or the file editor
-BACKUPS = Path(os.environ.get("MB_BACKUPS", "/share/matter-builder/backups"))
+BACKUPS = Path(os.environ.get("MB_BACKUPS") or (DATA / "backups" if STANDALONE else "/share/matter-builder/backups"))
+AUTH = DATA / "auth.json"
 
 lock = threading.Lock()
 job = {"kind": None, "running": False, "ok": None, "started": 0, "title": ""}
@@ -1498,26 +1507,189 @@ def link_poll(link_id):
     return reply
 
 
+# ---------------------------------------------------------------- standalone login
+# Without Home Assistant there is nobody in front of the page, so it has a
+# password of its own. The first password is chosen on the page; from another
+# machine that also needs the setup code printed in the log, so nobody else on
+# the network can claim a fresh installation first. Sessions are random
+# tokens in an HttpOnly, SameSite=Strict cookie; only their hashes are stored.
+
+SESSION_DAYS = 30
+PBKDF2_ROUNDS = 310000
+auth_lock = threading.Lock()
+login_failures = {"count": 0, "until": 0.0}
+SETUP_CODE = "-".join(secrets.token_hex(2).upper() for _ in range(3))
+
+
+def auth_load():
+    try:
+        return json.loads(AUTH.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def auth_save(data):
+    AUTH.parent.mkdir(parents=True, exist_ok=True)
+    tmp = AUTH.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data))
+    os.chmod(tmp, 0o600)
+    tmp.replace(AUTH)
+
+
+def password_hash(password, salt, rounds=PBKDF2_ROUNDS):
+    return hashlib.pbkdf2_hmac("sha256", password.encode(), bytes.fromhex(salt), rounds).hex()
+
+
+def password_set():
+    return bool(auth_load().get("hash"))
+
+
+def password_ok(password):
+    data = auth_load()
+    if not data.get("hash"):
+        return False
+    return hmac.compare_digest(password_hash(password, data["salt"], data.get("rounds", PBKDF2_ROUNDS)), data["hash"])
+
+
+def set_password(password):
+    """A new password ends every session."""
+    salt = secrets.token_hex(16)
+    auth_save({"salt": salt, "rounds": PBKDF2_ROUNDS, "hash": password_hash(password, salt), "sessions": {}})
+
+
+def session_key(token):
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def new_session():
+    token = secrets.token_urlsafe(32)
+    with auth_lock:
+        data = auth_load()
+        now = time.time()
+        sessions = {k: v for k, v in data.get("sessions", {}).items() if v > now}
+        sessions[session_key(token)] = now + SESSION_DAYS * 86400
+        data["sessions"] = sessions
+        auth_save(data)
+    return token
+
+
+def session_ok(token):
+    if not token:
+        return False
+    return auth_load().get("sessions", {}).get(session_key(token), 0) > time.time()
+
+
+def end_session(token):
+    with auth_lock:
+        data = auth_load()
+        data.get("sessions", {}).pop(session_key(token or ""), None)
+        auth_save(data)
+
+
+def password_problem(password):
+    if len(password) < 8:
+        return "at least 8 characters"
+    if len(password) > 128:
+        return "at most 128 characters"
+    return None
+
+
 # ---------------------------------------------------------------- HTTP
+
+# Without a session: the page itself (it shows the login) and the login API
+PUBLIC_PATHS = {"/", "/index.html", "/esptool.js", "/api/auth", "/api/auth/login", "/api/auth/setup"}
+
 
 class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         pass
 
     def allowed(self):
+        if STANDALONE:
+            return self.standalone_allowed()
         if ALLOW_ANY or self.client_address[0] in (INGRESS, "::ffff:" + INGRESS):
             return True
         self.send_error(403)
         return False
 
-    def reply(self, data, status=200, ctype="application/json"):
+    def session_token(self):
+        for part in self.headers.get("Cookie", "").split(";"):
+            key, _, value = part.strip().partition("=")
+            if key == "mb_session":
+                return value
+        return ""
+
+    def local_client(self):
+        return self.client_address[0] in ("127.0.0.1", "::1", "::ffff:127.0.0.1")
+
+    def standalone_allowed(self):
+        # Another site may not post here in the name of a logged-in browser
+        # (the cookie is SameSite=Strict as well)
+        origin = self.headers.get("Origin")
+        if self.command == "POST" and origin and urllib.parse.urlsplit(origin).netloc != self.headers.get("Host", ""):
+            self.reply({"error": "cross-site request"}, 403)
+            return False
+        if self.path.split("?")[0] in PUBLIC_PATHS or session_ok(self.session_token()):
+            return True
+        self.reply({"error": "login"}, 401)
+        return False
+
+    def reply(self, data, status=200, ctype="application/json", headers=None):
         body = data if isinstance(data, bytes) else json.dumps(data).encode()
         self.send_response(status)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        for key, value in (headers or {}).items():
+            self.send_header(key, value)
         self.end_headers()
         self.wfile.write(body)
+
+    def session_cookie(self, token, max_age):
+        return {"Set-Cookie": f"mb_session={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age={max_age}"}
+
+    def auth_post(self, path, data):
+        """The standalone login: first password, log in, log out, change it."""
+        if not STANDALONE:
+            return self.reply({"error": "not found"}, 404)
+        password = str(data.get("password", ""))
+        if path == "/api/auth/setup":
+            if password_set():
+                return self.reply({"error": "a password is already set"}, 409)
+            code = str(data.get("code", "")).strip().upper()
+            if not self.local_client() and not hmac.compare_digest(code, SETUP_CODE):
+                return self.reply({"error": "wrong setup code: it is in the log of Matter Builder"}, 403)
+            problem = password_problem(password)
+            if problem:
+                return self.reply({"error": f"the password needs {problem}"}, 400)
+            set_password(password)
+            print("password set", flush=True)
+            return self.reply({"ok": True}, headers=self.session_cookie(new_session(), SESSION_DAYS * 86400))
+        if path == "/api/auth/login":
+            now = time.time()
+            if now < login_failures["until"]:
+                return self.reply({"error": f"too many attempts: try again in {int(login_failures['until'] - now) + 1} s"}, 429)
+            if not password_ok(password):
+                login_failures["count"] += 1
+                if login_failures["count"] >= 5:
+                    login_failures.update(count=0, until=now + 30)
+                time.sleep(1)
+                return self.reply({"error": "wrong password"}, 403)
+            login_failures.update(count=0, until=0.0)
+            return self.reply({"ok": True}, headers=self.session_cookie(new_session(), SESSION_DAYS * 86400))
+        if path == "/api/auth/logout":
+            end_session(self.session_token())
+            return self.reply({"ok": True}, headers=self.session_cookie("", 0))
+        if path == "/api/auth/password":
+            if not password_ok(str(data.get("old", ""))):
+                time.sleep(1)
+                return self.reply({"error": "the current password is wrong"}, 403)
+            problem = password_problem(password)
+            if problem:
+                return self.reply({"error": f"the password needs {problem}"}, 400)
+            set_password(password)  # ends every other session
+            return self.reply({"ok": True}, headers=self.session_cookie(new_session(), SESSION_DAYS * 86400))
+        return self.reply({"error": "not found"}, 404)
 
     def body(self):
         length = int(self.headers.get("Content-Length", 0) or 0)
@@ -1580,6 +1752,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path == "/esptool.js":
             # esptool-js 0.7.0 (Apache-2.0, www/esptool-js.LICENSE): USB flashing in the browser
             return self.reply((HERE / "www" / "esptool.js").read_bytes(), ctype="text/javascript; charset=utf-8")
+        if path == "/api/auth":
+            return self.reply({"standalone": STANDALONE, "password_set": STANDALONE and password_set(),
+                               "logged_in": not STANDALONE or session_ok(self.session_token()),
+                               "needs_code": STANDALONE and not self.local_client()})
         if path == "/api/catalog":
             return self.reply(catalog())
         if path == "/api/serial":
@@ -1595,7 +1771,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                "sources": release_state["sources"],
                                "packages": release_state["packages"],
                                "release": release_state["release"], "release_error": release_state["error"],
-                               "settings": load_settings(), "system": system_info()})
+                               "settings": load_settings(), "system": system_info(), "standalone": STANDALONE})
         if path == "/api/specs":
             return self.reply({"specs": list_specs(), "examples": examples()})
         if path.startswith("/api/specs/"):
@@ -1648,6 +1824,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def post(self):
         path = self.path.split("?")[0]
         data = self.body()
+        if path.startswith("/api/auth/"):
+            return self.auth_post(path, data)
         if path == "/api/link":
             host, password = str(data.get("host", "")).strip(), str(data.get("password", ""))
             if not host or not password:
@@ -1767,6 +1945,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 started = start_job("update", proxy["name"], lambda: update_proxy(proxy, image))
                 return self.reply({"started": started})
             if parts[3] == "add_to_ha":
+                if STANDALONE:
+                    return self.reply({"error": "only in the Home Assistant add-on"}, 400)
                 started = start_job("matter", proxy["name"], lambda: add_to_ha(proxy))
                 return self.reply({"started": started})
             if parts[3] == "command":
@@ -1806,4 +1986,6 @@ if __name__ == "__main__":
     fetch_server = Server(("::", FETCH_PORT), FetchHandler)
     threading.Thread(target=fetch_server.serve_forever, daemon=True).start()
     print(f"Matter Builder on port {PORT}, updates fetched from port {FETCH_PORT}", flush=True)
+    if STANDALONE and not password_set():
+        print(f"No password yet: choose one on the page. From another machine it asks for this setup code: {SETUP_CODE}", flush=True)
     Server(("::", PORT), Handler).serve_forever()

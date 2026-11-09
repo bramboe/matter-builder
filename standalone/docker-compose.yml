@@ -1,0 +1,26 @@
+# Matter Builder without Home Assistant, in Docker (Linux).
+#
+#   cd standalone && docker compose up -d --build
+#   docker logs matter-builder      # the setup code for the first password
+#
+# Then open http://<this machine>:8099. It is the same add-on as in Home
+# Assistant (same files, same version), with a login of its own.
+services:
+  matter-builder:
+    build:
+      context: ../ha-addon/matter_builder
+      args:
+        BUILD_FROM: debian:bookworm-slim
+    container_name: matter-builder
+    restart: unless-stopped
+    # Finding devices (mDNS), Thread addresses and devices fetching updates
+    # from this machine all need the host network
+    network_mode: host
+    environment:
+      MB_STANDALONE: "1"
+      TZ: Europe/Amsterdam  # devices with time rules get this zone
+    volumes:
+      - ./data:/data  # devices, settings, password, backups, toolchain
+    # To install over USB on this machine, pass the ESP32's port:
+    # devices:
+    #   - /dev/ttyACM0:/dev/ttyACM0

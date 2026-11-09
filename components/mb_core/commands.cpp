@@ -7,7 +7,16 @@
 #include <vector>
 
 #include "boot_guard.h"
+#include "esp_app_desc.h"
+#include "esp_chip_info.h"
 #include "esp_console.h"
+#include "esp_flash.h"
+#include "esp_heap_caps.h"
+#include "esp_idf_version.h"
+#include "esp_mac.h"
+#include "esp_ota_ops.h"
+#include "esp_timer.h"
+#include "sdkconfig.h"
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -22,7 +31,7 @@ namespace {
 using Args = std::vector<std::string>;
 
 const char* HELP =
-    "system                                  firmware slots, reset reason, network\n"
+    "system [json]                           firmware slots, reset reason, network (json: for the page)\n"
     "revert                                  boot the other firmware slot\n"
     "reboot                                  restart\n"
     "log [from]                              the log kept in RAM, from byte <from> on (4 KB at a time)\n";
@@ -51,6 +60,77 @@ std::string nvs_text() {
     return "nvs: " + std::to_string(stats.used_entries) + " of " + std::to_string(stats.total_entries) +
            " entries used, " + std::to_string(stats.free_entries) + " free, " +
            std::to_string(stats.namespace_count) + " namespaces\n";
+}
+
+const char* reset_reason_name(esp_reset_reason_t reason) {
+    switch (reason) {
+        case ESP_RST_POWERON: return "power on";
+        case ESP_RST_EXT: return "reset pin";
+        case ESP_RST_SW: return "restart";
+        case ESP_RST_PANIC: return "crash";
+        case ESP_RST_INT_WDT: case ESP_RST_TASK_WDT: case ESP_RST_WDT: return "watchdog";
+        case ESP_RST_DEEPSLEEP: return "deep sleep";
+        case ESP_RST_BROWNOUT: return "brownout (power dip)";
+        case ESP_RST_USB: return "USB";
+        case ESP_RST_JTAG: return "JTAG";
+        default: return "other";
+    }
+}
+
+std::string json_escaped(const char* text) {
+    std::string out = "\"";
+    for (const char* c = text; *c; ++c) {
+        if (*c == '"' || *c == '\\') out += '\\';
+        if (static_cast<unsigned char>(*c) >= 0x20) out += *c;
+    }
+    return out + "\"";
+}
+
+std::string slot_json(const esp_partition_t* part) {
+    if (part == nullptr) return "null";
+    esp_app_desc_t desc;
+    const bool valid = esp_ota_get_partition_description(part, &desc) == ESP_OK;
+    char address[16];
+    std::snprintf(address, sizeof(address), "0x%lx", static_cast<unsigned long>(part->address));
+    return std::string("{\"label\":") + json_escaped(part->label) + ",\"address\":\"" + address + "\"" +
+           (valid ? ",\"app\":" + json_escaped(desc.project_name) + ",\"version\":" + json_escaped(desc.version) : "") + "}";
+}
+
+// The device's technical details, for the page's System card
+std::string system_json() {
+    const esp_app_desc_t* app = esp_app_get_description();
+    esp_chip_info_t chip = {};
+    esp_chip_info(&chip);
+    uint32_t flash = 0;
+    esp_flash_get_size(nullptr, &flash);
+    uint8_t mac[6] = {};
+    esp_read_mac(mac, ESP_MAC_BASE);
+    char mac_text[18];
+    std::snprintf(mac_text, sizeof(mac_text), "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    nvs_stats_t nvs = {};
+    nvs_get_stats(nullptr, &nvs);
+    std::string out = "{\"app\":" + json_escaped(app->project_name) + ",\"version\":" + json_escaped(app->version) +
+                      ",\"built\":" + json_escaped((std::string(app->date) + " " + app->time).c_str()) +
+                      ",\"idf\":" + json_escaped(esp_get_idf_version()) + ",\"chip\":" + json_escaped(CONFIG_IDF_TARGET) +
+                      ",\"revision\":\"v" + std::to_string(chip.revision / 100) + "." + std::to_string(chip.revision % 100) +
+                      "\",\"cores\":" + std::to_string(chip.cores) + ",\"mhz\":" + std::to_string(CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ) +
+                      ",\"flash\":" + std::to_string(flash) + ",\"mac\":\"" + mac_text + "\"" +
+                      ",\"heap\":" + std::to_string(esp_get_free_heap_size()) +
+                      ",\"heap_min\":" + std::to_string(esp_get_minimum_free_heap_size()) +
+                      ",\"heap_block\":" + std::to_string(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)) +
+                      ",\"uptime\":" + std::to_string(esp_timer_get_time() / 1000000) +
+                      ",\"reset\":" + json_escaped(reset_reason_name(esp_reset_reason())) +
+                      ",\"running\":" + slot_json(esp_ota_get_running_partition()) +
+                      ",\"other\":" + slot_json(esp_ota_get_next_update_partition(nullptr)) +
+                      ",\"nvs_used\":" + std::to_string(nvs.used_entries) + ",\"nvs_total\":" + std::to_string(nvs.total_entries) +
+                      ",\"network\":\"" +
+#if CONFIG_OPENTHREAD_ENABLED
+                      "thread"
+#else
+                      "wifi"
+#endif
+                      "\"}\n";
+    return out;
 }
 
 std::string cmd_revert() {
@@ -95,6 +175,7 @@ std::string run_command(const std::string& line) {
         return out;
     }
     const std::string& cmd = args[0];
+    if (cmd == "system" && args.size() == 2 && args[1] == "json") return system_json();
     if (cmd == "system") return boot_guard::describe() + nvs_text() + net::describe();
     if (cmd == "revert") return cmd_revert();
     if (cmd == "log") return log_buffer::read(args.size() > 1 ? std::strtoul(args[1].c_str(), nullptr, 10) : 0, 4096);

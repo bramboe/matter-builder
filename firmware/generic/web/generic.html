@@ -74,6 +74,8 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
 .menu{position:absolute;right:8px;top:48px;min-width:200px;background:var(--card);border-radius:4px;box-shadow:0 4px 16px rgba(0,0,0,.25);padding:8px 0;display:none}
 .menu.open{display:block}
 .menu button{width:100%;justify-content:flex-start;border-radius:0;background:none;min-height:44px;font-weight:400}
+.field input.saved::placeholder{color:inherit;opacity:1;letter-spacing:2px}
+.passState{color:var(--ok,#2e7d32);font-weight:500}
 #toast{position:fixed;left:50%;bottom:16px;transform:translate(-50%,140px);max-width:calc(100% - 32px);background:#323232;color:#f1f1f1;border-radius:4px;padding:12px 16px;box-shadow:0 3px 6px rgba(0,0,0,.3);transition:transform .2s;white-space:pre-wrap;z-index:3}
 #toast.show{transform:translate(-50%,0)}
 </style>
@@ -281,7 +283,7 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
       <form id="wifiForm" class="form" style="grid-template-columns:1fr">
         <label class="field"><span data-t="wifiNetwork"></span><input id="wifiSsid" autocomplete="off" maxlength="32"></label>
         <div class="chips netlist" id="wifiSsidNets"></div><button type="button" class="text" data-scan="wifiSsid" data-t="scanWifi" style="justify-self:start"></button>
-        <label class="field"><span data-t="wifiPassword"></span><input id="wifiPass" type="password" autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other" maxlength="64"></label>
+        <label class="field"><span><span data-t="wifiPassword"></span> <span id="wifiPassState" class="passState"></span></span><input id="wifiPass" type="password" autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other" maxlength="64"></label>
         <div class="sub wifiResult" style="color:var(--bad)" hidden></div>
         <div class="features" style="margin-top:0"><button type="submit" data-t="save"></button>
           <button type="button" class="pri" id="cfgStart" data-t="configStart"></button></div>
@@ -317,6 +319,7 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
       <div class="row"><div class="label"><span data-t="network"></span><div class="sub" id="pageUrl"></div></div><div id="netKind">–</div></div>
       <div class="row"><div class="label" data-t="freeMemory"></div><div id="heap">–</div></div>
       <div class="row"><div class="label" data-t="uptime"></div><div id="uptime">–</div></div>
+      <details id="techDetails"><summary data-t="techTitle"></summary><div id="techRows"></div></details>
     </div>
   </div>
 </div>
@@ -359,7 +362,7 @@ const TEXT = {
   password: 'Password', login: 'Sign in', wrongPassword: 'Wrong password.', changePassword: 'Change password', restart: 'Restart',
   settings: 'Settings', pairingCode: 'Pairing code', openWindow: 'Open pairing window',
   deviceNetwork: 'Device and network', device: 'Device', vidPid: 'Vendor / product ID',
-  testIds: 'Test IDs of the Matter standard', system: 'System', freeMemory: 'Free memory', uptime: 'Running',
+  testIds: 'Test IDs of the Matter standard', techTitle: 'Technical details', techFirmware: 'Firmware', techChip: 'Chip', techFlash: 'Flash', techMac: 'MAC address', techMemory: 'Memory (free · lowest · largest block)', techReset: 'Last restart', techSlots: 'Firmware slots', techNvs: 'Settings storage', techIdf: 'ESP-IDF', techNetwork: 'Network', techEntries: 'entries', techRunning: 'running', system: 'System', freeMemory: 'Free memory', uptime: 'Running',
   showPassword: 'Show password', hidePassword: 'Hide password', connecting: 'Connecting…', noConnection: 'No connection',
   setupTitle: 'Choose a password', setupHelp: 'This device has no password yet. Choose one: you need it to open this page on another device.',
   changeTitle: 'Change password', newPassword: 'New password', repeatPassword: 'Repeat password', save: 'Save',
@@ -367,7 +370,7 @@ const TEXT = {
   passwordRefused: 'password refused', error: 'Error', cancel: 'Cancel',
   configMode: 'Configuration mode',
   configHelp: 'For a firmware update: the device restarts on Wi-Fi for 15 minutes, with Thread and Matter off. Then it returns by itself.',
-  scanWifi: 'Look for networks', scanning: 'Looking… (Thread pauses for a few seconds)', noNetworks: 'No Wi-Fi networks found', openNetwork: 'open', wifiNetwork: 'Wi-Fi network', wifiPassword: 'Wi-Fi password', wifiPassKeep: 'saved, leave empty to keep', saved: 'Saved',
+  scanWifi: 'Look for networks', scanning: 'Looking… (Thread pauses for a few seconds)', noNetworks: 'No Wi-Fi networks found', openNetwork: 'open', wifiNetwork: 'Wi-Fi network', wifiPassword: 'Wi-Fi password', wifiPassKeep: 'saved, leave empty to keep', wifiPassSaved: '✓ saved: type to change it', saving: 'Saving…', saved: 'Saved',
   configStart: 'Start configuration mode', configNeedsWifi: 'Enter the Wi-Fi network first.',
   configConfirm: h => `Restart on Wi-Fi? The device does not work in Home Assistant until it is back (at most 15 minutes). Then open http://${h}/`,
   configStarted: h => `Restarting on Wi-Fi: open http://${h}/ in a minute`,
@@ -979,6 +982,29 @@ async function loadMatter() {
   $('#pageUrl').textContent = deviceHome;
 }
 
+// Technical details ("system json"), loaded when opened
+async function loadTech() {
+  let s;
+  try { s = JSON.parse(await cmd('system json')); } catch (e) { return; }
+  const kb = n => Math.round(n / 1024) + ' KB';
+  const slot = p => p ? `${p.label} @${p.address}` + (p.app ? ` · ${p.app} ${p.version}` : '') : '–';
+  const chips = {esp32c6: 'ESP32-C6', esp32h2: 'ESP32-H2', esp32s3: 'ESP32-S3', esp32c3: 'ESP32-C3', esp32: 'ESP32'};
+  const rows = [
+    [t('techFirmware'), `${s.app} ${s.version} · ${s.built}`],
+    [t('techChip'), `${chips[s.chip] || s.chip} ${s.revision} · ${s.cores}× ${s.mhz} MHz`],
+    [t('techNetwork'), s.network === 'thread' ? 'Thread' : 'Wi-Fi'],
+    [t('techFlash'), Math.round(s.flash / 1048576) + ' MB'],
+    [t('techMac'), s.mac],
+    [t('techMemory'), `${kb(s.heap)} · ${kb(s.heap_min)} · ${kb(s.heap_block)}`],
+    [t('techReset'), s.reset],
+    [t('techSlots'), `${slot(s.running)} (${t('techRunning')})\n${slot(s.other)}`],
+    [t('techNvs'), `${s.nvs_used} / ${s.nvs_total} ${t('techEntries')}`],
+    [t('techIdf'), s.idf],
+  ];
+  $('#techRows').innerHTML = rows.map(([k, v]) => `<div class="row"><div class="label">${esc(k)}</div><div class="sub" style="text-align:right;white-space:pre-line;word-break:break-word">${esc(v)}</div></div>`).join('');
+}
+$('#techDetails').addEventListener('toggle', () => { if ($('#techDetails').open) loadTech(); });
+
 // Programs with a token of their own (the Home Assistant add-on, scripts)
 let access = null;
 async function loadAccess() {
@@ -1063,7 +1089,10 @@ async function loadWifi() {
     const w = JSON.parse(await cmd('wifi json'));
     wifiHost = w.host;
     if (document.activeElement !== $('#wifiSsid')) $('#wifiSsid').value = w.ssid;
-    $('#wifiPass').placeholder = w.password_set ? t('wifiPassKeep') : '';
+    // A saved password shows as dots, as a filled-in field would; typing replaces it
+    $('#wifiPass').placeholder = w.password_set ? '••••••••••••' : '';
+    $('#wifiPass').classList.toggle('saved', !!w.password_set);
+    $('#wifiPassState').textContent = w.password_set ? t('wifiPassSaved') : '';
     if (document.activeElement !== $('#wizSsid')) $('#wizSsid').value = w.source === 'page' ? w.ssid : '';
     // Why the last configuration mode went back to Thread early, e.g. "password 15"
     const [why, code] = (w.last_result || '').split(' ');
@@ -1134,9 +1163,29 @@ async function saveWifi(ssidEl = $('#wifiSsid'), passEl = $('#wifiPass')) {
   return true;
 }
 
+// Feedback on the button itself: toasts can fall outside the view (the page in
+// the add-on's portal frame), and a command over Thread takes a few seconds
+async function busyButton(button, work, doneKey = 'saved') {
+  const label = button.textContent;
+  button.disabled = true;
+  button.textContent = t('saving');
+  try {
+    const ok = await work();
+    button.textContent = ok === false ? label : '✓ ' + t(doneKey);
+    if (ok !== false) setTimeout(() => { button.textContent = label; }, 2500);
+    return ok;
+  } catch (err) {
+    button.textContent = label;
+    toast(t('error') + ': ' + err.message);
+    return false;
+  } finally {
+    button.disabled = false;
+  }
+}
+
 $('#wifiForm').onsubmit = async e => {
   e.preventDefault();
-  try { if (await saveWifi()) toast(t('saved')); } catch (err) { toast(t('error') + ': ' + err.message); }
+  await busyButton(e.submitter || $('#wifiForm button[type=submit]'), () => saveWifi());
 };
 $('#cfgStart').onclick = async () => {
   try {

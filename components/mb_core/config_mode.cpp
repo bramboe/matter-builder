@@ -480,7 +480,7 @@ std::string command_in_config_mode(const std::vector<std::string>& args) {
         return state_json(network);  // the page's polling: not activity
     }
     last_activity_us = esp_timer_get_time();
-    if (cmd == "system") {
+    if (cmd == "system" && args.size() == 1) {  // "system json" goes on to the built-in
         if (ap_mode) {
             return boot_guard::describe() + "configuration mode on the setup access point '" + ap_ssid +
                    "', ip " + ip_text + "\n";

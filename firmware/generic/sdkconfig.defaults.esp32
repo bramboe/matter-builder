@@ -16,3 +16,7 @@ CONFIG_COMPILER_OPTIMIZATION_ASSERTIONS_SILENT=y
 CONFIG_ESP_ERR_TO_NAME_LOOKUP=n
 CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_CMN=y
 CONFIG_BT_NIMBLE_LOG_LEVEL_WARNING=y
+# Room for 12 Matter endpoints, not 22: the root, the aggregator, the eight
+# connections and two rules. With 22 the classic ESP32 ran out of memory
+# while Matter started (and rolled back to its previous firmware)
+CONFIG_ESP_MATTER_MAX_DYNAMIC_ENDPOINT_COUNT=12

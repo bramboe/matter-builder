@@ -649,7 +649,7 @@ def update_proxy(proxy, image):
     if info.get("network") == "wifi":
         status, text = upload_over_thread(proxy, image, wifi=True)
         log(text.strip() or f"HTTP {status}")
-        return status == 200 and wait_until_back(proxy)
+        return status == 200 and wait_until_back(proxy, image)
 
     status, wifi = command(proxy, "wifi json")
     try:
@@ -662,13 +662,13 @@ def update_proxy(proxy, image):
         log("== Over Thread instead (slow, about half an hour)")
         status, text = upload_over_thread(proxy, image)
         log(text.strip() or f"HTTP {status}")
-        return status == 200 and wait_until_back(proxy)
+        return status == 200 and wait_until_back(proxy, image)
 
     if proxy.get("ota_over_thread"):
         # Learned on an earlier update: Wi-Fi does not reach this device
         status, text = upload_over_thread(proxy, image)
         log(text.strip() or f"HTTP {status}")
-        return status == 200 and wait_until_back(proxy)
+        return status == 200 and wait_until_back(proxy, image)
 
     log("== Configuration mode on Wi-Fi")
     status, text = command(proxy, "wifi config 15")
@@ -708,7 +708,7 @@ def update_proxy(proxy, image):
             return False
         status, text = upload_over_thread(proxy, image)
     log(text.strip() or f"HTTP {status}")
-    return status == 200 and wait_until_back(proxy)
+    return status == 200 and wait_until_back(proxy, image)
 
 
 THREAD_RATE = 1200  # bytes per second, measured: Thread is slow for a whole image
@@ -753,17 +753,29 @@ def remember_ota_over_thread(proxy):
     save_proxies(proxies)
 
 
-def wait_until_back(proxy):
+def wait_until_back(proxy, image=None):
+    """The device on its own address again, running the new firmware: one that
+    comes back on the old version did not start the new one (its boot guard
+    went back), which is a failed update, not a done one."""
+    want = image.name.removesuffix(".bin").rpartition("-")[2] if image is not None else None
     log("== Waiting for the proxy on its own address")
     time.sleep(15)  # it answers with the old firmware until it restarts
     end = time.time() + 240
+    running = None
     while time.time() < end:
         time.sleep(5)
         status, text = command(proxy, "system", timeout=10)
-        if status == 200:
-            log(text.strip().splitlines()[0])
+        if status != 200:
+            continue
+        running = text.strip().splitlines()[0]
+        if want is None or f" {want} " in running:
+            log(running)
             log("== Done")
             return True
+    if running:
+        log(running)
+        log(f"!! The device went back to its previous firmware: {image.name} did not start on it")
+        return False
     log("!! The proxy did not come back yet; boot_guard returns to the previous firmware if it cannot get online")
     return False
 

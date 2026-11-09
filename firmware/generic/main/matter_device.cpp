@@ -1,5 +1,6 @@
 #include "matter_device.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -288,6 +289,11 @@ endpoint_t* slot_endpoint[io::SLOTS] = {};
 // After them one endpoint per rule, the same way: a rule shown in Matter is
 // a switch that turns the rule on and off, at a fixed endpoint
 endpoint_t* rule_endpoint[rules::RULES] = {};
+// As many rule endpoints as the endpoint table holds next to the root, the
+// aggregator and the connections: all 12 on the C6, 2 on the classic ESP32,
+// whose memory does not hold more (it ran out starting Matter with 12)
+constexpr int RULE_ENDPOINTS =
+    std::min(rules::RULES, CONFIG_ESP_MATTER_MAX_DYNAMIC_ENDPOINT_COUNT - 2 - io::SLOTS);
 
 void create_endpoints() {
     endpoint::aggregator::config_t aggregator_config;
@@ -316,7 +322,7 @@ void create_endpoints() {
         endpoint_of[i] = endpoint::get_id(ep);
         ESP_LOGI(TAG, "Connection %d '%s' on endpoint %u", i, s.name, endpoint_of[i]);
     }
-    for (int i = 0; i < rules::RULES; ++i) {
+    for (int i = 0; i < RULE_ENDPOINTS; ++i) {
         endpoint::bridged_node::config_t config;
         config.bridged_device_basic_information.reachable = true;
         endpoint_t* ep = endpoint::bridged_node::create(node, &config, ENDPOINT_FLAG_BRIDGE, nullptr);

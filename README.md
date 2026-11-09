@@ -10,6 +10,8 @@ It grows with what you want to do: install ready-made firmware and set it up
 in your browser, pick a recipe or package from the catalog, or write a
 component of your own and build it in Home Assistant.
 
+![A device's own settings page: connections, rules and settings](docs/screenshots/device-page.png)
+
 - **Ready-made, signed firmware.** Installed and set up from the browser, no
   toolchain involved. The standard firmware, the *generic device*, covers
   relays, LEDs, buttons, contacts, motion and SHT4x sensors on free pins of an
@@ -84,6 +86,25 @@ for that moment when it can reach it, otherwise the update goes over Thread
   previous firmware.
 - **Thread or Wi-Fi.** Thread for low power and range through a mesh, Wi-Fi
   when there is no Thread network; on the C6 you choose.
+
+### Screenshots
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/add-connection.png" alt="Adding a connection: relay, LED, button, contact, motion, SHT4x, infrared or Bluetooth"><br><sub>Adding a connection on the device's page</sub></td>
+    <td width="50%"><img src="docs/screenshots/addon-devices.png" alt="The add-on's device overview"><br><sub>The add-on: linked devices</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/install-wizard.png" alt="Installing firmware: Thread or Wi-Fi"><br><sub>Installing firmware on a new ESP32</sub></td>
+    <td><img src="docs/screenshots/catalog.png" alt="The catalog with firmware and recipes"><br><sub>The catalog: firmware and recipes</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/bed-bridge.png" alt="The Octo bed bridge page with two beds"><br><sub>The Octo bed bridge</sub></td>
+    <td align="center"><img src="docs/screenshots/device-page-phone.png" width="45%" alt="A device's page on a phone"><br><sub>The device's page on a phone</sub></td>
+  </tr>
+</table>
+
+<sub>Screenshots with demo data.</sub>
 
 ## Layers
 

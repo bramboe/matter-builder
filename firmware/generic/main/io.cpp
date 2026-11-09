@@ -42,6 +42,7 @@ constexpr int64_t CLIMATE_US = 30 * 1000 * MS;
 constexpr uint8_t SHT4X_ADDRESS = 0x44;
 constexpr int64_t PRESENCE_US = 60 * 1000 * MS;   // not seen for a minute: away
 constexpr int64_t BLE_CLIMATE_US = 60 * 1000 * MS;  // a thermometer's reading at most every minute
+constexpr uint32_t BLUETOOTH_MIN_HEAP = 60 * 1024;  // free memory the Bluetooth stack needs to start
 
 #if CONFIG_IDF_TARGET_ESP32
 // Pins a connection may use on the classic ESP32: not the flash (6-11), the
@@ -1016,8 +1017,18 @@ bool climate(int index, int16_t& centi_celsius, uint16_t& centi_percent) {
 bool needs_bluetooth() { return bluetooth; }
 
 void start_bluetooth(bool shared_with_pairing) {
-    // Only when a connection needs it; scanning only when one listens
-    if (bluetooth) ble_scan::start(on_ble_advert, shared_with_pairing, listening);
+    // Only when a connection needs it; scanning only when one listens. The
+    // Bluetooth stack needs room: on a classic ESP32 next to Matter and Wi-Fi
+    // there is too little, and starting it anyway took the device down
+    if (!bluetooth) return;
+    if (!shared_with_pairing && esp_get_free_heap_size() < BLUETOOTH_MIN_HEAP) {
+        problem += (problem.empty() ? "" : " ") + std::string("Bluetooth is off: not enough memory (") +
+                   std::to_string(esp_get_free_heap_size() / 1024) + " KB free, " +
+                   std::to_string(BLUETOOTH_MIN_HEAP / 1024) + " KB needed). The Bluetooth connections do not work on this board.";
+        ESP_LOGE(TAG, "Not enough memory for Bluetooth (%u bytes free)", static_cast<unsigned>(esp_get_free_heap_size()));
+        return;
+    }
+    ble_scan::start(on_ble_advert, shared_with_pairing, listening);
 }
 
 void set_ble_pairing(bool on) { ble_pairing = on; }

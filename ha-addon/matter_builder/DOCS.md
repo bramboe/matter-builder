@@ -82,7 +82,7 @@ so when it is not.
 | Chip | Network | Firmware |
 |---|---|---|
 | ESP32-C6 | Thread or Wi-Fi, chosen in the wizard | `mb_generic` (Thread), `mb_generic_wifi` (Wi-Fi) |
-| Classic ESP32 | Wi-Fi | `mb_generic_esp32` |
+| Classic ESP32 | Wi-Fi (no Bluetooth connections: too little memory next to Matter) | `mb_generic_esp32` |
 
 The flash must hold the firmware twice (an update goes into the second
 copy): the **ESP32-C6 needs 8 MB**, the **classic ESP32 4 MB** (the common

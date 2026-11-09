@@ -225,7 +225,12 @@ void console_start() {
     repl_config.max_cmdline_length = 600;  // a pasted Thread dataset
     repl_config.task_stack_size = 8192;    // "io json" with sensor values overflowed the default 4 KB
     esp_console_dev_uart_config_t uart_config = ESP_CONSOLE_DEV_UART_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_console_new_repl_uart(&uart_config, &repl_config, &repl));
+    // Without memory for it the device runs on without a serial console
+    // (it aborted here on a classic ESP32 with Bluetooth on)
+    if (esp_console_new_repl_uart(&uart_config, &repl_config, &repl) != ESP_OK) {
+        std::fputs("serial console unavailable: not enough memory\n", stdout);
+        return;
+    }
 
     for (const char* name : {"help", "system", "revert", "reboot"}) {
         esp_console_cmd_t cmd = {};

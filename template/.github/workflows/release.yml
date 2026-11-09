@@ -16,7 +16,7 @@ permissions:
 
 env:
   MB_REPO: bramboe/matter-builder
-  MB_VERSION: v0.1.16
+  MB_VERSION: v0.1.17
   IDF_IMAGE: espressif/idf:v5.5.5
   ESP_MATTER_COMMIT: fe1efc6cdf62f19b5ca44213900333a6aad7a8b2
 

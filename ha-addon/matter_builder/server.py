@@ -523,7 +523,11 @@ def run_script(name, *args):
 
 
 def toolchain_ready():
-    return bool(COMMIT) and (DATA / "toolchain" / f"ready-{COMMIT}").exists()
+    """esp-matter at this version, and ESP-IDF where idf_env.sh looks for it:
+    in Espressif's image, or downloaded into /data (an older add-on's
+    toolchain had ESP-IDF in its image and must be installed once more)."""
+    idf = Path("/opt/esp/idf/export.sh") if Path("/opt/esp/idf/export.sh").exists() else DATA / "toolchain" / "esp-idf" / "export.sh"
+    return bool(COMMIT) and (DATA / "toolchain" / f"ready-{COMMIT}").exists() and idf.exists()
 
 
 def builds():

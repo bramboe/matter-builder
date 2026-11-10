@@ -464,3 +464,17 @@ settings: {}              # following the package's schema
 6. Catalog: the Action, `catalog.json` on Pages, the block list and the Catalog page. (`tools/build_catalog.py`, `.github/workflows/catalog.yml`, `catalog/`.)
 7. Flash page on GitHub Pages (§16.5, way 3).
 8. Documentation: "making a package" and "sharing a recipe".
+
+## Rule: into Matter only on the Matter thread
+
+Matter's own work runs on its thread, with a stack sized for it. Code on
+another task (the HTTP API, the console, a timer, the Bluetooth host) that
+reads or changes Matter state goes through `matter_thread::run()`
+(components/mb_core): the work runs on the Matter thread and the caller
+waits for it. Taking the stack lock from the other task instead
+(`LockChipStack`, `ScopedChipStackLock`) runs Matter's code on that task's
+small stack: opening the pairing window that way crashed the bed bridge, and
+so did removing a fabric. There is no exception for work that looks small.
+
+Events towards Matter that nobody waits for (an input changed, a sensor
+value) keep using `PlatformMgr().ScheduleWork()`.

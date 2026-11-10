@@ -406,6 +406,12 @@ a problem is, link by link:
 - **Border router ↔ Matter Builder** (or **Wi-Fi ↔ Matter Builder**): how many
   checks it answered in the last day, how fast, and the longest gap.
 
+- **Device memory**: the free memory and how low it got, whether it is
+  fragmented, the task with the least stack left, and restarts after a crash
+  (an update or a power cut is not one). Matter needs a lot of memory; this
+  warns before a device runs out, and says so when a device that went silent
+  was almost out of memory the last time it answered.
+
 On top a summary in plain words, e.g. *Not heard from since 22:42. Your other
 Thread devices do not answer either: most likely the border router or the
 Thread network, not this device.* **Check now** measures at once. The device's

@@ -1740,6 +1740,15 @@ def health_sample(proxy):
             info = json.loads(text)
             sample.update(ok=True, rtt=int((time.time() - started) * 1000), uptime=info.get("uptime"),
                           net=info.get("net") if isinstance(info.get("net"), dict) else None)
+            # Memory: free now, the lowest since it started, the largest free
+            # block, what each task has left of its stack, why it last restarted
+            for key in ("heap", "heap_min", "heap_block"):
+                if isinstance(info.get(key), int):
+                    sample[key] = info[key]
+            if isinstance(info.get("stacks"), dict):
+                sample["stacks"] = {str(k): v for k, v in info["stacks"].items() if isinstance(v, int)}
+            if isinstance(info.get("reset"), str):
+                sample["reset"] = info["reset"]
         except ValueError:
             sample["error"] = "no answer it understands"
     else:
@@ -1784,6 +1793,57 @@ def grown(samples, key, parent=None):
 def restarts(samples):
     ups = [s["uptime"] for s in samples if s.get("ok") and isinstance(s.get("uptime"), (int, float))]
     return sum(1 for a, b in zip(ups, ups[1:]) if b < a)
+
+
+def crashes(samples):
+    """Restarts in the samples that were a crash or a watchdog, not an update or a power cut."""
+    count, previous = 0, None
+    for sample in samples:
+        up = sample.get("uptime") if sample.get("ok") else None
+        if not isinstance(up, (int, float)):
+            continue
+        if previous is not None and up < previous and sample.get("reset") in ("crash", "watchdog"):
+            count += 1
+        previous = up
+    return count
+
+
+def kb(size):
+    return f"{size / 1024:.0f} KB" if size >= 10240 else f"{size / 1024:.1f} KB"
+
+
+def memory_link(ok):
+    """The device's memory over the day: how low it got, fragmentation, the
+    tightest task stack and crashes. None when the firmware does not say."""
+    with_memory = [s for s in ok if isinstance(s.get("heap_min"), int)]
+    if not with_memory:
+        return None
+    last = with_memory[-1]
+    lowest = min(s["heap_min"] for s in with_memory)
+    block, free = last.get("heap_block"), last.get("heap")
+    stacks = last.get("stacks") or {}
+    task, left = min(stacks.items(), key=lambda item: item[1]) if stacks else (None, None)
+    crashed = crashes(ok)
+    name = "Device memory"
+    if left is not None and left < 256:
+        return {"name": name, "state": "bad",
+                "text": f"The task “{task}” has only {left} bytes of stack left: a crash is close. Please report this."}
+    if lowest < 8192:
+        return {"name": name, "state": "bad",
+                "text": f"Almost out of memory: {kb(lowest)} free at its lowest. It may restart by itself; fewer connections help."}
+    if crashed >= 2:
+        return {"name": name, "state": "bad", "text": f"Restarted after a crash {crashed}× in the last day."}
+    if left is not None and left < 768:
+        return {"name": name, "state": "warn", "text": f"The task “{task}” is low on stack ({left} bytes left)."}
+    if lowest < 20480:
+        return {"name": name, "state": "warn", "text": f"Memory ran low: {kb(lowest)} free at its lowest."}
+    if isinstance(block, int) and isinstance(free, int) and block < 12288 and block < free // 3:
+        return {"name": name, "state": "warn",
+                "text": f"Memory is fragmented: {kb(free)} free, but the largest piece is {kb(block)}. A restart tidies it."}
+    if crashed:
+        return {"name": name, "state": "warn", "text": "Restarted after a crash once in the last day."}
+    detail = f"; tightest stack: {task}, {kb(left)} left" if task else ""
+    return {"name": name, "state": "ok", "text": f"{kb(free) if isinstance(free, int) else kb(lowest)} free, {kb(lowest)} at its lowest{detail}."}
 
 
 def clock_text(t):
@@ -1861,6 +1921,9 @@ def health_verdict(samples, others_down=False):
                           "text": f"Signal {rssi} dBm." if isinstance(rssi, int) else "Connected."})
     if rebooted:
         links[0] = dict(links[0], note=f"Restarted {rebooted}× in the last day.")
+    memory = memory_link(ok)
+    if memory:
+        links.append(memory)
 
     # 3. From there to Matter Builder
     rtts = sorted(s["rtt"] for s in ok if "rtt" in s)
@@ -1892,6 +1955,8 @@ def health_verdict(samples, others_down=False):
         summary = f"Not heard from since {clock_text(since)}."
         if others_down and thread:
             summary += " Your other Thread devices do not answer either: most likely the border router or the Thread network, not this device."
+        elif memory and memory["state"] == "bad":
+            summary += " The last time it answered it was almost out of memory: it may have stopped by itself. Power it off and on."
         elif last_ok and all(link["state"] == "ok" for link in links[:-1]):
             summary += (" The last time it answered, its network was fine: most likely it has no power"
                         + (", or the border router is down." if thread else ", or Wi-Fi is down."))

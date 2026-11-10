@@ -97,6 +97,22 @@ std::string slot_json(const esp_partition_t* part) {
 }
 
 // The device's technical details, for the page's System card
+// How much stack each known task has never used (its high-water mark), in
+// bytes: a task close to 0 is about to overflow. For the add-on's health
+// check; a task that does not exist in this firmware is left out.
+std::string stacks_json() {
+    static const char* const TASKS[] = {"CHIP", "httpd", "console_repl", "main", "ot_task", "nimble_host", "tiT",
+                                        "sys_evt", "esp_timer", "wifi", "io", "rules", "bledev", "ir", "boot_button"};
+    std::string out = "{";
+    for (const char* name : TASKS) {
+        const TaskHandle_t task = xTaskGetHandle(name);
+        if (task == nullptr) continue;
+        out += std::string(out.size() > 1 ? "," : "") + "\"" + name + "\":" +
+               std::to_string(static_cast<unsigned>(uxTaskGetStackHighWaterMark(task)));
+    }
+    return out + "}";
+}
+
 std::string system_json() {
     const esp_app_desc_t* app = esp_app_get_description();
     esp_chip_info_t chip = {};
@@ -124,6 +140,7 @@ std::string system_json() {
                       ",\"other\":" + slot_json(esp_ota_get_next_update_partition(nullptr)) +
                       ",\"nvs_used\":" + std::to_string(nvs.used_entries) + ",\"nvs_total\":" + std::to_string(nvs.total_entries) +
                       ",\"net\":" + net::health_json() +
+                      ",\"stacks\":" + stacks_json() +
                       ",\"network\":\"" +
 #if CONFIG_OPENTHREAD_ENABLED
                       "thread"

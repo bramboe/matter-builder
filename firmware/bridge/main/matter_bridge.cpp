@@ -22,6 +22,7 @@
 
 #include "bed_link.h"
 #include "matter_info.h"
+#include "matter_thread.h"
 #include "esp_app_desc.h"
 #include "esp_log.h"
 #include "mb_core.h"
@@ -850,19 +851,20 @@ std::string language_command(const std::vector<std::string>& args) {
     for (int i = 0; i < LANGUAGE_COUNT; ++i) {
         if (args.size() == 2 && args[1] == LANGUAGES[i].code) {
             nvs_put("lang", static_cast<uint32_t>(i));
-            chip::DeviceLayer::PlatformMgr().LockChipStack();
-            language = i;
-            for (int b = 0; b < bed_total; ++b) {
-                build_modes(b);
-                esp_matter_attr_val_t description = esp_matter_char_str(
-                    const_cast<char*>(LANGUAGES[i].description), std::strlen(LANGUAGES[i].description));
-                attribute::update(beds[b].device_endpoint, ModeSelect::Id, ModeSelect::Attributes::Description::Id,
-                                  &description);
-                MatterReportingAttributeChangeCallback(beds[b].device_endpoint, ModeSelect::Id,
-                                                       ModeSelect::Attributes::SupportedModes::Id);
-            }
-            chip::DeviceLayer::PlatformMgr().UnlockChipStack();
-            return std::string(LANGUAGES[i].code) + "\n";
+            const bool ran = matter_thread::run([&] {
+                language = i;
+                for (int b = 0; b < bed_total; ++b) {
+                    build_modes(b);
+                    esp_matter_attr_val_t description = esp_matter_char_str(
+                        const_cast<char*>(LANGUAGES[i].description), std::strlen(LANGUAGES[i].description));
+                    attribute::update(beds[b].device_endpoint, ModeSelect::Id, ModeSelect::Attributes::Description::Id,
+                                      &description);
+                    MatterReportingAttributeChangeCallback(beds[b].device_endpoint, ModeSelect::Id,
+                                                           ModeSelect::Attributes::SupportedModes::Id);
+                }
+            });
+            // Stored either way: without Matter's turn now, it shows after the next start
+            return ran ? std::string(LANGUAGES[i].code) + "\n" : "stored: shown after a restart (Matter is busy)\n";
         }
     }
     return "usage: language [en|nl|de|es]\n";
@@ -871,27 +873,27 @@ std::string language_command(const std::vector<std::string>& args) {
 std::string preset_command(const std::vector<std::string>& args) {
     if (args.size() == 2 && args[1] == "list") {
         std::string out = "{\"beds\":[";
-        chip::DeviceLayer::PlatformMgr().LockChipStack();
-        for (int i = 0; i < bed_total; ++i) {
-            const BedEndpoints& bed = beds[i];
-            char text[64];
-            std::snprintf(text, sizeof(text), "%s{\"head\":%u,\"legs\":%u,\"presets\":[", i ? "," : "",
-                          (FLAT - bed.head.current) / 100, (FLAT - bed.feet.current) / 100);
-            out += text;
-            for (int slot = 1; slot <= PRESET_SLOTS; ++slot) {
-                uint16_t head;
-                uint16_t feet;
-                if (preset_get(i, slot, head, feet)) {
-                    std::snprintf(text, sizeof(text), "{\"head\":%u,\"legs\":%u}", (FLAT - head) / 100,
-                                  (FLAT - feet) / 100);
-                } else {
-                    std::snprintf(text, sizeof(text), "null");
-                }
+        matter_thread::run([&] {
+            for (int i = 0; i < bed_total; ++i) {
+                const BedEndpoints& bed = beds[i];
+                char text[64];
+                std::snprintf(text, sizeof(text), "%s{\"head\":%u,\"legs\":%u,\"presets\":[", i ? "," : "",
+                              (FLAT - bed.head.current) / 100, (FLAT - bed.feet.current) / 100);
                 out += text;
-                out += slot < PRESET_SLOTS ? "," : "]}";
+                for (int slot = 1; slot <= PRESET_SLOTS; ++slot) {
+                    uint16_t head;
+                    uint16_t feet;
+                    if (preset_get(i, slot, head, feet)) {
+                        std::snprintf(text, sizeof(text), "{\"head\":%u,\"legs\":%u}", (FLAT - head) / 100,
+                                      (FLAT - feet) / 100);
+                    } else {
+                        std::snprintf(text, sizeof(text), "null");
+                    }
+                    out += text;
+                    out += slot < PRESET_SLOTS ? "," : "]}";
+                }
             }
-        }
-        chip::DeviceLayer::PlatformMgr().UnlockChipStack();
+        });
         return out + "]}\n";
     }
     if (args.size() < 3) {
@@ -914,9 +916,10 @@ std::string preset_command(const std::vector<std::string>& args) {
     } else {
         return "usage: preset list | preset <0|1> <flat|1|2|3|match> | preset <0|1> save <1|2|3>\n";
     }
-    chip::DeviceLayer::PlatformMgr().LockChipStack();
-    const bool ok = apply_mode(index, mode);
-    chip::DeviceLayer::PlatformMgr().UnlockChipStack();
+    bool ok = false;
+    if (!matter_thread::run([&] { ok = apply_mode(index, mode); })) {
+        return "Matter is busy: try again in a moment\n";
+    }
     if (!ok) {
         return mode >= MODE_PRESET && mode < MODE_MATCH ? "preset is empty or bed not ready\n" : "bed not ready\n";
     }
@@ -933,25 +936,27 @@ std::string describe() {
     chip::MutableCharSpan manual_span(manual);
     const auto flags = chip::RendezvousInformationFlags(chip::RendezvousInformationFlag::kOnNetwork);
 
-    chip::DeviceLayer::PlatformMgr().LockChipStack();
-    const bool have_qr = GetQRCode(qr_span, flags) == CHIP_NO_ERROR;
-    const bool have_manual = GetManualPairingCode(manual_span, flags) == CHIP_NO_ERROR;
-    chip::Server& server = chip::Server::GetInstance();
-    const unsigned fabrics = server.GetFabricTable().FabricCount();
-    const bool window_open = server.GetCommissioningWindowManager().IsCommissioningWindowOpen();
+    bool have_qr = false, have_manual = false, window_open = false;
+    unsigned fabrics = 0;
     std::string beds_text;
-    for (int i = 0; i < bed_total; ++i) {
-        const BedEndpoints& bed = beds[i];
-        char line[240];
-        std::snprintf(line, sizeof(line),
-                      "bed %d '%s': endpoints device=%u head=%u legs=%u light=%u, %s, head %u%% raised, legs %u%% raised, "
-                      "config status 0x%02x\n",
-                      i, bed.label, bed.device_endpoint, bed.head.endpoint_id, bed.feet.endpoint_id, bed.light_endpoint,
-                      bed.reachable ? "reachable" : "unreachable", (FLAT - bed.head.position) / 100,
-                      (FLAT - bed.feet.position) / 100, WC::ConfigStatusGet(bed.head.endpoint_id).Raw());
-        beds_text += line;
-    }
-    chip::DeviceLayer::PlatformMgr().UnlockChipStack();
+    matter_thread::run([&] {
+        have_qr = GetQRCode(qr_span, flags) == CHIP_NO_ERROR;
+        have_manual = GetManualPairingCode(manual_span, flags) == CHIP_NO_ERROR;
+        chip::Server& server = chip::Server::GetInstance();
+        fabrics = server.GetFabricTable().FabricCount();
+        window_open = server.GetCommissioningWindowManager().IsCommissioningWindowOpen();
+        for (int i = 0; i < bed_total; ++i) {
+            const BedEndpoints& bed = beds[i];
+            char line[240];
+            std::snprintf(line, sizeof(line),
+                          "bed %d '%s': endpoints device=%u head=%u legs=%u light=%u, %s, head %u%% raised, legs %u%% raised, "
+                          "config status 0x%02x\n",
+                          i, bed.label, bed.device_endpoint, bed.head.endpoint_id, bed.feet.endpoint_id, bed.light_endpoint,
+                          bed.reachable ? "reachable" : "unreachable", (FLAT - bed.head.position) / 100,
+                          (FLAT - bed.feet.position) / 100, WC::ConfigStatusGet(bed.head.endpoint_id).Raw());
+            beds_text += line;
+        }
+    });
 
     std::string out;
     out += "fabrics: " + std::to_string(fabrics) + ", commissioning window " + (window_open ? "open" : "closed") + "\n";

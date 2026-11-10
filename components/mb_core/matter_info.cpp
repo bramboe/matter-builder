@@ -13,6 +13,7 @@
 #include "esp_app_desc.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
+#include "matter_thread.h"
 #include "mb_core.h"
 #include "net.h"
 #include "sdkconfig.h"
@@ -57,76 +58,47 @@ const char* vendor_name(uint16_t vendor_id) {
 
 }  // namespace
 
-// Opening the window advertises the device again (on Thread: an SRP update
-// at the border router), too deep for the HTTP task's stack: it crashed the
-// bed bridge. Like removing a fabric, it runs on the Matter thread.
-struct OpenRequest {
-    CHIP_ERROR err;
-    SemaphoreHandle_t done;
-};
+const char* BUSY = "Matter is busy: try again in a moment\n";
 
+// Opening the window advertises the device again (on Thread: an SRP update
+// at the border router): it crashed the bed bridge on the HTTP task's stack
 std::string open_commissioning_window() {
-    OpenRequest request{CHIP_ERROR_INTERNAL, xSemaphoreCreateBinary()};
-    if (request.done == nullptr) return "could not open the commissioning window: no memory\n";
-    CHIP_ERROR err = chip::DeviceLayer::PlatformMgr().ScheduleWork(
-        [](intptr_t arg) {
-            auto* r = reinterpret_cast<OpenRequest*>(arg);
-            auto& manager = chip::Server::GetInstance().GetCommissioningWindowManager();
-            r->err = manager.IsCommissioningWindowOpen()
-                         ? CHIP_NO_ERROR
-                         : manager.OpenBasicCommissioningWindow(chip::System::Clock::Seconds32(300));
-            xSemaphoreGive(r->done);
-        },
-        reinterpret_cast<intptr_t>(&request));
-    if (err == CHIP_NO_ERROR) {
-        xSemaphoreTake(request.done, portMAX_DELAY);  // the request lives on this stack
-        err = request.err;
-    }
-    vSemaphoreDelete(request.done);
+    CHIP_ERROR err = CHIP_ERROR_INTERNAL;
+    const bool ran = matter_thread::run([&] {
+        auto& manager = chip::Server::GetInstance().GetCommissioningWindowManager();
+        err = manager.IsCommissioningWindowOpen()
+                  ? CHIP_NO_ERROR
+                  : manager.OpenBasicCommissioningWindow(chip::System::Clock::Seconds32(300));
+    });
+    if (!ran) return BUSY;
     return err == CHIP_NO_ERROR ? "commissioning window open for 5 minutes\n"
                                 : std::string("could not open the commissioning window: ") + err.AsString() + "\n";
 }
 
 std::string fabrics_text() {
     std::string out;
-    chip::DeviceLayer::PlatformMgr().LockChipStack();
-    for (const auto& fabric : chip::Server::GetInstance().GetFabricTable()) {
-        const chip::CharSpan label = fabric.GetFabricLabel();
-        char line[96];
-        std::snprintf(line, sizeof(line), "fabric %u: vendor 0x%04X, fabric id 0x%" PRIX64 ", label '%.*s'\n",
-                      fabric.GetFabricIndex(), chip::to_underlying(fabric.GetVendorId()), fabric.GetFabricId(),
-                      static_cast<int>(label.size()), label.data());
-        out += line;
-    }
-    chip::DeviceLayer::PlatformMgr().UnlockChipStack();
+    const bool ran = matter_thread::run([&] {
+        for (const auto& fabric : chip::Server::GetInstance().GetFabricTable()) {
+            const chip::CharSpan label = fabric.GetFabricLabel();
+            char line[96];
+            std::snprintf(line, sizeof(line), "fabric %u: vendor 0x%04X, fabric id 0x%" PRIX64 ", label '%.*s'\n",
+                          fabric.GetFabricIndex(), chip::to_underlying(fabric.GetVendorId()), fabric.GetFabricId(),
+                          static_cast<int>(label.size()), label.data());
+            out += line;
+        }
+    });
+    if (!ran) return BUSY;
     return out.empty() ? "no fabrics\n" : out;
 }
 
 // Deleting a fabric runs every cleanup that listens to it (sessions, access
-// control, subscriptions): too deep for the console or HTTP task's stack, so
-// it runs on the Matter thread and this task waits for it
-struct RemoveRequest {
-    chip::FabricIndex index;
-    CHIP_ERROR err;
-    SemaphoreHandle_t done;
-};
-
+// control, subscriptions)
 std::string remove_fabric(unsigned index) {
-    RemoveRequest request{static_cast<chip::FabricIndex>(index), CHIP_ERROR_INTERNAL, xSemaphoreCreateBinary()};
-    if (request.done == nullptr) return "could not remove fabric: no memory\n";
-    CHIP_ERROR err = chip::DeviceLayer::PlatformMgr().ScheduleWork(
-        [](intptr_t arg) {
-            auto* r = reinterpret_cast<RemoveRequest*>(arg);
-            r->err = chip::Server::GetInstance().GetFabricTable().Delete(r->index);
-            xSemaphoreGive(r->done);
-        },
-        reinterpret_cast<intptr_t>(&request));
-    if (err == CHIP_NO_ERROR) {
-        // The request lives on this stack: wait for it, however long it takes
-        xSemaphoreTake(request.done, portMAX_DELAY);
-        err = request.err;
-    }
-    vSemaphoreDelete(request.done);
+    CHIP_ERROR err = CHIP_ERROR_INTERNAL;
+    const bool ran = matter_thread::run([&] {
+        err = chip::Server::GetInstance().GetFabricTable().Delete(static_cast<chip::FabricIndex>(index));
+    }, 60000);
+    if (!ran) return BUSY;
     return err == CHIP_NO_ERROR ? "fabric " + std::to_string(index) + " removed\n"
                                 : std::string("could not remove fabric: ") + err.AsString() + "\n";
 }
@@ -140,22 +112,23 @@ std::string matter_json() {
     const auto flags = chip::RendezvousInformationFlags(chip::RendezvousInformationFlag::kOnNetwork);
     std::string fabrics;
 
-    chip::DeviceLayer::PlatformMgr().LockChipStack();
-    const bool have_qr = GetQRCode(qr_span, flags) == CHIP_NO_ERROR;
-    const bool have_manual = GetManualPairingCode(manual_span, flags) == CHIP_NO_ERROR;
-    chip::Server& server = chip::Server::GetInstance();
-    const bool window_open = server.GetCommissioningWindowManager().IsCommissioningWindowOpen();
-    for (const auto& fabric : server.GetFabricTable()) {
-        const uint16_t vendor_id = chip::to_underlying(fabric.GetVendorId());
-        const char* vendor = vendor_name(vendor_id);
-        char hex[8];
-        std::snprintf(hex, sizeof(hex), "0x%04X", vendor_id);
-        const chip::CharSpan label = fabric.GetFabricLabel();
-        fabrics += std::string(fabrics.empty() ? "" : ",") + "{\"index\":" + std::to_string(fabric.GetFabricIndex()) +
-                   ",\"vendor\":" + json_text(vendor != nullptr ? vendor : hex) + ",\"vendor_id\":" + json_text(hex) +
-                   ",\"label\":" + json_text(std::string(label.data(), label.size())) + "}";
-    }
-    chip::DeviceLayer::PlatformMgr().UnlockChipStack();
+    bool have_qr = false, have_manual = false, window_open = false;
+    matter_thread::run([&] {
+        have_qr = GetQRCode(qr_span, flags) == CHIP_NO_ERROR;
+        have_manual = GetManualPairingCode(manual_span, flags) == CHIP_NO_ERROR;
+        chip::Server& server = chip::Server::GetInstance();
+        window_open = server.GetCommissioningWindowManager().IsCommissioningWindowOpen();
+        for (const auto& fabric : server.GetFabricTable()) {
+            const uint16_t vendor_id = chip::to_underlying(fabric.GetVendorId());
+            const char* vendor = vendor_name(vendor_id);
+            char hex[8];
+            std::snprintf(hex, sizeof(hex), "0x%04X", vendor_id);
+            const chip::CharSpan label = fabric.GetFabricLabel();
+            fabrics += std::string(fabrics.empty() ? "" : ",") + "{\"index\":" + std::to_string(fabric.GetFabricIndex()) +
+                       ",\"vendor\":" + json_text(vendor != nullptr ? vendor : hex) + ",\"vendor_id\":" + json_text(hex) +
+                       ",\"label\":" + json_text(std::string(label.data(), label.size())) + "}";
+        }
+    });
 
     int qr_size = 0;
     const std::string path = have_qr ? setup_code::qr_svg_path(qr, qr_size) : "";

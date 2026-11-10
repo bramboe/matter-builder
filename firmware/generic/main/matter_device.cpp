@@ -23,6 +23,7 @@
 #include "io.h"
 #include "rules.h"
 #include "matter_info.h"
+#include "matter_thread.h"
 #include "mb_core.h"
 #include "setup_code.h"
 
@@ -506,17 +507,18 @@ void after_start() {
 
 std::string endpoints_text() {
     std::string out;
-    esp_matter::lock::ScopedChipStackLock lock(portMAX_DELAY);
-    for (endpoint_t* ep = endpoint::get_first(node); ep != nullptr; ep = endpoint::get_next(ep)) {
-        int clusters = 0;
-        for (cluster_t* c = cluster::get_first(ep); c != nullptr; c = cluster::get_next(c)) ++clusters;
-        char line[96];
-        std::snprintf(line, sizeof(line), "endpoint %u: %s, parent %u, %u device types, %d clusters\n",
-                      endpoint::get_id(ep), endpoint::is_enabled(ep) ? "enabled" : "disabled",
-                      endpoint::get_parent_endpoint_id(ep), static_cast<unsigned>(endpoint::get_device_type_count(ep)),
-                      clusters);
-        out += line;
-    }
+    matter_thread::run([&] {
+        for (endpoint_t* ep = endpoint::get_first(node); ep != nullptr; ep = endpoint::get_next(ep)) {
+            int clusters = 0;
+            for (cluster_t* c = cluster::get_first(ep); c != nullptr; c = cluster::get_next(c)) ++clusters;
+            char line[96];
+            std::snprintf(line, sizeof(line), "endpoint %u: %s, parent %u, %u device types, %d clusters\n",
+                          endpoint::get_id(ep), endpoint::is_enabled(ep) ? "enabled" : "disabled",
+                          endpoint::get_parent_endpoint_id(ep), static_cast<unsigned>(endpoint::get_device_type_count(ep)),
+                          clusters);
+            out += line;
+        }
+    });
     return out;
 }
 

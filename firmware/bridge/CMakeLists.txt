@@ -17,8 +17,8 @@ set(EXTRA_COMPONENT_DIRS
 # Shown to controllers as the software version. PROJECT_VER_NUMBER goes into
 # the Matter OTA image header and must equal CONFIG_DEVICE_SOFTWARE_VERSION_NUMBER,
 # the version the device reports: an update is only taken when it is higher.
-set(PROJECT_VER "1.0.24")
-set(PROJECT_VER_NUMBER 124)
+set(PROJECT_VER "1.0.25")
+set(PROJECT_VER_NUMBER 125)
 project(octo_bridge)
 
 if(NOT CONFIG_DEVICE_SOFTWARE_VERSION_NUMBER EQUAL PROJECT_VER_NUMBER)

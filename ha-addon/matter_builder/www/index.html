@@ -452,6 +452,14 @@ const TEXT = {
   applyingConfig: 'Applying the configuration…', configOnTrial: s => `The new connections run on trial: keep them within ${s} s, or the device goes back.`,
   configKept: 'Kept. The device is ready.', configFailed: e => `The configuration was not applied: ${e}`,
   emptyTitle: 'Set up your first device',
+  liked: 'Liked by users', rate: 'Rate on GitHub', report: 'Report', rateHelp: 'A star on its repository is a vote; from 5 stars it shows as liked by users.', copied: 'Copied',
+  share: 'Share', shareTitle: 'Share to the catalog', shareHelp: n => `“${n}” as a recipe others can use. It goes into a repository of your own on GitHub; nobody has to approve it, and the catalog picks it up within a day.`,
+  sharePersonal: 'This configuration has a Bluetooth address in it. Take the address: line out before you share it (step 2 lets you edit).',
+  shareUser: 'Your GitHub name', shareRepo: 'Repository',
+  shareStep1: 'Make the repository', shareStep1Help: 'Once. Public, with the repository name above. Skip this when you already have it.', shareCreate: 'Create on GitHub',
+  shareStep2: 'Add the recipe', shareStep2Help: 'Opens GitHub with the file and its contents filled in: press “Commit changes”.', shareAdd: 'Add recipe on GitHub', shareCopy: 'Copy YAML',
+  shareStep3: 'Give it the topic', shareStep3Help: topic => `Once. On the repository: the gear next to “About” → Topics → <span class="mono">${topic}</span>. That is how the catalog finds it.`, shareOpenRepo: 'Open my repository',
+  shareAfter: 'Recipes hold connections, no code, and never a password or PIN. Others can rate yours with a star on your repository.',
   ignore: 'Ignore', ignoreHelp: 'Do not offer this device for linking; show it again from Settings', showAgain: 'Show again',
   ignoredTitle: 'Ignored devices', ignoredHelp: 'Found on your network, but not offered for linking.',
   bleTitle: 'Bluetooth device', ofEightCommands: n => `${n} of 8 commands`,
@@ -634,6 +642,7 @@ const ICON = {
   bed: 'M19 7h-8v7H3V5H1v15h2v-3h18v3h2v-9a4 4 0 0 0-4-4M7 13a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3',
   chip: 'M6 4h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2m1 3v10h10V7H7m3 3h4v4h-4v-4M8 1h2v2H8V1m3 0h2v2h-2V1m3 0h2v2h-2V1M8 21h2v2H8v-2m3 0h2v2h-2v-2m3 0h2v2h-2v-2M1 8h2v2H1V8m0 3h2v2H1v-2m0 3h2v2H1v-2m20-6h2v2h-2V8m0 3h2v2h-2v-2m0 3h2v2h-2v-2',
   plus: 'M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z',
+  share: 'M18,16.08C17.24,16.08 16.56,16.38 16.04,16.85L8.91,12.7C8.96,12.47 9,12.24 9,12C9,11.76 8.96,11.53 8.91,11.3L15.96,7.19C16.5,7.69 17.21,8 18,8A3,3 0 0,0 21,5A3,3 0 0,0 18,2A3,3 0 0,0 15,5C15,5.24 15.04,5.47 15.09,5.7L8.04,9.81C7.5,9.31 6.79,9 6,9A3,3 0 0,0 3,12A3,3 0 0,0 6,15C6.79,15 7.5,14.69 8.04,14.19L15.16,18.34C15.11,18.55 15.08,18.77 15.08,19C15.08,20.61 16.39,21.91 18,21.91C19.61,21.91 20.92,20.61 20.92,19A2.92,2.92 0 0,0 18,16.08Z',
   group: 'M3 3h8v8H3V3m2 2v4h4V5H5m8-2h8v8h-8V3m2 2v4h4V5h-4M3 13h8v8H3v-8m2 2v4h4v-4H5m8-2h8v8h-8v-8m2 2v4h4v-4h-4Z',
   close: 'M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z',
   dots: 'M12,16A2,2 0 0,1 14,18A2,2 0 0,1 12,20A2,2 0 0,1 10,18A2,2 0 0,1 12,16M12,10A2,2 0 0,1 14,12A2,2 0 0,1 12,14A2,2 0 0,1 10,12A2,2 0 0,1 12,10M12,4A2,2 0 0,1 14,6A2,2 0 0,1 12,8A2,2 0 0,1 10,6A2,2 0 0,1 12,4Z',
@@ -1513,7 +1522,7 @@ async function loadCatalog() {
 
 const sourceAdded = repo => (state.sources || []).some(s => s.repo === repo);
 const badge = it => it.official ? `<span class="chip accent">${t('official')}</span>`
-  : `<span class="chip">${t('community')}</span>${it.verified ? ` <span class="chip ok">${t('verified')}</span>` : ''}`;
+  : `<span class="chip">${t('community')}</span>${it.verified ? ` <span class="chip ok">${t('verified')}</span>` : ''}${it.liked ? ` <span class="chip ok">${t('liked')}</span>` : ''}`;
 
 function catalogCard(it, i) {
   const what = it.kind === 'firmware' ? esc(it.description || '')
@@ -1534,7 +1543,8 @@ function renderCatalog() {
     (sourceFilter === 'any' || (sourceFilter === 'official') === !!it.official) &&
     (!q || `${it.title} ${it.description || ''} ${it.maker || ''} ${it.source}`.toLowerCase().includes(q)));
   const fw = shownItems.map((it, i) => [it, i]).filter(([it]) => it.kind === 'firmware');
-  const rc = shownItems.map((it, i) => [it, i]).filter(([it]) => it.kind === 'recipe');
+  const rc = shownItems.map((it, i) => [it, i]).filter(([it]) => it.kind === 'recipe')
+    .sort(([a], [b]) => (b.official ? 1 : 0) - (a.official ? 1 : 0) || (b.stars || 0) - (a.stars || 0));
   setHtml($('#catalogBody'), (catalogData ? '' : `<p class="sub" style="margin:12px 2px">${t('catalogOffline')}</p>`) +
     (fw.length ? `<div class="section-head"><h2>${t('firmwareSection')}</h2></div><div class="grid">${fw.map(([it, i]) => catalogCard(it, i)).join('')}</div>` : '') +
     (rc.length ? `<div class="section-head"><h2>${t('recipeSection')}</h2></div><div class="grid">${rc.map(([it, i]) => catalogCard(it, i)).join('')}</div>` : '') +
@@ -1584,6 +1594,10 @@ function renderItem() {
     ${facts.map(([k, v]) => `<div class="row"><div class="label sub">${k}</div><div>${v}</div></div>`).join('')}
     ${it.official ? '' : `<div class="banner" style="margin-top:12px;background:var(--warnchip)"><span class="grow sub" style="color:var(--fg)">${t('communityNotice')}</span></div>`}
     ${it.kind === 'firmware' && !it.factory ? `<p class="sub">${t('updateOnly')}</p>` : ''}
+    ${it.official || !it.url ? '' : `<div class="actions" style="justify-content:flex-start">
+      <a class="button" href="${esc(it.url)}" target="_blank" rel="noopener">★ ${t('rate')}</a>
+      <a class="text" href="https://github.com/${OFFICIAL_REPO}/issues/new?template=catalog-report.yml&title=${encodeURIComponent('Catalog report: ' + it.source)}&source=${encodeURIComponent(it.source)}&item=${encodeURIComponent(it.title)}" target="_blank" rel="noopener">${t('report')}</a>
+      <span class="sub">${t('rateHelp')}</span></div>`}
     <div class="actions end"><button class="plain" onclick="$('#itemDlg').close()">${t('close')}</button>
       ${canInstall ? `<button class="pri" onclick="installItem()">${t('install')}</button>` : ''}
       ${it.kind === 'recipe' ? `<button class="pri" onclick="useItem()">${t('use')}</button>` : ''}</div>`);
@@ -1654,6 +1668,56 @@ async function removeSource(repo) {
   refresh();
 }
 
+// ---------------------------------------------------------------- share to the catalog
+// A recipe gets into the catalog from its maker's own GitHub repository with
+// the topic "matter-builder-package": nobody approves it, the catalog picks
+// it up at night. This walks the user through it, with the YAML ready.
+const OFFICIAL_REPO = 'bramboe/matter-builder', SHARE_TOPIC = 'matter-builder-package';
+let share = null;
+async function shareSpec(slug) {
+  const r = await api(`api/specs/${slug}`);
+  let user = '';
+  try { user = localStorage.getItem('mbGithubUser') || ''; } catch (e) {}
+  share = {slug, text: r.text || '', name: (state_specName(slug) || slug), user, repo: 'matter-builder-recipes', copied: false};
+  renderShare();
+  if (!$('#itemDlg').open) $('#itemDlg').showModal();
+}
+const state_specName = slug => { const sp = (specs || []).find(x => x.slug === slug); return sp ? sp.name : ''; };
+function shareSet(key, value) {
+  share[key] = value.trim().replace(/[^A-Za-z0-9._-]/g, '');
+  if (key === 'user') { try { localStorage.setItem('mbGithubUser', share.user); } catch (e) {} }
+  renderShare(true);
+}
+async function shareCopy() {
+  try { await navigator.clipboard.writeText(share.text); share.copied = true; } catch (e) { share.copied = false; }
+  renderShare(true);
+}
+function renderShare(keepFocus) {
+  const s = share, ready = s.user && s.repo;
+  const repoUrl = `https://github.com/${s.user}/${s.repo}`;
+  const create = `https://github.com/new?name=${encodeURIComponent(s.repo)}&visibility=public&description=${encodeURIComponent('Recipes for Matter Builder')}`;
+  // GitHub's "new file" page, with the path and the recipe filled in
+  const add = `${repoUrl}/new/main?filename=${encodeURIComponent('recipes/' + s.slug + '.yaml')}&value=${encodeURIComponent(s.text)}`;
+  const personal = /^\s*address\s*:/m.test(s.text);
+  const focus = keepFocus && document.activeElement ? document.activeElement.id : '';
+  const step = (n, title, body) => `<div class="row hrow"><span class="chip accent" style="margin-top:2px">${n}</span><div class="label">${title}<div class="sub" style="margin-top:2px">${body}</div></div></div>`;
+  $('#itemBody').dataset.html = '';
+  setHtml($('#itemBody'), `<h2>${t('shareTitle')}</h2><p class="sub">${esc(t('shareHelp', s.name))}</p>
+    ${personal ? `<div class="banner" style="background:var(--warnchip)"><span class="grow sub" style="color:var(--fg)">${t('sharePersonal')}</span></div>` : ''}
+    <div class="form" style="grid-template-columns:1fr 1fr">
+      <label class="field"><span>${t('shareUser')}</span><input id="shareUser" value="${esc(s.user)}" autocomplete="off" spellcheck="false" autocapitalize="off" onchange="shareSet('user', this.value)"></label>
+      <label class="field"><span>${t('shareRepo')}</span><input id="shareRepo" value="${esc(s.repo)}" autocomplete="off" spellcheck="false" autocapitalize="off" onchange="shareSet('repo', this.value)"></label></div>
+    ${step(1, t('shareStep1'), `${t('shareStep1Help')}<div class="actions" style="margin-top:6px"><a class="button" href="${create}" target="_blank" rel="noopener">${t('shareCreate')}</a></div>`)}
+    ${step(2, t('shareStep2'), `${t('shareStep2Help')}<div class="actions" style="margin-top:6px">
+        ${ready ? `<a class="button pri" style="background:var(--primary);color:#fff" href="${esc(add)}" target="_blank" rel="noopener">${t('shareAdd')}</a>` : `<button disabled>${t('shareAdd')}</button>`}
+        <button class="plain" onclick="shareCopy()">${s.copied ? t('copied') : t('shareCopy')}</button></div>`)}
+    ${step(3, t('shareStep3'), `${t('shareStep3Help', SHARE_TOPIC)}<div class="actions" style="margin-top:6px">
+        ${ready ? `<a class="button" href="${esc(repoUrl)}" target="_blank" rel="noopener">${t('shareOpenRepo')}</a>` : `<button disabled>${t('shareOpenRepo')}</button>`}</div>`)}
+    <p class="sub" style="margin-top:12px">${t('shareAfter')}</p>
+    <div class="actions end"><button class="pri" onclick="$('#itemDlg').close()">${t('done')}</button></div>`);
+  if (focus && $('#' + focus)) $('#' + focus).focus();
+}
+
 // ---------------------------------------------------------------- developer
 function specCard(sp) {
   const latest = list => list.length ? list[list.length - 1] : null;
@@ -1665,7 +1729,8 @@ function specCard(sp) {
       ${dev && factory ? `<div class="sub">${t('factoryFile')}: <a href="api/download/${encodeURIComponent(factory)}" class="mono">${esc(factory)}</a></div>` : ''}</div>
     <div class="acts">${sp.error ? '' : `<button class="text" onclick="useConfig('${sp.slug}', 'new')">${t('install')}</button>
       <button class="plain" onclick="useConfig('${sp.slug}', 'device')">${t('applyTo')}</button>`}
-      <button class="plain" onclick="editSpec('${sp.slug}')">${t('edit')}</button><span class="grow"></span>
+      <button class="plain" onclick="editSpec('${sp.slug}')">${t('edit')}</button>
+      ${sp.error ? '' : `<button class="text" onclick="shareSpec('${sp.slug}')">${icon('share')} ${t('share')}</button>`}<span class="grow"></span>
       <details class="more"><summary aria-label="${t('more')}">${icon('dots')}</summary><div class="pop">
         ${dev ? `<button onclick="buildSpec('${sp.slug}')" ${sp.error || !state.toolchain || state.job.running ? 'disabled' : ''}>${t('build')}</button>` : ''}
         <button class="warn" onclick="deleteSpec('${sp.slug}', '${esc(sp.name)}')">${t('del')}</button></div></details></div></div>`;

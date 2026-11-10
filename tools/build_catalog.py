@@ -10,6 +10,13 @@ its packages are listed from that manifest. Recipes are recipes/*.yaml in the
 repository (examples/*.yaml for the official source): specs of the generic device (tools/mb_generate.py), so only
 connections, no code.
 
+Nobody approves a source before it is listed. Users rate a source with a
+star on its repository: from LIKED_STARS stars it is marked as liked by
+users. Users report one with an issue here titled "Catalog report:
+<owner/name>" (the add-on's Report link): with open reports from
+REPORTS_TO_HIDE different accounts it is left out until the reports are
+closed.
+
 This repository is always in the catalog, as the official source. A
 repository in catalog/blocklist.txt is left out; one in catalog/verified.txt
 is marked as looked at by the project. Nothing here is trusted by the add-on
@@ -105,6 +112,33 @@ def recipes(repo, branch, folder):
     return out
 
 
+LIKED_STARS = 5
+REPORTS_TO_HIDE = 3
+REPORT_TITLE = "catalog report:"
+
+
+def reports():
+    """Sources reported by users: repository (lower case) -> the accounts with an open report."""
+    out, page = {}, 1
+    while page <= 5:
+        try:
+            issues = get_json(f"{API}/repos/{OFFICIAL}/issues?state=open&per_page=100&page={page}")
+        except OSError as err:
+            print(f"  reports not read: {err}")
+            break
+        for issue in issues if isinstance(issues, list) else []:
+            title = str(issue.get("title") or "").strip().lower()
+            if "pull_request" in issue or not title.startswith(REPORT_TITLE):
+                continue
+            repo = title[len(REPORT_TITLE):].strip().split(" ")[0]
+            if repo.count("/") == 1:
+                out.setdefault(repo, set()).add((issue.get("user") or {}).get("login"))
+        if not isinstance(issues, list) or len(issues) < 100:
+            break
+        page += 1
+    return out
+
+
 def source(repo, official, verified):
     """The catalog items of one repository, or None when it does not qualify."""
     info = get_json(f"{API}/repos/{repo}")
@@ -122,6 +156,7 @@ def source(repo, official, verified):
         return None
     base = {"source": repo, "official": official, "verified": official or repo.lower() in verified,
             "maker": info["owner"]["login"], "stars": info.get("stargazers_count", 0),
+            "liked": not official and info.get("stargazers_count", 0) >= LIKED_STARS,
             "url": info["html_url"], "key_sha256": key}
     items = []
     try:
@@ -159,10 +194,15 @@ def main(out):
     blocked, verified = listed("blocklist.txt"), listed("verified.txt")
     found = get_json(f"{API}/search/repositories?q=topic:{TOPIC}&per_page=100")
     repos = [OFFICIAL] + [r["full_name"] for r in found.get("items", []) if r["full_name"].lower() != OFFICIAL.lower()]
+    reported = reports()
     items = []
     for repo in repos:
         if repo.lower() in blocked:
             print(f"  {repo}: blocked")
+            continue
+        reporters = reported.get(repo.lower(), set())
+        if repo != OFFICIAL and len(reporters) >= REPORTS_TO_HIDE:
+            print(f"  {repo}: left out, reported by {len(reporters)} users")
             continue
         try:
             got = source(repo, repo == OFFICIAL, verified)

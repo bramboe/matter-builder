@@ -29,6 +29,9 @@ component of your own and build it in Home Assistant.
   Bluetooth LE device (a bed, a fan, a blind). The commands of a product are
   the same for everyone, so they travel in a recipe; your device's address
   and PIN stay on your device.
+- **A catalog anyone can add to.** *Share* puts a configuration in the
+  catalog as a recipe, from a repository of your own: nobody approves it.
+  Stars are the rating, reports from users take a source out.
 - **Network health.** Per device, link by link: its own Thread or Wi-Fi
   connection, the way out through the border router, and the way to Matter
   Builder, with a day of history. When a Thread device drops out, it says

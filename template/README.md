@@ -33,7 +33,9 @@ firmware from here that is signed with this source's key.
 | `.github/workflows/release.yml` | Builds, signs and publishes for a tag `v<version>` |
 
 A source with only recipes needs no key and no workflow: recipes are
-connections, not code.
+connections, not code. In Matter Builder,
+*Share* on a configuration (Configs) makes such a repository with you: it
+opens GitHub with the recipe filled in.
 
 ## Release
 

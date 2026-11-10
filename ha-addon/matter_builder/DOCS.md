@@ -123,6 +123,25 @@ Sources are listed under Settings, where you can add one by its GitHub name
 or remove it. To make a source of your own, start from the `template` folder
 of the project's repository.
 
+## Sharing a recipe
+
+**Share** on a configuration under *Configs* puts it in the catalog as a
+recipe others can use. It goes into a public GitHub repository of your own;
+nobody approves it. The dialog walks through it: make the repository (once),
+add the recipe (GitHub opens with the file and its contents filled in), and
+give the repository the topic `matter-builder-package` (once). The catalog is
+rebuilt every night and finds it by that topic.
+
+A recipe holds connections, rules and a Bluetooth device's commands: no
+code, no passwords, no PIN. A Bluetooth address is yours: take it out first.
+
+In the catalog a community item can be **rated** with a star on its
+repository; from 5 stars it shows as *Liked by users*, and recipes with more
+stars come first. **Report** opens an issue about it; a source with open
+reports from three different people leaves the catalog until they are
+closed. The catalog counts no downloads of recipes: nothing reports back
+what you use.
+
 ## Configuration YAML
 
 One format for devices, configs, recipes and the wizard:

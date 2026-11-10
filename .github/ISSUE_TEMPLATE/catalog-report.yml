@@ -1,0 +1,26 @@
+name: Report a catalog item
+description: "A recipe or package source in the catalog that is harmful, misleading or broken"
+title: "Catalog report: owner/name"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Keep the title as "Catalog report: owner/name" (the source's GitHub repository): that is how reports are counted. A source with open reports from three different people leaves the catalog until they are closed.
+  - type: input
+    id: source
+    attributes:
+      label: Source
+      description: The GitHub repository of the source, owner/name
+    validations:
+      required: true
+  - type: input
+    id: item
+    attributes:
+      label: Recipe or package
+      description: Which one, if it is about one of them
+  - type: textarea
+    id: why
+    attributes:
+      label: What is wrong with it
+    validations:
+      required: true

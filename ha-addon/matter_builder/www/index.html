@@ -173,7 +173,52 @@ textarea.yaml{width:100%;min-height:280px;font:12px/1.5 ui-monospace,Menlo,monos
 .auth h2{margin:0 0 4px;font-size:22px;font-weight:400}
 .auth .actions{margin-top:16px}
 .auth .error{margin-top:10px}
-@media (max-width:640px){.bar h1{display:none}.search input{width:100px}dialog.side{border-radius:0}}
+.taskbar .bar>div:nth-child(2){flex:1 1 180px}
+.ble-cmd{grid-template-columns:2fr 3fr 1fr 1fr}
+dialog{max-width:calc(100vw - 16px)}
+dialog.side{max-width:100vw}
+/* Phones: panels take the whole screen, rows wrap instead of squeezing their
+   text, controls are big enough for a finger, and inputs are 16 px so iOS
+   does not zoom in on them */
+@media (max-width:640px){
+  .bar h1{display:none}
+  .bar{gap:6px;padding:0 8px}
+  nav{flex:1 1 100%;overflow-x:auto;scrollbar-width:none}
+  nav::-webkit-scrollbar,.tabs::-webkit-scrollbar{display:none}
+  nav button{min-height:46px;white-space:nowrap}
+  .bar .grow{display:none}
+  .search{flex:1;min-width:0;height:40px;margin-bottom:8px}
+  .search input{width:100%;min-width:0}
+  header .bar>button{margin-bottom:8px}
+  main{padding:12px 8px 20px}
+  input,select,textarea{font-size:16px !important}
+  dialog{width:calc(100vw - 16px);max-height:calc(100dvh - 16px)}
+  dialog.side{width:100vw;height:100dvh;max-height:100dvh;border-radius:0}
+  .dlg-head{padding:12px 8px 6px 12px}
+  .dlg-body{padding:4px 12px 20px}
+  .tabs{margin:0 12px;overflow-x:auto;scrollbar-width:none}
+  .tabs button{flex:none;white-space:nowrap;padding:0 12px;min-height:44px}
+  .filters button,.seg button{min-height:36px}
+  .ed-item-head{flex-wrap:wrap;row-gap:2px}
+  .ed-item-head .info{flex:1 1 calc(100% - 60px)}
+  .ed-item-head .info+*{margin-left:auto}
+  .ed-item-head details.more summary{width:40px;height:40px}
+  .ed-fields{grid-template-columns:1fr 1fr}
+  .ble-cmd{grid-template-columns:1fr 1fr}
+  .ble-cmd .field:nth-child(-n+2){grid-column:1/-1}
+  .ed-section{flex-wrap:wrap}
+  .banner{padding:10px 12px}
+  .banner .grow{flex:1 1 calc(100% - 52px);min-width:0}
+  .banner button{margin-left:auto}
+  .banner button+button{margin-left:0}
+  .taskbar .bar{flex-wrap:wrap;padding:8px 12px calc(8px + env(safe-area-inset-bottom));align-items:center}
+  .taskbar .bar>div:nth-child(2){flex:1 1 calc(100% - 52px)}
+  .taskbar .progress{flex:1;width:auto}
+  .taskbar .bar button{margin-left:auto}
+  .taskbar .bar button+button{margin-left:0}
+  .actions button{min-height:40px}
+  .hscale{font-size:12px}
+}
 </style>
 </head>
 <body>
@@ -1035,7 +1080,7 @@ class ConfigEditor {
     const field = (label, key, value, extra = '') => `<label class="field"><span>${label}</span><input value="${esc(value)}" spellcheck="false" ${extra} oninput="${ref}.bleSet('${key}', this.value)"></label>`;
     const commands = b.commands.map((c, i) => {
       const linked = this.rows.some(r => r.type === 'ble_command' && r.number === i + 1);
-      return `<div class="ed-item"><div class="ed-item-body" style="padding-top:10px"><div class="ed-fields" style="grid-template-columns:2fr 3fr 1fr 1fr">
+      return `<div class="ed-item"><div class="ed-item-body" style="padding-top:10px"><div class="ed-fields ble-cmd">
           <label class="field"><span>${t('bleLabel', i + 1)}</span><input maxlength="32" value="${esc(c.label)}" oninput="${ref}.bleCmd(${i}, 'label', this.value)"></label>
           <label class="field"><span>${t('bleBytes')}</span><input class="mono" spellcheck="false" value="${esc(c.bytes)}" oninput="${ref}.bleCmd(${i}, 'bytes', this.value)"></label>
           <label class="field"><span>${t('bleTimes')}</span><input type="number" min="1" max="50" value="${c.times}" oninput="${ref}.bleCmd(${i}, 'times', +this.value)"></label>

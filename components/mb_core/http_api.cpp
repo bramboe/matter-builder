@@ -366,7 +366,14 @@ void start(const char* fallback_token) {
     }
     load_password(fallback_token);
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.stack_size = 8192;  // measured: 920 bytes were left of 6144 on the bed bridge
+    // Every command of the page and the add-on runs on this task. Measured on
+    // the bed bridge: of 6144 bytes, 208 were left at the deepest. The classic
+    // ESP32 has less memory to give.
+#if CONFIG_IDF_TARGET_ESP32
+    config.stack_size = 8192;
+#else
+    config.stack_size = 10240;
+#endif
     config.recv_wait_timeout = 15;
     config.send_wait_timeout = 15;
     // Browsers keep several connections open; close the oldest idle one

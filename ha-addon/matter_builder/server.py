@@ -1613,7 +1613,7 @@ SETTING_SET = re.compile(r"settings set [a-z_][a-z0-9_]{0,31} [A-Za-z0-9_.:-]{1,
 
 def allowed(line):
     return line in ("io json", "json", "wifi json", "matter", "matter open", "pairing", "pairing ble on",
-                    "pairing ble off", "reboot", "settings json", "system json", "bledev json") or line.startswith(ALLOWED_COMMANDS) \
+                    "pairing ble off", "reboot", "settings json", "system json", "bledev json", "events") or line.startswith(ALLOWED_COMMANDS) \
         or SETTING_SET.fullmatch(line) is not None
 
 

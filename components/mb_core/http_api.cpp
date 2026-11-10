@@ -366,7 +366,7 @@ void start(const char* fallback_token) {
     }
     load_password(fallback_token);
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.stack_size = 6144;
+    config.stack_size = 8192;  // measured: 920 bytes were left of 6144 on the bed bridge
     config.recv_wait_timeout = 15;
     config.send_wait_timeout = 15;
     // Browsers keep several connections open; close the oldest idle one

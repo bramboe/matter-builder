@@ -1052,6 +1052,23 @@ def matter_server(command, args, timeout=300):
         sock.close()
 
 
+HA_VENDOR = 0x134B  # Nabu Casa: the vendor of Home Assistant's Matter fabric
+
+
+def drop_stale_ha_fabric(proxy):
+    """Removes Home Assistant's fabric from the device ("matter fabrics" /
+    "matter remove"), when Home Assistant no longer has the device."""
+    status, text = command(proxy, "matter fabrics")
+    stale = [int(m.group(1)) for m in re.finditer(r"fabric (\d+): vendor 0x([0-9A-F]+)", text or "")
+             if int(m.group(2), 16) == HA_VENDOR] if status == 200 else []
+    if not stale:
+        return False
+    for index in stale:
+        _, reply = command(proxy, f"matter remove {index}", timeout=30)
+        log(f"== Home Assistant had forgotten the device: its old key removed ({reply.strip()})")
+    return True
+
+
 def add_to_ha(proxy):
     """A device into Home Assistant's Matter fabric: a pairing window on the
     device, then the Matter server commissions it over the network."""
@@ -1077,8 +1094,24 @@ def add_to_ha(proxy):
         if "already commissioned into this fabric" in str(err):
             log("== Already in Home Assistant")
             return True
-        log(f"!! {err}")
-        return False
+        # Home Assistant forgot the device (removed while it was offline), but
+        # the device still holds Home Assistant's old key: that key goes, then
+        # once more. Only on this error, so a device Home Assistant knows stays.
+        if not re.search(r"conflict|fabric.*exist|already.*fabric", str(err), re.I) or not drop_stale_ha_fabric(proxy):
+            log(f"!! {err}")
+            return False
+        command(proxy, "matter open")
+        status, text = command(proxy, "matter")
+        try:
+            code = json.loads(text)["qr"]
+        except (ValueError, KeyError, TypeError):
+            match = re.search(r"MT:[0-9A-Z.\-]+", text or "")
+            code = match.group(0) if match else code
+        try:
+            node = matter_server("commission_with_code", {"code": code, "network_only": True})
+        except (OSError, ValueError) as again:
+            log(f"!! {again}")
+            return False
     log(f"== Added: Matter node {node.get('node_id') if isinstance(node, dict) else node}")
     return True
 

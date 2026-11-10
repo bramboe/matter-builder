@@ -57,13 +57,32 @@ const char* vendor_name(uint16_t vendor_id) {
 
 }  // namespace
 
+// Opening the window advertises the device again (on Thread: an SRP update
+// at the border router), too deep for the HTTP task's stack: it crashed the
+// bed bridge. Like removing a fabric, it runs on the Matter thread.
+struct OpenRequest {
+    CHIP_ERROR err;
+    SemaphoreHandle_t done;
+};
+
 std::string open_commissioning_window() {
-    chip::DeviceLayer::PlatformMgr().LockChipStack();
-    auto& manager = chip::Server::GetInstance().GetCommissioningWindowManager();
-    const CHIP_ERROR err = manager.IsCommissioningWindowOpen()
-                               ? CHIP_NO_ERROR
-                               : manager.OpenBasicCommissioningWindow(chip::System::Clock::Seconds32(300));
-    chip::DeviceLayer::PlatformMgr().UnlockChipStack();
+    OpenRequest request{CHIP_ERROR_INTERNAL, xSemaphoreCreateBinary()};
+    if (request.done == nullptr) return "could not open the commissioning window: no memory\n";
+    CHIP_ERROR err = chip::DeviceLayer::PlatformMgr().ScheduleWork(
+        [](intptr_t arg) {
+            auto* r = reinterpret_cast<OpenRequest*>(arg);
+            auto& manager = chip::Server::GetInstance().GetCommissioningWindowManager();
+            r->err = manager.IsCommissioningWindowOpen()
+                         ? CHIP_NO_ERROR
+                         : manager.OpenBasicCommissioningWindow(chip::System::Clock::Seconds32(300));
+            xSemaphoreGive(r->done);
+        },
+        reinterpret_cast<intptr_t>(&request));
+    if (err == CHIP_NO_ERROR) {
+        xSemaphoreTake(request.done, portMAX_DELAY);  // the request lives on this stack
+        err = request.err;
+    }
+    vSemaphoreDelete(request.done);
     return err == CHIP_NO_ERROR ? "commissioning window open for 5 minutes\n"
                                 : std::string("could not open the commissioning window: ") + err.AsString() + "\n";
 }

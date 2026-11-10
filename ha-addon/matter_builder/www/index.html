@@ -363,6 +363,11 @@ textarea.yaml{width:100%;min-height:280px;font:12px/1.5 ui-monospace,Menlo,monos
       </form>
       <div id="sourceResult"></div>
       <div class="actions"><button id="checkReleases" data-t="checkReleases"></button></div>
+      <div id="ignoredSection" hidden>
+        <h3 style="margin-top:20px" data-t="ignoredTitle"></h3>
+        <div class="sub" data-t="ignoredHelp"></div>
+        <div id="ignoredList" style="margin-top:8px"></div>
+      </div>
       <h3 style="margin-top:20px" data-t="nightTitle"></h3>
       <div class="sub" data-t="nightHelp"></div>
       <label class="field" style="max-width:220px;margin-top:8px"><span data-t="nightHour"></span><select id="nightHour"></select></label>
@@ -402,6 +407,18 @@ const TEXT = {
   applyingConfig: 'Applying the configuration…', configOnTrial: s => `The new connections run on trial: keep them within ${s} s, or the device goes back.`,
   configKept: 'Kept. The device is ready.', configFailed: e => `The configuration was not applied: ${e}`,
   emptyTitle: 'Set up your first device',
+  ignore: 'Ignore', ignoreHelp: 'Do not offer this device for linking; show it again from Settings', showAgain: 'Show again',
+  ignoredTitle: 'Ignored devices', ignoredHelp: 'Found on your network, but not offered for linking.',
+  bleTitle: 'Bluetooth device', ofEightCommands: n => `${n} of 8 commands`,
+  bleHelp: 'A Bluetooth device this ESP32 sends commands to: a bed, a fan, a blind. Its commands are the same for everyone with that device, so they go into configs and recipes; each can be a connection (a button in Matter).',
+  bleOther: 'Another device', bleAddress: 'Bluetooth address', bleAddressHint: 'AA:BB:CC:DD:EE:FF', bleAddressType: 'Address type', blePublic: 'Public', bleRandom: 'Random',
+  bleService: 'Service', bleCharacteristic: 'Characteristic', bleWrite: 'Write', bleWriteResp: 'With response', bleWriteNoResp: 'Without response', bleIdle: 'Stay connected (s)',
+  blePinNote: 'Its address is yours; a first message after connecting (a PIN) is set on the device’s own page and never part of a config.',
+  bleLabel: n => `Command ${n}`, bleBytes: 'Bytes (hex)', bleTimes: 'Times', bleGap: 'Gap (ms)', bleAddCommand: 'Add command', bleAsConnection: 'Add as connection', bleIsConnection: 'Connection',
+  bleRemove: 'Remove the Bluetooth device', bleRemoveConfirm: 'Remove the Bluetooth device from this configuration, with the connections that use its commands? (On the device it stays until you clear it on its page.)',
+  bleNeedUuid: 'Bluetooth device: the service and characteristic as a UUID, e.g. FFE0', bleNeedAddress: 'Bluetooth device: the address like AA:BB:CC:DD:EE:FF',
+  bleNeedBytes: n => `Bluetooth device: command ${n} needs its bytes as hex (1 to 64 bytes)`, bleNoCommand: n => `${n}: no such command on the Bluetooth device`,
+  bleNotHere: 'This device has no Bluetooth device to send commands to (it needs an ESP32-C6 with current firmware).',
   groupsTooOld: v => `Groups need generic firmware ${v} or newer: update the device first (Firmware tab).`,
   groups: 'Groups', groupsHelp: 'Connections in one group are one device: one accessory in Apple Home (with its parts), one device in Home Assistant. Drag them between groups, or use ⋮ → Move to.',
   groupsOffConfirm: 'Turn groups off? Every connection becomes a device of its own again.', groupN: n => `Group ${n}`, groupName: 'Group name',
@@ -755,10 +772,18 @@ function deviceCard(p) {
     </div></div>`;
 }
 
+// A found device you do not want to link (a neighbour's, a test board): out
+// of the list until you show it again in the settings
+async function ignoreFound(id, on) {
+  await api('api/found/ignore', {id, on});
+  refresh();
+}
+
 function renderDevices() {
   const found = state.found;
   setHtml($('#discovered'), found.map(d => `<div class="banner"><span class="ico" style="width:32px;height:32px">${appIcon(d.app)}</span>
       <div class="grow"><b style="font-weight:500">${t('discovered', esc(appTitle(d.app)), esc(d.version || ''))}</b><div class="sub mono">${esc(d.host)}</div></div>
+      <button class="plain" onclick="ignoreFound('${esc(d.id)}', true)" title="${esc(t('ignoreHelp'))}">${t('ignore')}</button>
       <button class="pri" onclick="openWizard('link', '${esc(d.address)}')">${t('adopt')}</button></div>`).join(''));
   const q = query.toLowerCase();
   const list = state.proxies.filter(p => !q || `${p.name} ${p.host} ${connectedText(statuses[p.id])}`.toLowerCase().includes(q));
@@ -876,6 +901,7 @@ class ConfigEditor {
     this.components = []; this.drivers = [];  // component types: from the config, or from the device
     this.rules = []; this.ruleOpen = new Set(); this.rulesSupported = true; this.clock = null;
     this.grouping = false;  // the Groups switch: connections shown and moved by group
+    this.ble = null; this.bleSupported = true;  // a Bluetooth device it sends commands to (ESP32-C6)
     EDITORS[id] = this;
   }
   get ref() { return `EDITORS['${this.id}']`; }
@@ -885,17 +911,18 @@ class ConfigEditor {
   help(type) { const d = this.driver(type); return d ? (d.description || '') : TEXT.typeHelp[type] || ''; }
   pinCount(type) { const d = this.driver(type); return d ? d.pins : isBle(type) ? 0 : type === 'sht4x' ? 2 : 1; }
   mount(host) { this.host = host; this.render(); }
-  load(name, rows, pins, rules) {
+  load(name, rows, pins, rules, ble) {
+    this.ble = ble ? JSON.parse(JSON.stringify(ble)) : null;
     this.name = name; this.rows = rows.map(r => ({...r})); if (pins) this.pins = pins;
     this.rules = JSON.parse(JSON.stringify(rules || [])); this.ruleOpen.clear();
-    this.yaml = specYaml(name, this.rows, this.components, this.drivers, this.rules); this.error = ''; this.open.clear(); this.cardYaml = {}; this.picking = false;
+    this.yaml = specYaml(name, this.rows, this.components, this.drivers, this.rules, this.ble); this.error = ''; this.open.clear(); this.cardYaml = {}; this.picking = false;
     this.grouping = this.rows.some(r => r.group);
     this.render();
   }
   // A YAML text (a config or recipe): shown as it is in the YAML mode
   async loadText(text) {
     this.yaml = text; this.cardYaml = {}; this.open.clear();
-    try { const s = await parseSpec(text); this.name = s.name; this.rows = s.rows; this.components = s.components; this.drivers = s.drivers; this.rules = s.rules; this.error = ''; this.grouping = this.grouping || this.rows.some(r => r.group); }
+    try { const s = await parseSpec(text); this.name = s.name; this.rows = s.rows; this.components = s.components; this.drivers = s.drivers; this.rules = s.rules; this.ble = s.ble; this.error = ''; this.grouping = this.grouping || this.rows.some(r => r.group); }
     catch (e) { this.error = t('yamlError', e.message); this.mode = 'yaml'; }
     this.changed();
   }
@@ -907,9 +934,9 @@ class ConfigEditor {
 
   async setMode(mode) {
     if (mode === this.mode) return;
-    if (mode === 'yaml') this.yaml = specYaml(this.name, this.rows, this.components, this.drivers, this.rules);
+    if (mode === 'yaml') this.yaml = specYaml(this.name, this.rows, this.components, this.drivers, this.rules, this.cleanBle());
     else {
-      try { const s = await parseSpec(this.yaml); this.name = s.name; this.rows = s.rows; this.components = s.components; this.drivers = s.drivers; this.rules = s.rules; this.error = ''; }
+      try { const s = await parseSpec(this.yaml); this.name = s.name; this.rows = s.rows; this.components = s.components; this.drivers = s.drivers; this.rules = s.rules; this.ble = s.ble; this.error = ''; }
       catch (e) { this.error = t('yamlError', e.message); this.render(); return; }
     }
     this.mode = mode; this.error = '';
@@ -920,7 +947,7 @@ class ConfigEditor {
   async get() {
     if (this.mode === 'yaml') {
       const s = await parseSpec(this.yaml);
-      this.name = s.name; this.rows = s.rows; this.components = s.components; this.drivers = s.drivers; this.rules = s.rules; this.error = '';
+      this.name = s.name; this.rows = s.rows; this.components = s.components; this.drivers = s.drivers; this.rules = s.rules; this.ble = s.ble; this.error = '';
       return s;
     }
     const rows = this.rows.map(r => ({...r, name: (r.name || '').trim() || this.title(r.type),
@@ -943,9 +970,94 @@ class ConfigEditor {
         if (['enable', 'disable', 'toggle_rule'].includes(st.kind) && !this.rules.some(x => x.index === st.target)) throw new Error(t('ruleNeedsRule', r.name));
       }
     }
-    return {name: this.name.trim(), rows, rules: JSON.parse(JSON.stringify(this.rules))};
+    return {name: this.name.trim(), rows, rules: JSON.parse(JSON.stringify(this.rules)), ble: this.checkedBle(rows)};
   }
-  text() { return this.mode === 'yaml' ? this.yaml : specYaml(this.name.trim(), this.rows, this.components, this.drivers, this.rules); }
+
+  // ---- Bluetooth device
+  cleanBle() {
+    if (!this.ble) return null;
+    const b = this.ble;
+    return {address: (b.address || '').trim().toUpperCase(), address_type: b.address_type || 'public', service: (b.service || '').trim().toUpperCase(),
+      characteristic: (b.characteristic || '').trim().toUpperCase(), write: b.write, idle: Math.max(0, Math.min(3600, Math.round(+b.idle || 0))),
+      commands: b.commands.map((c, i) => ({label: (c.label || '').trim() || `Command ${i + 1}`, bytes: bleHex(c.bytes),
+        times: Math.max(1, Math.min(50, Math.round(+c.times || 1))), gap: Math.max(0, Math.min(2000, Math.round(+c.gap || 0)))}))};
+  }
+  checkedBle(rows) {
+    const b = this.cleanBle(), uuid = /^([0-9A-F]{4}|[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12})$/;
+    const used = rows.filter(r => r.type === 'ble_command');
+    if (!b) return null;
+    if (!uuid.test(b.service) || !uuid.test(b.characteristic)) throw new Error(t('bleNeedUuid'));
+    if (b.address && !/^[0-9A-F]{2}(:[0-9A-F]{2}){5}$/.test(b.address)) throw new Error(t('bleNeedAddress'));
+    b.commands.forEach((c, i) => { if (!/^([0-9A-F]{2}){1,64}$/.test(c.bytes)) throw new Error(t('bleNeedBytes', i + 1)); });
+    for (const r of used) if (!(r.number >= 1 && r.number <= b.commands.length)) throw new Error(t('bleNoCommand', r.name || this.title(r.type)));
+    return b;
+  }
+  bleSet(key, value) { this.ble[key] = value; this.changed(false); }
+  bleCmd(i, key, value) { this.ble.commands[i][key] = value; this.changed(false); }
+  bleStart(template) {
+    const tpl = BLE_TEMPLATES[template];
+    this.ble = tpl ? {...bleEmpty(), service: tpl.service, characteristic: tpl.characteristic, write: tpl.write, idle: tpl.idle,
+      commands: tpl.commands.map(([label, bytes, times, gap]) => ({label, bytes, times, gap}))} : bleEmpty();
+    this.changed();
+  }
+  bleRemove() {
+    if (!confirm(t('bleRemoveConfirm'))) return;
+    this.ble = null;
+    this.rows = this.rows.filter(r => r.type !== 'ble_command');
+    this.changed();
+  }
+  bleAddCommand() { if (this.ble.commands.length < BLE_COMMANDS_MAX) { this.ble.commands.push({label: '', bytes: '', times: 1, gap: 0}); this.changed(); } }
+  bleDropCommand(i) {
+    // Only the last one: connections point at commands by their number
+    if (i !== this.ble.commands.length - 1) return;
+    this.ble.commands.pop();
+    this.rows = this.rows.filter(r => !(r.type === 'ble_command' && r.number === i + 1));
+    this.changed();
+  }
+  // A command as a connection: a momentary switch in Matter
+  bleAsConnection(i) {
+    const slot = [0, 1, 2, 3, 4, 5, 6, 7].find(x => !this.row(x));
+    if (slot === undefined || this.rows.some(r => r.type === 'ble_command' && r.number === i + 1)) return;
+    this.rows.push({slot, type: 'ble_command', pin: 0, pin2: 0, inverted: false, name: (this.ble.commands[i].label || `Command ${i + 1}`).slice(0, 23),
+      code: '', mac: '', number: i + 1, ...ROW_OPTIONS});
+    this.rows.sort((a, b) => a.slot - b.slot);
+    this.changed();
+  }
+  bleSection() {
+    if (!this.bleSupported) return '';
+    const ref = this.ref, b = this.ble;
+    const head = `<div class="ed-section"><h3>${t('bleTitle')}</h3>${b ? `<span class="sub">${t('ofEightCommands', b.commands.length)}</span>` : ''}</div>
+      <div class="sub" style="margin:-4px 2px 8px">${t('bleHelp')}</div>`;
+    if (!b) return `${head}<div class="actions" style="margin:0 0 8px;justify-content:flex-start">
+        ${Object.entries(BLE_TEMPLATES).map(([k, v]) => `<button onclick="${ref}.bleStart('${k}')">${icon('plus')} ${esc(v.title)}</button>`).join('')}
+        <button class="plain" onclick="${ref}.bleStart('')">${t('bleOther')}</button></div>`;
+    const full = this.rows.length >= 8;
+    const field = (label, key, value, extra = '') => `<label class="field"><span>${label}</span><input value="${esc(value)}" spellcheck="false" ${extra} oninput="${ref}.bleSet('${key}', this.value)"></label>`;
+    const commands = b.commands.map((c, i) => {
+      const linked = this.rows.some(r => r.type === 'ble_command' && r.number === i + 1);
+      return `<div class="ed-item"><div class="ed-item-body" style="padding-top:10px"><div class="ed-fields" style="grid-template-columns:2fr 3fr 1fr 1fr">
+          <label class="field"><span>${t('bleLabel', i + 1)}</span><input maxlength="32" value="${esc(c.label)}" oninput="${ref}.bleCmd(${i}, 'label', this.value)"></label>
+          <label class="field"><span>${t('bleBytes')}</span><input class="mono" spellcheck="false" value="${esc(c.bytes)}" oninput="${ref}.bleCmd(${i}, 'bytes', this.value)"></label>
+          <label class="field"><span>${t('bleTimes')}</span><input type="number" min="1" max="50" value="${c.times}" oninput="${ref}.bleCmd(${i}, 'times', +this.value)"></label>
+          <label class="field"><span>${t('bleGap')}</span><input type="number" min="0" max="2000" value="${c.gap}" oninput="${ref}.bleCmd(${i}, 'gap', +this.value)"></label></div>
+        <div class="actions" style="margin-top:8px;justify-content:flex-start">
+          ${linked ? `<span class="chip ok">${t('bleIsConnection')}</span>` : `<button onclick="${ref}.bleAsConnection(${i})" ${full ? 'disabled' : ''}>${t('bleAsConnection')}</button>`}
+          <span class="grow"></span>${i === b.commands.length - 1 ? `<button class="warn" onclick="${ref}.bleDropCommand(${i})">${t('remove')}</button>` : ''}</div></div></div>`;
+    }).join('');
+    return `${head}<div class="ed-item"><div class="ed-item-body" style="padding-top:10px"><div class="ed-fields">
+        ${field(t('bleAddress'), 'address', b.address, `placeholder="${t('bleAddressHint')}" maxlength="17"`)}
+        <label class="field"><span>${t('bleAddressType')}</span><select onchange="${ref}.bleSet('address_type', this.value)">
+          <option value="public" ${b.address_type !== 'random' ? 'selected' : ''}>${t('blePublic')}</option><option value="random" ${b.address_type === 'random' ? 'selected' : ''}>${t('bleRandom')}</option></select></label>
+        ${field(t('bleService'), 'service', b.service, 'placeholder="FFE0"')}${field(t('bleCharacteristic'), 'characteristic', b.characteristic, 'placeholder="FFE1"')}
+        <label class="field"><span>${t('bleWrite')}</span><select onchange="${ref}.bleSet('write', this.value)">
+          <option value="response" ${b.write === 'response' ? 'selected' : ''}>${t('bleWriteResp')}</option><option value="no-response" ${b.write === 'no-response' ? 'selected' : ''}>${t('bleWriteNoResp')}</option></select></label>
+        <label class="field"><span>${t('bleIdle')}</span><input type="number" min="0" max="3600" value="${b.idle}" oninput="${ref}.bleSet('idle', +this.value)"></label></div>
+      <div class="sub" style="margin-top:8px">${t('blePinNote')}</div>
+      <div class="actions" style="margin-top:6px"><span class="grow"></span><button class="warn" onclick="${ref}.bleRemove()">${t('bleRemove')}</button></div></div></div>
+      ${commands}
+      <button class="ed-add" onclick="${ref}.bleAddCommand()" ${b.commands.length >= BLE_COMMANDS_MAX ? 'disabled' : ''}>${icon('plus')} ${t('bleAddCommand')}</button>`;
+  }
+  text() { return this.mode === 'yaml' ? this.yaml : specYaml(this.name.trim(), this.rows, this.components, this.drivers, this.rules, this.cleanBle()); }
 
   // ---- rules
   slotsFor(role) { return this.rows.filter(x => roleOf(x, this.driver(x.type)) === role); }
@@ -1308,6 +1420,7 @@ class ConfigEditor {
           <button class="icon" onclick="${ref}.picking = false; ${ref}.render()" aria-label="${t('close')}">${icon('close')}</button></div>
           <div class="ed-item-body"><div class="choices" style="margin:0">${this.types().map(x => `<button class="choice" onclick="${ref}.add('${x}')"><span class="ico">${typeIcon(x, this.driver(x))}</span><span><b>${esc(this.title(x))}</b><span class="sub">${esc(this.help(x))}</span></span></button>`).join('')}</div></div></div>`
         : `<button class="ed-add" onclick="${ref}.picking = true; ${ref}.render()" ${full ? 'disabled' : ''}>${icon('plus')} ${full ? t('allUsed') : t('addConnection')}</button>`}
+      ${this.bleSection()}
       ${this.rulesSupported ? `<div class="ed-section"><h3>${t('rules')}</h3><span class="sub">${t('ofTwelve', this.rules.length)}</span></div>
         <div class="sub" style="margin:-4px 2px 6px">${t('rulesHelp')}</div>
         ${[...this.rules].sort((a, b) => a.index - b.index).map(r => this.ruleCard(r)).join('')}
@@ -1448,7 +1561,7 @@ function communityGate(then) {
 
 function useItem() {
   communityGate(() => {
-    const recipe = {id: item.id, title: item.title, rows: rowsOf(item.connections)};
+    const recipe = {id: item.id, title: item.title, rows: rowsOf(item.connections), text: item.text || ''};
     $('#itemDlg').close();
     openWizard('recipeTarget', null, {recipe});
   });
@@ -1850,16 +1963,22 @@ async function openDevice(id, which, recipe) {
     try { setEditor.beds = (JSON.parse(await proxyCommand(id, 'json')).beds || []).filter(b => b.configured); } catch (e) { setEditor.beds = []; }
   }
   if (managed.io) {
+    // The Bluetooth device it sends commands to: only firmware that has it (ESP32-C6)
+    try { managed.ble = bleFromDevice(JSON.parse(await proxyCommand(id, 'bledev json')).bledev); } catch (e) { managed.ble = undefined; }
+    devEditor.bleSupported = managed.ble !== undefined;
     devEditor.mount($('#devEditor'));
     devEditor.drivers = managed.io.drivers || [];
     devEditor.components = [];
     devEditor.rulesSupported = !!managed.rules;
     devEditor.clock = managed.rules ? managed.rules.clock : null;
     devEditor.runner = managed.rules ? index => proxyCommand(id, `rule run ${index}`).then(reply => note(reply.trim() === 'ok' ? t('ruleRan') : reply)) : null;
-    devEditor.load(managed.io.name, rowsFromIo(managed.io), managed.io.pins, managed.rules ? managed.rules.rules : []);
+    devEditor.load(managed.io.name, rowsFromIo(managed.io), managed.io.pins, managed.rules ? managed.rules.rules : [], managed.ble);
     $('#mSave').classList.remove('pri');
     if (recipe) {
-      devEditor.load(managed.io.name, recipe.rows.map(r => ({...r})), managed.io.pins, recipe.rules || []);
+      // The whole recipe when it has its text: rules and a Bluetooth device too
+      let full = null;
+      if (recipe.text) { try { full = await parseSpec(recipe.text); } catch (e) {} }
+      devEditor.load(managed.io.name, (full ? full.rows : recipe.rows).map(r => ({...r})), managed.io.pins, full ? full.rules : recipe.rules || [], full ? full.ble : null);
       devEditor.onChange();
       $('#recipeNotice').innerHTML = `${esc(t('fromRecipe', recipe.title))} <button class="text" onclick="saveAndApply()">${t('saveApply')}</button>`;
       $('#recipeNotice').hidden = false;
@@ -2024,7 +2143,7 @@ const MIN_GROUPS = '0.1.13';
 
 // One YAML format everywhere (device, config, recipe, wizard): the spec of
 // tools/mb_generate.py, checked by the add-on with the generator itself
-function specYaml(name, rows, components = [], drivers = [], rules = []) {
+function specYaml(name, rows, components = [], drivers = [], rules = [], ble = null) {
   const lines = ['device:', `  name: ${name}`, '  app: generic', '', 'connections:'];
   for (const r of rows) {
     const d = drivers.find(x => x.type === r.type);
@@ -2032,7 +2151,7 @@ function specYaml(name, rows, components = [], drivers = [], rules = []) {
     if (isBle(r.type)) lines.push(`    mac: ${r.mac}`); else if (!d || d.pins > 0) lines.push(`    pin: ${r.pin}`);
     if (r.type === 'sht4x') lines.push(`    scl: ${r.pin2}`);
     if (d && d.pins === 2) lines.push(`    pin2: ${r.pin2}`);
-    if (d && d.number) lines.push(`    number: ${r.number || 0}`);
+    if ((d && d.number) || r.type === 'ble_command') lines.push(`    number: ${r.number || 0}`);
     if (isIr(r.type)) lines.push(`    code: ${r.code}`);
     if (r.inverted) lines.push('    inverted: true');
     if (optOutput(r.type, d) && r.power && r.power !== 'off') lines.push(`    power: ${r.power}`);
@@ -2042,6 +2161,15 @@ function specYaml(name, rows, components = [], drivers = [], rules = []) {
     lines.push(`    name: ${r.name || (d ? d.title : TEXT.types[r.type])}`);
   }
   if (components.length) lines.push('', 'components:', ...components.map(c => `  - source: ${c.source}`));
+  if (ble) {
+    lines.push('', 'bluetooth_device:');
+    if (ble.address) lines.push(`  address: ${ble.address}`, ...(ble.address_type === 'random' ? ['  address_type: random'] : []));
+    lines.push(`  service: ${ble.service}`, `  characteristic: ${ble.characteristic}`, `  write: ${ble.write}`, `  idle: ${ble.idle}`, '  commands:');
+    for (const c of ble.commands) {
+      lines.push(`    - label: ${c.label}`, `      bytes: "${c.bytes}"`);
+      if (c.times > 1) lines.push(`      times: ${c.times}`, `      gap: ${c.gap}`);
+    }
+  }
   lines.push(...rulesYaml(rules));
   return lines.join('\n') + '\n';
 }
@@ -2050,7 +2178,58 @@ async function parseSpec(text) {
   const r = await api('api/specs', {text, check_only: true});
   if (!r.spec) throw new Error(r.error || 'not valid');
   return {name: r.spec.name, rows: rowsOf(r.spec.connections), components: (r.spec.components || []).map(c => ({source: c.source})),
-    drivers: r.spec.drivers || [], rules: r.spec.rules || []};
+    drivers: r.spec.drivers || [], rules: r.spec.rules || [], ble: r.spec.bluetooth_device || null};
+}
+
+// ---------------------------------------------------------------- Bluetooth device
+// A Bluetooth LE device the ESP32 sends commands to (firmware "bledev"): a
+// bed, a fan, a blind. Where to write and up to 8 commands are the same for
+// everyone with that device, so they are part of a config or recipe; each
+// command can be a connection ("Bluetooth command"). The first message after
+// connecting (a PIN) is set on the device's own page, never here.
+const BLE_COMMANDS_MAX = 8;
+const bleHex = v => String(v).replace(/[\s:-]/g, '').toUpperCase();
+const hexOfText = text => Array.from(new TextEncoder().encode(text), b => b.toString(16).padStart(2, '0')).join('');
+// Octo beds: the remote's packets, framed and checksummed
+function octoPacket(c0, c1, data = []) {
+  const summed = [0x40, c0, c1, (data.length >> 8) & 255, data.length & 255, ...data, 0x40];
+  const checksum = (((summed.reduce((a, b) => a + b, 0) & 255) ^ 0xFF) + 1) & 255;
+  const escape = {0x40: 1, 0x3C: 2, 0x4F: 3, 0x41: 4}, out = [0x40];
+  for (const b of [c0, c1, summed[3], summed[4], checksum, ...data]) { if (b in escape) out.push(0x3C, escape[b]); else out.push(b); }
+  out.push(0x40);
+  return out.map(b => b.toString(16).padStart(2, '0').toUpperCase()).join('');
+}
+const BLE_TEMPLATES = {
+  octo: {title: 'Octo bed', service: 'FFE0', characteristic: 'FFE1', write: 'no-response', idle: 25,
+    commands: [['Head up', octoPacket(2, 0x70, [2]), 8, 375], ['Head down', octoPacket(2, 0x71, [2]), 8, 375],
+      ['Legs up', octoPacket(2, 0x70, [4]), 8, 375], ['Legs down', octoPacket(2, 0x71, [4]), 8, 375],
+      ['Both up', octoPacket(2, 0x70, [6]), 8, 375], ['Both down', octoPacket(2, 0x71, [6]), 8, 375],
+      ['Stop', octoPacket(2, 0x73), 1, 0], ['Light on', octoPacket(0x20, 0x72, [0, 1, 2, 1, 1, 1, 1, 1]), 1, 0]]},
+};
+const bleEmpty = () => ({address: '', address_type: 'public', service: '', characteristic: '', write: 'response', idle: 30, commands: []});
+// From the device ("bledev json"): null when nothing is set
+function bleFromDevice(d) {
+  let last = -1;
+  d.commands.forEach((c, i) => { if (c.bytes) last = i; });
+  if (!d.service && !d.characteristic && !d.mac && last < 0) return null;
+  return {address: d.mac || '', address_type: d.random ? 'random' : 'public', service: d.service, characteristic: d.characteristic,
+    write: d.no_response ? 'no-response' : 'response', idle: d.idle,
+    commands: d.commands.slice(0, last + 1).map(c => ({label: c.label, bytes: c.bytes, times: c.times || 1, gap: c.gap || 0}))};
+}
+// The commands that turn the device's Bluetooth device into this one
+function bleLines(before, after) {
+  if (!after) return [];
+  const b = before || bleEmpty(), lines = [];
+  if (after.service !== b.service) lines.push(`bledev service ${after.service}`);
+  if (after.characteristic !== b.characteristic) lines.push(`bledev characteristic ${after.characteristic}`);
+  if (after.write !== b.write) lines.push(`bledev write ${after.write}`);
+  if (after.idle !== b.idle) lines.push(`bledev idle ${after.idle}`);
+  if (after.address && (after.address !== b.address || after.address_type !== b.address_type)) lines.push(`bledev target ${after.address} ${after.address_type}`);
+  after.commands.forEach((c, i) => {
+    if (JSON.stringify(c) !== JSON.stringify(b.commands[i])) lines.push(`bledev cmd ${i} ${c.bytes} ${c.times} ${c.gap} ${hexOfText(c.label)}`);
+  });
+  for (let i = after.commands.length; i < b.commands.length; i++) if (b.commands[i].bytes) lines.push(`bledev clear ${i}`);
+  return lines;
 }
 
 // The commands that turn a device's draft into these connections and name
@@ -2105,14 +2284,16 @@ async function saveManage() {
   if (spec.rows.some(r => r.group) && fw && newer(MIN_GROUPS, fw.version)) {
     $('#mError').textContent = t('groupsTooOld', MIN_GROUPS); $('#mError').hidden = false; return;
   }
-  const lines = diffLines(managed.io, spec.rows, spec.name, devEditor.drivers)
+  if (spec.ble && managed.ble === undefined) { $('#mError').textContent = t('bleNotHere'); $('#mError').hidden = false; return; }
+  // The Bluetooth device first: its commands must be there for the connections that use them
+  const lines = bleLines(managed.ble, spec.ble).concat(diffLines(managed.io, spec.rows, spec.name, devEditor.drivers))
     .concat(managed.rules ? ruleLines(managed.rules.rules, spec.rules || []) : []);
   try { await sendLines(managed.id, lines); }
   catch (e) { $('#mError').textContent = e.message; $('#mError').hidden = false; return; }
   managed.io = JSON.parse(await proxyCommand(managed.id, 'io json')).io;
   if (managed.rules) try { managed.rules = JSON.parse(await proxyCommand(managed.id, 'rule json')); } catch (e) {}
   devEditor.clock = managed.rules ? managed.rules.clock : null;
-  devEditor.load(managed.io.name, rowsFromIo(managed.io), managed.io.pins, managed.rules ? managed.rules.rules : []);
+  devEditor.load(managed.io.name, rowsFromIo(managed.io), managed.io.pins, managed.rules ? managed.rules.rules : [], managed.ble);
   $('#mSave').classList.remove('pri');
   $('#recipeNotice').hidden = true;
   showManageState();
@@ -2123,7 +2304,7 @@ async function saveAsConfig() {
   $('#mError').hidden = true;
   try {
     const spec = await devEditor.get();
-    const r = await api('api/specs', {text: specYaml(spec.name, spec.rows, [], [], spec.rules || [])});
+    const r = await api('api/specs', {text: specYaml(spec.name, spec.rows, [], [], spec.rules || [], spec.ble)});
     if (r.error) throw new Error(r.error);
     note(t('configSaved', r.spec.name));
     invalidateSpecs();
@@ -2209,7 +2390,7 @@ function renderWizard() {
   } else if (wiz.step === 'recipeTarget') {
     title = t('wRecipeTarget');
     const generic = state.proxies.filter(p => { const r = running(statuses[p.id]); return r && isGenericApp(r.app); });
-    if (!wiz.configText) wiz.configText = specYaml(wiz.recipe.title, wiz.recipe.rows);
+    if (!wiz.configText) wiz.configText = wiz.recipe.text || specYaml(wiz.recipe.title, wiz.recipe.rows);
     body = `<div class="sub">${esc(wiz.recipe.title)}</div><div class="choices">
       ${wiz.deviceOnly ? '' : choice(false, 'usb', t('recipeNew'), t('recipeNewHelp'), "go('firmware')")}
       ${generic.map(p => choice(false, 'chip', t('recipeOn', esc(p.name)), t('recipeOnHelp'), `const r = wiz.recipe; closeWizard(); openDevice('${p.id}', 'connections', r)`)).join('')}</div>
@@ -2359,6 +2540,7 @@ async function applyConfig() {
     if (tooOld(running(st), spec.rows)) throw new Error(t('firmwareTooOld', MIN_NEW_TYPES));
     const missing = missingType(spec.rows, io.drivers);
     if (missing) throw new Error(t('missingComponent', missing));
+    if (spec.ble) await sendLines(id, bleLines(null, spec.ble));
     await sendLines(id, diffLines(io, spec.rows, spec.name, (io.drivers || []).concat(spec.drivers || [])));
     if (spec.rules && spec.rules.length) {
       let have = null;
@@ -2523,6 +2705,10 @@ function renderSettings() {
   setHtml($('#sourceList'), (state.sources || []).map(s => `<div class="row"><div class="label">${esc(s.repo)}
       <div class="sub">${s.error ? esc(s.error) : s.release ? t('signedRelease', esc(s.release)) : t('noReleases')}</div></div>
       ${s.official ? `<span class="chip accent">${t('official')}</span>` : `<button class="warn" onclick="removeSource('${esc(s.repo)}')">${t('remove')}</button>`}</div>`).join(''));
+  const ignored = state.ignored || [];
+  $('#ignoredSection').hidden = !ignored.length;
+  setHtml($('#ignoredList'), ignored.map(d => `<div class="row"><div class="label">${esc(d.app ? appTitle(d.app) : d.id)}
+      <div class="sub mono">${esc(d.host || d.id)}</div></div><button onclick="ignoreFound('${esc(d.id)}', false)">${t('showAgain')}</button></div>`).join(''));
   const sys = state.system;
   $('#system').textContent = `${sys.cores} ${t('cores')} · ${gb(sys.memory)} ${t('memory')} · ${gb(sys.disk_free)} ${t('disk')}`;
   $('#systemAdvice').textContent = t('fewCores');

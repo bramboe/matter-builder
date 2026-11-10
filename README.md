@@ -25,6 +25,10 @@ component of your own and build it in Home Assistant.
   one device: one accessory in Apple Home, one device in Home Assistant. In
   the add-on by dragging them into a group; on the bed bridge one device per
   bed.
+- **Bluetooth devices by recipe.** An ESP32-C6 can send commands to a
+  Bluetooth LE device (a bed, a fan, a blind). The commands of a product are
+  the same for everyone, so they travel in a recipe; your device's address
+  and PIN stay on your device.
 - **Network health.** Per device, link by link: its own Thread or Wi-Fi
   connection, the way out through the border router, and the way to Matter
   Builder, with a day of history. When a Thread device drops out, it says
@@ -211,6 +215,7 @@ before it installs anything.
 | Matter Builder 0.27.0 on its own | Without Home Assistant (Python on macOS tested: own login, setup code from another computer, sign out, lockout after 5 wrong passwords, discovery); Docker build and start tested in CI |
 | Network health (add-on 0.28.0) | Thread and Wi-Fi diagnosis per link with a day of history; verdicts tested on recorded scenarios, the page against mock devices; the firmware side is in the next release |
 | Generic 0.1.13, Octo bridge 1.0.23, add-on 0.29.0 | Groups (connections as one device; one device per bed) and network health; built for all four targets, the editor tested against mock devices; not yet on hardware |
+| Octo bridge 1.0.24, add-on 0.30.0 | On hardware: one device per bed in Home Assistant next to Apple Home, parts named by the add-on; groups on a classic ESP32; network health found a weak Thread link. The Bluetooth device editor is tested against mock devices only |
 | Catalog | Built nightly on GitHub Pages from repositories with the topic `matter-builder-package` |
 
 ## License

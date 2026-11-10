@@ -383,11 +383,75 @@ def rule_options(r):
     return " ".join(opts)
 
 
+BLE_UUID = re.compile(r"^([0-9A-Fa-f]{4}|[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12})$")
+BLE_COMMANDS = 8
+
+
+def check_bluetooth_device(device):
+    """A Bluetooth LE device the ESP32 sends commands to (firmware: ble_device):
+    where to write (service, characteristic) and up to 8 commands. The same
+    for everyone with that device, so it fits a recipe; the device's address
+    may be given, its first message after connecting (a PIN) never is: that
+    is set on the device's own page."""
+    if device is None:
+        return None
+    if not isinstance(device, dict):
+        raise SpecError("bluetooth_device: a mapping")
+    unknown = set(device) - {"address", "address_type", "service", "characteristic", "write", "idle", "commands"}
+    if unknown:
+        raise SpecError(f"bluetooth_device: unknown “{sorted(unknown)[0]}”")
+    out = {}
+    for key in ("service", "characteristic"):
+        value = str(device.get(key) or "")
+        if not BLE_UUID.match(value):
+            raise SpecError(f"bluetooth_device: {key} a UUID like FFE0 or 0000ffe0-0000-1000-8000-00805f9b34fb")
+        out[key] = value.upper()
+    write = str(device.get("write", "response"))
+    if write not in ("response", "no-response"):
+        raise SpecError("bluetooth_device: write response or no-response")
+    out["write"] = write
+    idle = device.get("idle", 30)
+    if not isinstance(idle, int) or isinstance(idle, bool) or not 0 <= idle <= 3600:
+        raise SpecError("bluetooth_device: idle in seconds, 0-3600")
+    out["idle"] = idle
+    if device.get("address"):
+        address = str(device["address"])
+        if not MAC.match(address):
+            raise SpecError("bluetooth_device: address like AA:BB:CC:DD:EE:FF")
+        kind = str(device.get("address_type", "public"))
+        if kind not in ("public", "random"):
+            raise SpecError("bluetooth_device: address_type public or random")
+        out["address"], out["address_type"] = address.upper(), kind
+    commands = device.get("commands") or []
+    if not isinstance(commands, list) or len(commands) > BLE_COMMANDS:
+        raise SpecError(f"bluetooth_device: commands a list of at most {BLE_COMMANDS}")
+    out["commands"] = []
+    for n, c in enumerate(commands, 1):
+        if not isinstance(c, dict):
+            raise SpecError(f"bluetooth_device command {n}: a mapping")
+        unknown = set(c) - {"label", "bytes", "times", "gap"}
+        if unknown:
+            raise SpecError(f"bluetooth_device command {n}: unknown “{sorted(unknown)[0]}”")
+        label = str(c.get("label") or f"Command {n}").strip()
+        if not 1 <= len(label) <= 32 or '"' in label or "\\" in label:
+            raise SpecError(f"bluetooth_device command {n}: label 1-32 characters, no quotes")
+        data = re.sub(r"[\s:-]", "", str(c.get("bytes") if c.get("bytes") is not None else "")).upper()
+        if not re.match(r"^([0-9A-F]{2}){1,64}$", data):
+            raise SpecError(f"bluetooth_device command {n}: bytes as hex in quotes, 1-64 bytes (e.g. \"4002730000\")")
+        times, gap = c.get("times", 1), c.get("gap", 0)
+        if not isinstance(times, int) or isinstance(times, bool) or not 1 <= times <= 50:
+            raise SpecError(f"bluetooth_device command {n}: times 1-50")
+        if not isinstance(gap, int) or isinstance(gap, bool) or not 0 <= gap <= 2000:
+            raise SpecError(f"bluetooth_device command {n}: gap in milliseconds, 0-2000")
+        out["commands"].append({"label": label, "bytes": data, "times": times, "gap": gap})
+    return out
+
+
 def check(spec):
     """The validated spec, with defaults filled in. Raises SpecError."""
     if not isinstance(spec, dict) or not isinstance(spec.get("device"), dict):
         raise SpecError("the spec needs a “device:” section")
-    unknown = set(spec) - {"device", "connections", "components", "rules"}
+    unknown = set(spec) - {"device", "connections", "components", "rules", "bluetooth_device"}
     if unknown:
         raise SpecError(f"unknown section “{sorted(unknown)[0]}”")
     device = spec["device"]
@@ -517,8 +581,17 @@ def check(spec):
             raise SpecError(f"connection {c['slot']}: controls must name an output or IR code in this config")
     if '"' in name or "\\" in name:
         raise SpecError("device.name: no quotes")
+    bluetooth_device = check_bluetooth_device(spec.get("bluetooth_device"))
+    if bluetooth_device and app != "generic":
+        raise SpecError("bluetooth_device: only for app generic")
+    for c in clean:
+        if c["type"] == "ble_command":
+            count = len(bluetooth_device["commands"]) if bluetooth_device else BLE_COMMANDS
+            if not 1 <= c.get("number", 0) <= count:
+                raise SpecError(f"connection {c['slot']}: number is a command of the Bluetooth device (1-{count})")
     requires = sorted(set(requirements(clean)) | set(APP_REQUIRES.get(app, [])) |
-                      {r for d in components for r in d["requires"]})
+                      {r for d in components for r in d["requires"]} |
+                      ({"bluetooth"} if bluetooth_device or any(c["type"] == "ble_command" for c in clean) else set()))
     if "bluetooth" in requires and not BOARD_CAPS[board]["bluetooth"]:
         what = "the Bluetooth connections need" if app == "generic" else f"{app} needs"
         raise SpecError(f"{what} a board with Bluetooth, and {board} has none")
@@ -526,6 +599,7 @@ def check(spec):
     if rules and app != "generic":
         raise SpecError("rules: only for app generic")
     return {"name": name, "slug": slug_of(name), "app": app, "board": board, "version": version, "rules": rules,
+            **({"bluetooth_device": bluetooth_device} if bluetooth_device else {}),
             "version_number": number, "connections": sorted(clean, key=lambda x: x["slot"]),
             "requires": requires, "network": BOARD_CAPS[board]["network"][0],
             "components": [{"source": d["source"], "type": d["type"], "path": d["path"]} for d in components],

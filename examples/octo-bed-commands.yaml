@@ -1,0 +1,85 @@
+# An Octo bed as buttons, without the bed bridge firmware: the generic device
+# (ESP32-C6) sends the remote's commands over Bluetooth. The commands are the
+# same for every Octo bed; your bed's Bluetooth address and its PIN are set
+# on the device's page (Bluetooth device), never in here.
+# For positions, presets and calibration use the Octo bed bridge instead.
+device:
+  name: Octo bed
+  app: generic
+
+bluetooth_device:
+  service: FFE0
+  characteristic: FFE1
+  write: no-response
+  idle: 25
+  commands:
+    - label: Head up
+      bytes: "40027000010B0240"
+      times: 8
+      gap: 375
+    - label: Head down
+      bytes: "40027100010A0240"
+      times: 8
+      gap: 375
+    - label: Legs up
+      bytes: "4002700001090440"
+      times: 8
+      gap: 375
+    - label: Legs down
+      bytes: "4002710001080440"
+      times: 8
+      gap: 375
+    - label: Both up
+      bytes: "4002700001070640"
+      times: 8
+      gap: 375
+    - label: Both down
+      bytes: "4002710001060640"
+      times: 8
+      gap: 375
+    - label: Stop
+      bytes: "40027300000B40"
+    - label: Light on
+      bytes: "4020720008DE000102010101010140"
+
+connections:
+  - slot: 0
+    type: ble_command
+    number: 1
+    group: Bed
+    name: Head up
+  - slot: 1
+    type: ble_command
+    number: 2
+    group: Bed
+    name: Head down
+  - slot: 2
+    type: ble_command
+    number: 3
+    group: Bed
+    name: Legs up
+  - slot: 3
+    type: ble_command
+    number: 4
+    group: Bed
+    name: Legs down
+  - slot: 4
+    type: ble_command
+    number: 5
+    group: Bed
+    name: Both up
+  - slot: 5
+    type: ble_command
+    number: 6
+    group: Bed
+    name: Both down
+  - slot: 6
+    type: ble_command
+    number: 7
+    group: Bed
+    name: Stop
+  - slot: 7
+    type: ble_command
+    number: 8
+    group: Bed
+    name: Light on

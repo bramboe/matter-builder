@@ -336,10 +336,60 @@ the groups, or use ⋮ → *Move to*; up to 4 groups, each with a name. In YAML:
 The Octo bed bridge has the same as a setting: **One device per bed** puts
 head, legs and light under their bed (on by default).
 
+In Home Assistant the main entity of each part (a cover, a light) is named
+after the device alone, so the parts of one device would all have the same
+name. After *Add to Home Assistant* the add-on names them after their part
+("Sam Head", `cover.sam_head`) in Home Assistant's entity registry; entities
+you renamed yourself are left alone. Apple Home shows the parts within one
+accessory by itself.
+
 A change of groups changes how the device looks to controllers: they are
 told to read it again. In Home Assistant the entities of a grouped
 connection move to the group's device; the endpoints stay the same, so
 entity IDs and automations should stay as they are (check after the change).
+
+## Bluetooth device
+
+A generic device on an ESP32-C6 can send commands to one Bluetooth LE
+device: a bed, a fan, a blind, anything that takes bytes written to one
+characteristic. Under **Bluetooth device** in its configuration: the
+device's address, the service and characteristic to write to, and up to 8
+commands (a label, the bytes as hex, how often and how fast to repeat them).
+*Add as connection* makes a command a connection of the type *Bluetooth
+command*: a button in Matter.
+
+The commands of a product are the same for everyone who has it, so they are
+part of the configuration and of recipes (the catalog has *Octo bed* as an
+example). In YAML:
+
+```yaml
+bluetooth_device:
+  service: FFE0
+  characteristic: FFE1
+  write: no-response
+  idle: 25
+  commands:
+    - label: Stop
+      bytes: "40027300000B40"
+connections:
+  - slot: 0
+    type: ble_command
+    number: 1        # the first command
+    name: Stop
+```
+
+Yours alone are the device's address (`address:`, optional in YAML) and a
+first message after connecting such as a PIN: that one is set on the
+device's own page and is never part of a configuration. The classic ESP32
+has no room for Bluetooth next to Matter.
+
+## Discovered devices
+
+A Matter Builder device on your network that is not linked yet shows as
+*Discovered*, with **Adopt** to link it. **Ignore** takes it out of the list
+(a test board, a neighbour's device); Settings → *Ignored devices* shows it
+again. A discovered device that no longer answers disappears by itself
+within a few minutes, and comes back when it is on again.
 
 ## Network health
 

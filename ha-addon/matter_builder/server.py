@@ -981,64 +981,75 @@ def release_image(name, kind="images"):
 MATTER_SERVER = ("127.0.0.1", 5580)
 
 
-def matter_server(command, args, timeout=300):
-    """One command to the Matter server's WebSocket API, and its answer.
-    A small client of its own: the add-on has no WebSocket library."""
-    sock = socket.create_connection(MATTER_SERVER, timeout=10)
+def ws_connect(address, path, timeout, who, host=None):
+    """A WebSocket connection: (send, receive, socket). send(opcode, bytes),
+    receive() gives the next JSON message. A small client of its own: the
+    add-on has no WebSocket library."""
+    sock = socket.create_connection(address, timeout=10)
     sock.settimeout(timeout)
     try:
         key = base64.b64encode(os.urandom(16)).decode()
-        sock.sendall((f"GET /ws HTTP/1.1\r\nHost: {MATTER_SERVER[0]}:{MATTER_SERVER[1]}\r\nUpgrade: websocket\r\n"
+        sock.sendall((f"GET {path} HTTP/1.1\r\nHost: {host or f'{address[0]}:{address[1]}'}\r\nUpgrade: websocket\r\n"
                       f"Connection: Upgrade\r\nSec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n\r\n").encode())
         head = b""
         while b"\r\n\r\n" not in head:
             chunk = sock.recv(1024)
             if not chunk:
-                raise OSError("Matter server closed the connection")
+                raise OSError(f"{who} closed the connection")
             head += chunk
         status_line = head.split(b"\r\n")[0].decode(errors="replace")
         if " 101 " not in status_line:
-            raise OSError(f"Matter server refused: {status_line}")
-        rest = head.split(b"\r\n\r\n", 1)[1]
+            raise OSError(f"{who} refused: {status_line}")
+    except Exception:
+        sock.close()
+        raise
+    rest = head.split(b"\r\n\r\n", 1)[1]
 
-        def read(n):
-            nonlocal rest
-            while len(rest) < n:
-                chunk = sock.recv(65536)
-                if not chunk:
-                    raise OSError("Matter server closed the connection")
-                rest += chunk
-            data, rest = rest[:n], rest[n:]
-            return data
+    def read(n):
+        nonlocal rest
+        while len(rest) < n:
+            chunk = sock.recv(65536)
+            if not chunk:
+                raise OSError(f"{who} closed the connection")
+            rest += chunk
+        data, rest = rest[:n], rest[n:]
+        return data
 
-        def send(opcode, payload):
-            mask = os.urandom(4)
-            size = len(payload)
-            header = bytes([0x80 | opcode]) + (bytes([0x80 | size]) if size < 126 else
-                                               bytes([0x80 | 126]) + struct.pack(">H", size) if size < 65536 else
-                                               bytes([0x80 | 127]) + struct.pack(">Q", size))
-            sock.sendall(header + mask + bytes(b ^ mask[i % 4] for i, b in enumerate(payload)))
+    def send(opcode, payload):
+        mask = os.urandom(4)
+        size = len(payload)
+        header = bytes([0x80 | opcode]) + (bytes([0x80 | size]) if size < 126 else
+                                           bytes([0x80 | 126]) + struct.pack(">H", size) if size < 65536 else
+                                           bytes([0x80 | 127]) + struct.pack(">Q", size))
+        sock.sendall(header + mask + bytes(b ^ mask[i % 4] for i, b in enumerate(payload)))
 
-        def receive():
-            message = b""
-            while True:
-                first, second = read(2)
-                size = second & 0x7F
-                if size == 126:
-                    size = struct.unpack(">H", read(2))[0]
-                elif size == 127:
-                    size = struct.unpack(">Q", read(8))[0]
-                payload = read(size)
-                opcode = first & 0x0F
-                if opcode == 9:
-                    send(10, payload)
-                    continue
-                if opcode == 8:
-                    raise OSError("Matter server closed the connection")
-                message += payload
-                if first & 0x80:
-                    return json.loads(message)
+    def receive():
+        message = b""
+        while True:
+            first, second = read(2)
+            size = second & 0x7F
+            if size == 126:
+                size = struct.unpack(">H", read(2))[0]
+            elif size == 127:
+                size = struct.unpack(">Q", read(8))[0]
+            payload = read(size)
+            opcode = first & 0x0F
+            if opcode == 9:
+                send(10, payload)
+                continue
+            if opcode == 8:
+                raise OSError(f"{who} closed the connection")
+            message += payload
+            if first & 0x80:
+                return json.loads(message)
 
+    return send, receive, sock
+
+
+def matter_server(command, args, timeout=300):
+    """One command to the Matter server's WebSocket API, and its answer."""
+    send, receive, sock = ws_connect(MATTER_SERVER, "/ws", timeout, "Matter server")
+    try:
         receive()  # server info first
         message_id = secrets.token_hex(4)
         send(1, json.dumps({"message_id": message_id, "command": command, "args": args}).encode())
@@ -1048,6 +1059,113 @@ def matter_server(command, args, timeout=300):
                 if "error_code" in reply:
                     raise OSError(f"Matter server: {reply.get('details') or reply['error_code']}")
                 return reply.get("result")
+    finally:
+        sock.close()
+
+
+# ---------------------------------------------------------------- names in Home Assistant
+# Parts that are grouped into one device (a bed's head, legs and light; the
+# connections of a group) carry their own name as the fixed label
+# "ha_entitylabel". Home Assistant only appends that to secondary entities
+# ("Identify (Head)"): for a bridge, the main entity of each part (the cover,
+# the light) is named after the device alone, so two covers are both "Sam"
+# (cover.sam, cover.sam_2). After adding a device, the add-on gives those
+# main entities their part's name ("Sam Head", cover.sam_head), in Home
+# Assistant's entity registry, as a user would by hand. Entities that already
+# have a name of their own are left alone.
+
+def ha_core_session():
+    """Home Assistant's WebSocket API through the Supervisor: (call, socket)."""
+    send, receive, sock = ws_connect(("supervisor", 80), "/core/websocket", 30, "Home Assistant", host="supervisor")
+    try:
+        receive()  # auth_required
+        send(1, json.dumps({"type": "auth", "access_token": SUPERVISOR_TOKEN}).encode())
+        if receive().get("type") != "auth_ok":
+            raise OSError("Home Assistant refused the add-on's token")
+    except Exception:
+        sock.close()
+        raise
+    counter = 0
+
+    def call(kind, **fields):
+        nonlocal counter
+        counter += 1
+        send(1, json.dumps({"id": counter, "type": kind, **fields}).encode())
+        while True:
+            reply = receive()
+            if reply.get("id") == counter and reply.get("type") == "result":
+                if not reply.get("success"):
+                    raise OSError(str((reply.get("error") or {}).get("message") or "Home Assistant refused"))
+                return reply.get("result")
+
+    return call, sock
+
+
+def slug(text):
+    return re.sub(r"[^a-z0-9]+", "_", str(text).lower()).strip("_")
+
+
+def part_labels(node):
+    """endpoint -> its "ha_entitylabel", from a node of the Matter server
+    (FixedLabel's LabelList: cluster 64, attribute 0)."""
+    labels = {}
+    for key, value in (node.get("attributes") or {}).items():
+        parts = key.split("/")
+        if len(parts) != 3 or parts[1:] != ["64", "0"] or not isinstance(value, list):
+            continue
+        for item in value:
+            if not isinstance(item, dict):
+                continue
+            name, text = item.get("0", item.get("label")), item.get("1", item.get("value"))
+            if str(name).lower() == "ha_entitylabel" and text:
+                labels[int(parts[0])] = str(text)
+    return labels
+
+
+def name_parts_in_ha(node_id, wait=90):
+    """Names the main entity of every labelled part of a Matter node; how many."""
+    if not SUPERVISOR_TOKEN:
+        return 0
+    labels = part_labels(matter_server("get_node", {"node_id": node_id}, timeout=30))
+    if not labels:
+        return 0
+    marker = re.compile(rf"-{node_id:016X}-\d+-(\d+)-")
+    call, sock = ha_core_session()
+    try:
+        # Home Assistant makes the entities a little after the device was added
+        deadline, mine, before = time.time() + wait, [], -1
+        while time.time() < deadline:
+            entities = call("config/entity_registry/list")
+            mine = [e for e in entities if e.get("platform") == "matter" and marker.search(e.get("unique_id") or "")]
+            if mine and len(mine) == before:
+                break  # all there: the same number twice
+            before = len(mine)
+            time.sleep(5)
+        taken = {e["entity_id"] for e in entities}
+        devices = {d["id"]: d for d in call("config/device_registry/list")}
+        named = 0
+        for entry in mine:
+            endpoint = int(marker.search(entry["unique_id"]).group(1))
+            if endpoint not in labels:
+                continue
+            if "original_name" not in entry:
+                entry = call("config/entity_registry/get", entity_id=entry["entity_id"])
+            # the main entity of the part: named after the device (no name of its own), not renamed by the user
+            if entry.get("name") or entry.get("original_name"):
+                continue
+            label = labels[endpoint]
+            device = devices.get(entry.get("device_id")) or {}
+            base, part = slug(device.get("name_by_user") or device.get("name") or ""), slug(label)
+            domain = entry["entity_id"].split(".")[0]
+            wanted = f"{domain}.{base}_{part}" if base and part else ""
+            change = {"entity_id": entry["entity_id"], "name": label}
+            if wanted and wanted != entry["entity_id"] and wanted not in taken:
+                change["new_entity_id"] = wanted
+                taken.add(wanted)
+            call("config/entity_registry/update", **change)
+            log(f"   named in Home Assistant: {change.get('new_entity_id', entry['entity_id'])} ({label})")
+            named += 1
+        return named
     finally:
         sock.close()
 
@@ -1112,8 +1230,29 @@ def add_to_ha(proxy):
         except (OSError, ValueError) as again:
             log(f"!! {again}")
             return False
-    log(f"== Added: Matter node {node.get('node_id') if isinstance(node, dict) else node}")
+    node_id = node.get("node_id") if isinstance(node, dict) else node
+    log(f"== Added: Matter node {node_id}")
+    if isinstance(node_id, int):
+        remember(proxy, matter_node=node_id)
+        name_parts(proxy, node_id)
     return True
+
+
+def name_parts(proxy, node_id=None):
+    """The parts of a grouped device get their names in Home Assistant; a
+    problem here is told, and does not undo that the device was added."""
+    node_id = node_id if isinstance(node_id, int) else proxy.get("matter_node")
+    if not isinstance(node_id, int):
+        log("!! Not known which Matter node this is in Home Assistant: add it from here once more")
+        return False
+    try:
+        count = name_parts_in_ha(node_id)
+        if count:
+            log(f"== {count} part{'s' if count != 1 else ''} named in Home Assistant")
+        return True
+    except (OSError, ValueError, KeyError) as err:
+        log(f"!! The parts were not named in Home Assistant ({err}): rename them there if two have the same name")
+        return False
 
 
 # ---------------------------------------------------------------- USB on this machine
@@ -1322,7 +1461,7 @@ class Discovery:
             found[device["id"]] = device
         print(f"found {device['app']} {device['version']} ({device['id']}) at {host} {address}", flush=True)
         moved(device)
-        if not linked(device["id"], host, address):
+        if not linked(device["id"], host, address) and device["id"] not in ignored_devices():
             notify(device)
 
 
@@ -1344,10 +1483,74 @@ def moved(device):
         save_proxies(proxies)
 
 
+def ignored_devices():
+    """Found devices the user does not want offered for linking (like "Ignore"
+    on a discovered device in Home Assistant): id -> what it was, for the
+    list in the settings where it can be shown again."""
+    value = load_settings().get("ignored")
+    return value if isinstance(value, dict) else {}
+
+
+def set_ignored(device_id, on):
+    settings = load_settings()
+    ignored = settings.get("ignored") if isinstance(settings.get("ignored"), dict) else {}
+    if on:
+        with lock:
+            device = dict(found.get(device_id) or {})
+        ignored[device_id] = {"app": device.get("app", ""), "host": device.get("host", ""), "since": int(time.time())}
+        dismiss(device_id)
+    else:
+        ignored.pop(device_id, None)
+    settings["ignored"] = ignored
+    save_settings(settings)
+
+
 def found_unlinked():
     with lock:
         devices = list(found.values())
-    return [d for d in devices if not linked(d["id"], d["host"], d["address"])]
+    ignored = ignored_devices()
+    return [d for d in devices if d["id"] not in ignored and not linked(d["id"], d["host"], d["address"])]
+
+
+# A found device that is gone (unplugged, or it left the network) must not
+# stay on the page: one that is not linked is asked again every few minutes,
+# and dropped when it did not answer twice in a row. It comes back by itself
+# when it announces itself again.
+FOUND_RECHECK = 180
+found_misses = {}
+
+
+def found_sweep():
+    while True:
+        time.sleep(60)
+        with lock:
+            devices = [dict(d) for d in found.values()]
+        for device in devices:
+            if time.time() - device.get("seen", 0) < FOUND_RECHECK or linked(device["id"], device["host"], device["address"]):
+                continue
+            try:
+                answer = device_info(device["address"])
+            except Exception:
+                answer = None
+            with lock:
+                if answer and answer.get("id") == device["id"]:
+                    found_misses.pop(device["id"], None)
+                    if device["id"] in found:
+                        found[device["id"]].update(seen=int(time.time()), version=answer.get("version", device.get("version")))
+                    continue
+                found_misses[device["id"]] = found_misses.get(device["id"], 0) + 1
+                gone = found_misses[device["id"]] >= 2
+                if gone:
+                    found.pop(device["id"], None)
+                    found_misses.pop(device["id"], None)
+                    discovery.asked.pop(device["host"], None)  # asked at once when it is back
+                else:
+                    # not again for a while: the next round is the second try
+                    if device["id"] in found:
+                        found[device["id"]]["seen"] = int(time.time()) - FOUND_RECHECK + 60
+            if gone:
+                print(f"{device['app']} at {device['host']} no longer answers: not offered any more", flush=True)
+                dismiss(device["id"])
 
 
 # ---------------------------------------------------------------- device specs
@@ -2017,6 +2220,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                "sources": release_state["sources"],
                                "packages": release_state["packages"],
                                "release": release_state["release"], "release_error": release_state["error"],
+                               "ignored": [{"id": k, **v} for k, v in ignored_devices().items()],
                                "settings": load_settings(), "system": system_info(), "standalone": STANDALONE})
         if path == "/api/specs":
             return self.reply({"specs": list_specs(), "examples": examples()})
@@ -2165,6 +2369,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 settings["night_hour"] = data["night_hour"]
             save_settings(settings)
             return self.reply(settings)
+        if path == "/api/found/ignore":
+            device_id = str(data.get("id", ""))
+            if not re.match(r"^[0-9A-Fa-f]{6,32}$", device_id):
+                return self.reply({"error": "no such device"}, 400)
+            set_ignored(device_id, bool(data.get("on", True)))
+            return self.reply({"ok": True})
         if path == "/api/toolchain":
             started = start_job("toolchain", "Installing the toolchain", lambda: run_script("toolchain.sh"))
             return self.reply({"started": started})
@@ -2199,6 +2409,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if STANDALONE:
                     return self.reply({"error": "only in the Home Assistant add-on"}, 400)
                 started = start_job("matter", proxy["name"], lambda: add_to_ha(proxy))
+                return self.reply({"started": started})
+            if parts[3] == "name_parts":
+                if STANDALONE:
+                    return self.reply({"error": "only in the Home Assistant add-on"}, 400)
+                node_id = data.get("node_id")
+                started = start_job("matter", proxy["name"], lambda: name_parts(proxy, node_id))
                 return self.reply({"started": started})
             if parts[3] == "command":
                 line = str(data.get("line", "")).strip()
@@ -2235,6 +2451,7 @@ if __name__ == "__main__":
     threading.Thread(target=releases_loop, daemon=True).start()
     threading.Thread(target=night_loop, daemon=True).start()
     threading.Thread(target=health_loop, daemon=True).start()
+    threading.Thread(target=found_sweep, daemon=True).start()
     fetch_server = Server(("::", FETCH_PORT), FetchHandler)
     threading.Thread(target=fetch_server.serve_forever, daemon=True).start()
     print(f"Matter Builder on port {PORT}, updates fetched from port {FETCH_PORT}", flush=True)

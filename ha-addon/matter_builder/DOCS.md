@@ -132,8 +132,16 @@ add the recipe (GitHub opens with the file and its contents filled in), and
 give the repository the topic `matter-builder-package` (once). The catalog is
 rebuilt every night and finds it by that topic.
 
+With **Publish with GitHub** the add-on does those three steps itself.
+It shows a code; you enter it on github.com and allow Matter Builder (access
+to your public repositories), and the add-on makes the repository when it is
+not there, adds the recipe and sets the topic. That access is used for this
+once and not kept: nothing of it is written to disk. *Or do it by hand*
+shows the steps without giving access.
+
 A recipe holds connections, rules and a Bluetooth device's commands: no
-code, no passwords, no PIN. A Bluetooth address is yours: take it out first.
+code, no passwords, no PIN. A Bluetooth address is yours: publishing with
+GitHub leaves it out; by hand, take it out first.
 
 In the catalog a community item can be **rated** with a star on its
 repository; from 5 stars it shows as *Liked by users*, and recipes with more

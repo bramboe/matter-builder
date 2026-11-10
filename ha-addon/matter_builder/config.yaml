@@ -1,7 +1,7 @@
 # Matter Builder: builds, links and updates the Matter/Thread proxies
 # (ESP32) of this repo from Home Assistant.
 name: Matter Builder
-version: "0.33.0"
+version: "0.34.0"
 slug: matter_builder
 description: Build, link and update ESP32 Matter/Thread proxies
 arch:
@@ -36,3 +36,6 @@ options:
   releases_repo: bramboe/matter-builder
 schema:
   releases_repo: str
+  # The public id of a GitHub OAuth app with the device flow on, for
+  # "Publish with GitHub" (a fork with an app of its own)
+  github_client_id: str?

@@ -1589,6 +1589,169 @@ def examples():
     return {p.stem: p.read_text() for p in sorted(folder.glob("*.yaml"))} if folder.exists() else {}
 
 
+# ---------------------------------------------------------------- share to the catalog
+# A recipe gets into the catalog from its maker's own public GitHub
+# repository with the topic "matter-builder-package". With GitHub's device
+# flow the add-on does that for the user: it shows a short code, the user
+# enters it on github.com and allows it, and the add-on makes the repository
+# (when it is not there), adds the recipe and sets the topic. The access
+# GitHub hands out is used for that once and then forgotten: it is never
+# written to disk. Without a GitHub app configured (GITHUB_CLIENT_ID), the
+# page shows the same steps to do by hand.
+
+# The public id of the "Matter Builder" OAuth app on GitHub (device flow on);
+# not a secret. The add-on option "github_client_id" or MB_GITHUB_CLIENT_ID
+# replaces it, for a fork with an app of its own.
+DEFAULT_GITHUB_CLIENT_ID = ""
+SHARE_TOPIC = "matter-builder-package"
+SHARE_REPO = re.compile(r"^[A-Za-z0-9._-]{1,100}$")
+shares = {}  # id -> a share on its way (device code, what to publish, state)
+
+
+def github_client_id():
+    return os.environ.get("MB_GITHUB_CLIENT_ID") or option("github_client_id", DEFAULT_GITHUB_CLIENT_ID)
+
+
+def github_form(url, fields):
+    """A form post to github.com that answers in JSON (the device flow)."""
+    req = urllib.request.Request(url, data=urllib.parse.urlencode(fields).encode(),
+                                 headers={"Accept": "application/json", "User-Agent": "matter-builder"})
+    with urllib.request.urlopen(req, timeout=20) as reply:
+        return json.loads(reply.read())
+
+
+def github_api(method, path, token, body=None):
+    """GitHub's REST API as the user: (status, JSON)."""
+    req = urllib.request.Request("https://api.github.com" + path, method=method,
+                                 data=json.dumps(body).encode() if body is not None else None,
+                                 headers={"Accept": "application/vnd.github+json", "User-Agent": "matter-builder",
+                                          "Authorization": f"Bearer {token}", "X-GitHub-Api-Version": "2022-11-28"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as reply:
+            return reply.status, json.loads(reply.read() or b"{}")
+    except urllib.error.HTTPError as err:
+        try:
+            return err.code, json.loads(err.read() or b"{}")
+        except ValueError:
+            return err.code, {}
+
+
+def shareable_text(text):
+    """A configuration as a recipe for others: without what is the user's
+    own (a Bluetooth device's address)."""
+    return "".join(line for line in text.splitlines(True) if not re.match(r"\s*address(_type)?\s*:", line))
+
+
+def share_start(slug, repo):
+    client = github_client_id()
+    if not client:
+        return {"error": "no GitHub app is set up for this"}
+    spec_file = SPECS / f"{Path(slug).name}.yaml"
+    if not spec_file.is_file():
+        return {"error": "unknown configuration"}
+    if not SHARE_REPO.match(repo or ""):
+        return {"error": "the repository name: letters, digits, . - _"}
+    text = shareable_text(spec_file.read_text())
+    _, problem = check_spec(text)  # what goes out is a valid recipe
+    if problem:
+        return {"error": f"this configuration cannot be shared: {problem}"}
+    try:
+        answer = github_form("https://github.com/login/device/code", {"client_id": client, "scope": "public_repo"})
+    except (OSError, ValueError) as err:
+        return {"error": f"GitHub is not reachable: {err}"}
+    if "device_code" not in answer:
+        return {"error": str(answer.get("error_description") or answer.get("error") or "GitHub refused")}
+    share_id = secrets.token_urlsafe(9)
+    now = time.time()
+    for key in [k for k, v in shares.items() if v["until"] < now]:
+        shares.pop(key, None)
+    shares[share_id] = {"device_code": answer["device_code"], "interval": int(answer.get("interval", 5)),
+                        "until": now + int(answer.get("expires_in", 900)), "next": 0, "slug": Path(slug).name,
+                        "repo": repo, "text": text, "state": "waiting", "result": None}
+    return {"id": share_id, "code": answer["user_code"], "url": answer.get("verification_uri", "https://github.com/login/device"),
+            "interval": shares[share_id]["interval"]}
+
+
+def share_publish(token, share):
+    """The repository (made when it is not there), the recipe in it, the topic on it."""
+    status, user = github_api("GET", "/user", token)
+    if status != 200:
+        raise OSError(f"GitHub did not say who you are (HTTP {status})")
+    full = f"{user['login']}/{share['repo']}"
+    status, repo = github_api("GET", f"/repos/{full}", token)
+    if status == 404:
+        status, repo = github_api("POST", "/user/repos", token, {
+            "name": share["repo"], "description": "Recipes for Matter Builder", "private": False, "auto_init": True,
+            "homepage": "https://github.com/bramboe/matter-builder"})
+        if status not in (200, 201):
+            raise OSError(f"the repository was not made: {repo.get('message') or status}")
+    elif status != 200:
+        raise OSError(f"{full}: {repo.get('message') or status}")
+    if repo.get("private"):
+        raise OSError(f"{full} is private: the catalog only lists public repositories")
+    branch = repo.get("default_branch") or "main"
+    path = f"/repos/{full}/contents/recipes/{share['slug']}.yaml"
+    body = {"message": f"Recipe: {share['slug']}", "branch": branch,
+            "content": base64.b64encode(share["text"].encode()).decode()}
+    for attempt in range(5):  # a repository made a second ago may not take files yet
+        status, existing = github_api("GET", f"{path}?ref={urllib.parse.quote(branch)}", token)
+        if status == 200 and existing.get("sha"):
+            body["sha"] = existing["sha"]
+        status, put = github_api("PUT", path, token, body)
+        if status in (200, 201):
+            break
+        time.sleep(2)
+    else:
+        raise OSError(f"the recipe was not added: {put.get('message') or status}")
+    status, topics = github_api("GET", f"/repos/{full}/topics", token)
+    names = topics.get("names", []) if status == 200 else []
+    if SHARE_TOPIC not in names:
+        status, answer = github_api("PUT", f"/repos/{full}/topics", token, {"names": names + [SHARE_TOPIC]})
+        if status != 200:
+            raise OSError(f"the topic was not set: {answer.get('message') or status}")
+    return {"repo": full, "url": repo.get("html_url") or f"https://github.com/{full}",
+            "file": f"https://github.com/{full}/blob/{branch}/recipes/{share['slug']}.yaml"}
+
+
+def share_poll(share_id):
+    share = shares.get(share_id)
+    if share is None:
+        return {"state": "expired"}
+    if share["state"] != "waiting":
+        return {"state": share["state"], **(share["result"] or {})}
+    now = time.time()
+    if now > share["until"]:
+        shares.pop(share_id, None)
+        return {"state": "expired"}
+    if now < share["next"]:
+        return {"state": "waiting"}
+    share["next"] = now + share["interval"]
+    try:
+        answer = github_form("https://github.com/login/oauth/access_token", {
+            "client_id": github_client_id(), "device_code": share["device_code"],
+            "grant_type": "urn:ietf:params:oauth:grant-type:device_code"})
+    except (OSError, ValueError):
+        return {"state": "waiting"}
+    token = answer.get("access_token")
+    if not token:
+        error = answer.get("error")
+        if error == "slow_down":
+            share["interval"] += 5
+        if error in ("authorization_pending", "slow_down"):
+            return {"state": "waiting"}
+        share.update(state="failed", result={"error": "You did not allow it on GitHub." if error == "access_denied"
+                                             else "The code expired: start again." if error == "expired_token"
+                                             else str(answer.get("error_description") or error or "GitHub refused")})
+        return {"state": "failed", **share["result"]}
+    share["device_code"] = ""
+    try:
+        share.update(state="done", result=share_publish(token, share))
+    except (OSError, ValueError, KeyError) as err:
+        share.update(state="failed", result={"error": str(err)})
+    del token  # used once: not kept, not stored
+    return {"state": share["state"], **share["result"]}
+
+
 # ---------------------------------------------------------------- management
 
 # What the management pages may send to a proxy: its connections, name,
@@ -2286,6 +2449,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                "packages": release_state["packages"],
                                "release": release_state["release"], "release_error": release_state["error"],
                                "ignored": [{"id": k, **v} for k, v in ignored_devices().items()],
+                               "share_github": bool(github_client_id()),
                                "settings": load_settings(), "system": system_info(), "standalone": STANDALONE})
         if path == "/api/specs":
             return self.reply({"specs": list_specs(), "examples": examples()})
@@ -2434,6 +2598,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 settings["night_hour"] = data["night_hour"]
             save_settings(settings)
             return self.reply(settings)
+        if path == "/api/share/start":
+            return self.reply(share_start(str(data.get("slug", "")), str(data.get("repo", ""))))
+        if path == "/api/share/poll":
+            return self.reply(share_poll(str(data.get("id", ""))))
         if path == "/api/found/ignore":
             device_id = str(data.get("id", ""))
             if not re.match(r"^[0-9A-Fa-f]{6,32}$", device_id):

@@ -168,6 +168,19 @@ textarea.yaml{width:100%;min-height:280px;font:12px/1.5 ui-monospace,Menlo,monos
 .hbars{display:block;width:100%;height:36px;margin-top:6px}
 .hbars .ok{fill:var(--ok)}.hbars .bad{fill:var(--bad)}
 .hscale{display:flex;justify-content:space-between}
+.share-step{display:flex;gap:12px;align-items:flex-start;padding:16px 0;border-top:1px solid var(--line)}
+.share-step .chip{margin-top:2px}
+.share-step .label{flex:1;min-width:0}
+.share-step .sub{margin-top:4px}
+.share-step .actions{margin-top:12px}
+.share-auto{background:var(--fill);border-radius:var(--radius);padding:16px}
+.share-auto .actions{margin-top:14px}
+.share-auto .form{margin-top:0}
+.share-code{display:flex;align-items:center;gap:8px;margin-top:12px}
+.share-code .mono{font-size:24px;letter-spacing:2px;font-weight:600;color:var(--fg)}
+.share-manual{margin-top:16px}
+.share-manual summary{cursor:pointer;padding:8px 0}
+a.button.pri{background:var(--primary);color:#fff}
 .auth{flex:1;display:flex;align-items:center;justify-content:center;padding:24px 16px}
 .auth .card{width:100%;max-width:380px;padding:24px}
 .auth h2{margin:0 0 4px;font-size:22px;font-weight:400}
@@ -459,6 +472,10 @@ const TEXT = {
   shareStep1: 'Make the repository', shareStep1Help: 'Once. Public, with the repository name above. Skip this when you already have it.', shareCreate: 'Create on GitHub',
   shareStep2: 'Add the recipe', shareStep2Help: 'Opens GitHub with the file and its contents filled in: press “Commit changes”.', shareAdd: 'Add recipe on GitHub', shareCopy: 'Copy YAML',
   shareStep3: 'Give it the topic', shareStep3Help: topic => `Once. On the repository: the gear next to “About” → Topics → <span class="mono">${topic}</span>. That is how the catalog finds it.`, shareOpenRepo: 'Open my repository',
+  sharePublish: 'Publish with GitHub', shareAutoHelp: 'Matter Builder makes the repository when it is not there, adds the recipe and sets the topic. You allow that once on GitHub with a code; the access is used for this and not kept.',
+  shareCodeHelp: 'Enter this code on GitHub and allow Matter Builder:', shareOpenGithub: 'Open GitHub', shareWaiting: 'Waiting for you on GitHub…',
+  shareDone: r => `Published in ${r}. It is in the catalog within a day.`, shareSeeRecipe: 'See the recipe', shareAgain: 'Try again', shareExpired: 'The code expired: start again.',
+  shareByHand: 'Or do it by hand, without giving access',
   shareAfter: 'Recipes hold connections, no code, and never a password or PIN. Others can rate yours with a star on your repository.',
   ignore: 'Ignore', ignoreHelp: 'Do not offer this device for linking; show it again from Settings', showAgain: 'Show again',
   ignoredTitle: 'Ignored devices', ignoredHelp: 'Found on your network, but not offered for linking.',
@@ -1678,7 +1695,7 @@ async function shareSpec(slug) {
   const r = await api(`api/specs/${slug}`);
   let user = '';
   try { user = localStorage.getItem('mbGithubUser') || ''; } catch (e) {}
-  share = {slug, text: r.text || '', name: (state_specName(slug) || slug), user, repo: 'matter-builder-recipes', copied: false};
+  share = {slug, text: r.text || '', name: (state_specName(slug) || slug), user, repo: 'matter-builder-recipes', copied: false, flow: null};
   renderShare();
   if (!$('#itemDlg').open) $('#itemDlg').showModal();
 }
@@ -1692,29 +1709,65 @@ async function shareCopy() {
   try { await navigator.clipboard.writeText(share.text); share.copied = true; } catch (e) { share.copied = false; }
   renderShare(true);
 }
+// With GitHub's device flow the add-on does the three steps itself: it
+// shows a code, the user allows it on github.com, the add-on publishes
+async function sharePublish() {
+  share.flow = {state: 'starting'};
+  renderShare();
+  const r = await api('api/share/start', {slug: share.slug, repo: share.repo});
+  if (r.error) { share.flow = {state: 'failed', error: r.error}; renderShare(); return; }
+  share.flow = {state: 'waiting', id: r.id, code: r.code, url: r.url};
+  renderShare();
+  clearInterval(share.timer);
+  share.timer = setInterval(async () => {
+    if (!share || !share.flow || share.flow.state !== 'waiting' || !$('#itemDlg').open) { clearInterval(share && share.timer); return; }
+    const p = await api('api/share/poll', {id: share.flow.id});
+    if (p.state === 'waiting') return;
+    clearInterval(share.timer);
+    share.flow = p.state === 'done' ? {state: 'done', ...p} : {state: 'failed', error: p.error || t('shareExpired')};
+    renderShare();
+  }, 3000);
+}
+async function shareCopyCode() { try { await navigator.clipboard.writeText(share.flow.code); share.flow.copied = true; renderShare(true); } catch (e) {} }
 function renderShare(keepFocus) {
-  const s = share, ready = s.user && s.repo;
+  const s = share, ready = s.user && s.repo, f = s.flow;
   const repoUrl = `https://github.com/${s.user}/${s.repo}`;
   const create = `https://github.com/new?name=${encodeURIComponent(s.repo)}&visibility=public&description=${encodeURIComponent('Recipes for Matter Builder')}`;
   // GitHub's "new file" page, with the path and the recipe filled in
   const add = `${repoUrl}/new/main?filename=${encodeURIComponent('recipes/' + s.slug + '.yaml')}&value=${encodeURIComponent(s.text)}`;
   const personal = /^\s*address\s*:/m.test(s.text);
   const focus = keepFocus && document.activeElement ? document.activeElement.id : '';
-  const step = (n, title, body) => `<div class="row hrow"><span class="chip accent" style="margin-top:2px">${n}</span><div class="label">${title}<div class="sub" style="margin-top:2px">${body}</div></div></div>`;
-  $('#itemBody').dataset.html = '';
-  setHtml($('#itemBody'), `<h2>${t('shareTitle')}</h2><p class="sub">${esc(t('shareHelp', s.name))}</p>
-    ${personal ? `<div class="banner" style="background:var(--warnchip)"><span class="grow sub" style="color:var(--fg)">${t('sharePersonal')}</span></div>` : ''}
-    <div class="form" style="grid-template-columns:1fr 1fr">
+  const step = (n, title, body) => `<div class="share-step"><span class="chip accent">${n}</span><div class="label">${title}<div class="sub">${body}</div></div></div>`;
+  const repoField = `<label class="field"><span>${t('shareRepo')}</span><input id="shareRepo" value="${esc(s.repo)}" autocomplete="off" spellcheck="false" autocapitalize="off" onchange="shareSet('repo', this.value)"></label>`;
+  const manual = `<div class="form" style="grid-template-columns:1fr 1fr">
       <label class="field"><span>${t('shareUser')}</span><input id="shareUser" value="${esc(s.user)}" autocomplete="off" spellcheck="false" autocapitalize="off" onchange="shareSet('user', this.value)"></label>
-      <label class="field"><span>${t('shareRepo')}</span><input id="shareRepo" value="${esc(s.repo)}" autocomplete="off" spellcheck="false" autocapitalize="off" onchange="shareSet('repo', this.value)"></label></div>
-    ${step(1, t('shareStep1'), `${t('shareStep1Help')}<div class="actions" style="margin-top:6px"><a class="button" href="${create}" target="_blank" rel="noopener">${t('shareCreate')}</a></div>`)}
-    ${step(2, t('shareStep2'), `${t('shareStep2Help')}<div class="actions" style="margin-top:6px">
-        ${ready ? `<a class="button pri" style="background:var(--primary);color:#fff" href="${esc(add)}" target="_blank" rel="noopener">${t('shareAdd')}</a>` : `<button disabled>${t('shareAdd')}</button>`}
+      ${state.share_github ? '' : repoField}</div>
+    ${personal ? `<div class="banner" style="background:var(--warnchip)"><span class="grow sub" style="color:var(--fg)">${t('sharePersonal')}</span></div>` : ''}
+    ${step(1, t('shareStep1'), `${t('shareStep1Help')}<div class="actions"><a class="button" href="${create}" target="_blank" rel="noopener">${t('shareCreate')}</a></div>`)}
+    ${step(2, t('shareStep2'), `${t('shareStep2Help')}<div class="actions">
+        ${ready ? `<a class="button" href="${esc(add)}" target="_blank" rel="noopener">${t('shareAdd')}</a>` : `<button disabled>${t('shareAdd')}</button>`}
         <button class="plain" onclick="shareCopy()">${s.copied ? t('copied') : t('shareCopy')}</button></div>`)}
-    ${step(3, t('shareStep3'), `${t('shareStep3Help', SHARE_TOPIC)}<div class="actions" style="margin-top:6px">
-        ${ready ? `<a class="button" href="${esc(repoUrl)}" target="_blank" rel="noopener">${t('shareOpenRepo')}</a>` : `<button disabled>${t('shareOpenRepo')}</button>`}</div>`)}
-    <p class="sub" style="margin-top:12px">${t('shareAfter')}</p>
-    <div class="actions end"><button class="pri" onclick="$('#itemDlg').close()">${t('done')}</button></div>`);
+    ${step(3, t('shareStep3'), `${t('shareStep3Help', SHARE_TOPIC)}<div class="actions">
+        ${ready ? `<a class="button" href="${esc(repoUrl)}" target="_blank" rel="noopener">${t('shareOpenRepo')}</a>` : `<button disabled>${t('shareOpenRepo')}</button>`}</div>`)}`;
+  let main = manual;
+  if (state.share_github) {
+    const auto = !f ? `<div class="form">${repoField}</div><div class="sub">${t('shareAutoHelp')}</div>
+          <div class="actions"><button class="pri" onclick="sharePublish()" ${s.repo ? '' : 'disabled'}>${icon('share')} ${t('sharePublish')}</button></div>`
+      : f.state === 'starting' ? `<div class="sub">${t('checking')}…</div>`
+      : f.state === 'waiting' ? `<div class="sub">${t('shareCodeHelp')}</div>
+          <div class="share-code"><span class="mono">${esc(f.code)}</span><button class="plain" onclick="shareCopyCode()">${f.copied ? t('copied') : t('copy')}</button></div>
+          <div class="actions"><a class="button pri" href="${esc(f.url)}" target="_blank" rel="noopener">${t('shareOpenGithub')}</a><span class="sub">${t('shareWaiting')}</span></div>`
+      : f.state === 'done' ? `<div class="health ok" style="margin-top:0">${esc(t('shareDone', f.repo))}</div>
+          <div class="actions"><a class="button" href="${esc(f.file)}" target="_blank" rel="noopener">${t('shareSeeRecipe')}</a><a class="text" href="${esc(f.url)}" target="_blank" rel="noopener">${t('shareOpenRepo')}</a></div>`
+      : `<div class="error">${esc(f.error)}</div><div class="actions"><button onclick="share.flow = null; renderShare()">${t('shareAgain')}</button></div>`;
+    main = `<div class="share-auto">${auto}</div>
+      <details class="share-manual"><summary class="sub">${t('shareByHand')}</summary>${manual}</details>`;
+  }
+  $('#itemBody').dataset.html = '';
+  setHtml($('#itemBody'), `<h2>${t('shareTitle')}</h2><p class="sub" style="margin:6px 0 16px">${esc(t('shareHelp', s.name))}</p>
+    ${main}
+    <p class="sub" style="margin-top:16px">${t('shareAfter')}</p>
+    <div class="actions end"><button class="${f && f.state === 'done' || !state.share_github ? 'pri' : 'plain'}" onclick="$('#itemDlg').close()">${t('done')}</button></div>`);
   if (focus && $('#' + focus)) $('#' + focus).focus();
 }
 

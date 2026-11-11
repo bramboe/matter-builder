@@ -5,9 +5,10 @@ CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
 CONFIG_ESPTOOLPY_FLASHSIZE_8MB=n
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions_4mb.csv"
 # No Bluetooth at all. Next to Matter and Wi-Fi this chip has no memory for
-# it: the Bluetooth connections never worked here, and pairing over Bluetooth
-# was off, but the stack still took memory at start (1.6 KB was left at the
-# lowest). Pairing goes over the network with the code.
+# it. Measured with one LED connected and 22 endpoints: 59 KB free (55 KB at
+# the lowest) without Bluetooth; with Bluetooth only built in, not even
+# started, 9 KB (3 KB at the lowest). Pairing goes over the network with the
+# code.
 CONFIG_BT_ENABLED=n
 CONFIG_ENABLE_CHIPOBLE=n
 CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
@@ -17,7 +18,7 @@ CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
 CONFIG_COMPILER_OPTIMIZATION_ASSERTIONS_SILENT=y
 CONFIG_ESP_ERR_TO_NAME_LOOKUP=n
 CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_CMN=y
-# Room for 12 Matter endpoints, not 22: the root, the aggregator, the eight
-# connections and two rules. With 22 the classic ESP32 ran out of memory
-# while Matter started (and rolled back to its previous firmware)
-CONFIG_ESP_MATTER_MAX_DYNAMIC_ENDPOINT_COUNT=12
+# 22 Matter endpoints, as on the ESP32-C6: the root, the aggregator, the
+# eight connections and all twelve rules. Without Bluetooth there is room
+# (ten endpoints cost about 10 KB)
+CONFIG_ESP_MATTER_MAX_DYNAMIC_ENDPOINT_COUNT=22

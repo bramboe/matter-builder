@@ -57,7 +57,7 @@ CONFIG_CUSTOM_DEVICE_INSTANCE_INFO_PROVIDER=y
 CONFIG_CUSTOM_DEVICE_INFO_PROVIDER=y
 CONFIG_CUSTOM_COMMISSIONABLE_DATA_PROVIDER=y
 # Must equal PROJECT_VER_NUMBER in CMakeLists.txt (checked there)
-CONFIG_DEVICE_SOFTWARE_VERSION_NUMBER=117
+CONFIG_DEVICE_SOFTWARE_VERSION_NUMBER=118
 
 # The root, the aggregator, one endpoint per connection (8) and one per rule
 # (12, a switch in Matter when shown there): 22. With 12, only the first two

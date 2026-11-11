@@ -113,7 +113,7 @@ installing from the page works in Chrome or Edge. To update Matter Builder,
 | Chip | Network | Flash | What you get |
 |---|---|---|---|
 | ESP32-C6 | Thread or Wi-Fi, chosen when installing | 8 MB | Everything: relays, LEDs, buttons, contacts, motion, SHT4x, infrared, Bluetooth thermometers, presence and commands, 12 rules that can be Matter switches, pairing over Bluetooth. The Octo bed bridge runs on it (Thread). |
-| Classic ESP32 | Wi-Fi | 4 MB | Relays, LEDs, buttons, contacts, motion, SHT4x and infrared, and rules (2 of them as Matter switches). No Bluetooth connections: its memory is too small next to Matter. |
+| Classic ESP32 | Wi-Fi | 4 MB | Relays, LEDs, buttons, contacts, motion, SHT4x and infrared, and 12 rules that can be Matter switches. No Bluetooth (connections or pairing): next to Matter it takes more memory than the chip has. |
 | ESP32-S3, C3, H2 | | | Not yet. |
 
 Updates go over Wi-Fi in a minute or two; a Thread device switches to Wi-Fi

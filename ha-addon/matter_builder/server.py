@@ -523,10 +523,10 @@ def start_job(kind, title, target):
     return True
 
 
-def run_script(name, *args):
+def run_script(name, *args, env=None):
     with JOB_LOG.open("a") as out:
         result = subprocess.run(["bash", str(HERE / name), *args], stdout=out, stderr=subprocess.STDOUT,
-                                env=os.environ.copy())
+                                env={**os.environ, **(env or {})})
     log(f"== exit {result.returncode}")
     return result.returncode == 0
 
@@ -2709,7 +2709,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path == "/api/build":
             if not toolchain_ready():
                 return self.reply({"error": "install the toolchain first"}, 400)
-            started = start_job("build", "generic", lambda: run_script("build.sh", "generic"))
+            # The generic device for another chip or network than the default
+            # (ESP32-C6 on Thread): {"chip": "esp32"}, {"network": "wifi"}
+            chip, network = str(data.get("chip", "")), str(data.get("network", ""))
+            if chip not in ("", "esp32c6", "esp32") or network not in ("", "thread", "wifi"):
+                return self.reply({"error": "chip esp32c6 or esp32, network thread or wifi"}, 400)
+            env = {k: v for k, v in (("MB_CHIP", chip), ("MB_NETWORK", network)) if v}
+            started = start_job("build", "generic", lambda: run_script("build.sh", "generic", env=env))
             return self.reply({"started": started})
         parts = path.strip("/").split("/")
         if len(parts) == 4 and parts[:2] == ["api", "proxy"]:

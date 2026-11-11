@@ -4,18 +4,19 @@
 CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
 CONFIG_ESPTOOLPY_FLASHSIZE_8MB=n
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions_4mb.csv"
-CONFIG_BTDM_CTRL_MODE_BLE_ONLY=y
-CONFIG_BTDM_CTRL_MODE_BR_EDR_ONLY=n
-CONFIG_BTDM_CTRL_MODE_BTDM=n
-CONFIG_BTDM_CTRL_BLE_MAX_CONN=2
+# No Bluetooth at all. Next to Matter and Wi-Fi this chip has no memory for
+# it: the Bluetooth connections never worked here, and pairing over Bluetooth
+# was off, but the stack still took memory at start (1.6 KB was left at the
+# lowest). Pairing goes over the network with the code.
+CONFIG_BT_ENABLED=n
+CONFIG_ENABLE_CHIPOBLE=n
 CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
 # Smaller: assertions without their text, error names without the lookup
 # table, the common root certificates (GitHub and the usual sites are in
-# it) instead of all of them, Bluetooth logging only for warnings
+# it) instead of all of them
 CONFIG_COMPILER_OPTIMIZATION_ASSERTIONS_SILENT=y
 CONFIG_ESP_ERR_TO_NAME_LOOKUP=n
 CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_CMN=y
-CONFIG_BT_NIMBLE_LOG_LEVEL_WARNING=y
 # Room for 12 Matter endpoints, not 22: the root, the aggregator, the eight
 # connections and two rules. With 22 the classic ESP32 ran out of memory
 # while Matter started (and rolled back to its previous firmware)

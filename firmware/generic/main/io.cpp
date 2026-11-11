@@ -1041,6 +1041,10 @@ void start_bluetooth(bool shared_with_pairing) {
     // Bluetooth stack needs room: on a classic ESP32 next to Matter and Wi-Fi
     // there is too little, and starting it anyway took the device down
     if (!bluetooth) return;
+#if !CONFIG_BT_ENABLED
+    problem += (problem.empty() ? "" : " ") + std::string("This board's firmware has no Bluetooth: the Bluetooth connections do not work here.");
+    return;
+#endif
     if (!shared_with_pairing && esp_get_free_heap_size() < BLUETOOTH_MIN_HEAP) {
         problem += (problem.empty() ? "" : " ") + std::string("Bluetooth is off: not enough memory (") +
                    std::to_string(esp_get_free_heap_size() / 1024) + " KB free, " +

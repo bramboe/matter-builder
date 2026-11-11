@@ -3,8 +3,15 @@ set(requires mb_core mb_driver esp_matter nvs_flash esp_driver_gpio esp_driver_l
 if(CONFIG_OPENTHREAD_ENABLED)
     list(APPEND requires openthread)
 endif()
+# Bluetooth (listening, and a device to send commands to) only where the chip
+# has room for it: without it, ble_none.cpp answers for both
+if(CONFIG_BT_ENABLED)
+    set(bluetooth "ble_scan.cpp" "ble_device.cpp")
+else()
+    set(bluetooth "ble_none.cpp")
+endif()
 idf_component_register(
-    SRCS "app_main.cpp" "io.cpp" "matter_device.cpp" "ir.cpp" "ble_scan.cpp" "components_registry.cpp" "rules.cpp" "ble_device.cpp"
+    SRCS "app_main.cpp" "io.cpp" "matter_device.cpp" "ir.cpp" "components_registry.cpp" "rules.cpp" ${bluetooth}
     INCLUDE_DIRS "."
     REQUIRES ${requires}
 )

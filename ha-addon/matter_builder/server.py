@@ -1602,7 +1602,7 @@ def examples():
 # The public id of the "Matter Builder" OAuth app on GitHub (device flow on);
 # not a secret. The add-on option "github_client_id" or MB_GITHUB_CLIENT_ID
 # replaces it, for a fork with an app of its own.
-DEFAULT_GITHUB_CLIENT_ID = ""
+DEFAULT_GITHUB_CLIENT_ID = "Ov23liUmcv8YXuijzubu"
 SHARE_TOPIC = "matter-builder-package"
 SHARE_REPO = re.compile(r"^[A-Za-z0-9._-]{1,100}$")
 shares = {}  # id -> a share on its way (device code, what to publish, state)
@@ -1616,8 +1616,14 @@ def github_form(url, fields):
     """A form post to github.com that answers in JSON (the device flow)."""
     req = urllib.request.Request(url, data=urllib.parse.urlencode(fields).encode(),
                                  headers={"Accept": "application/json", "User-Agent": "matter-builder"})
-    with urllib.request.urlopen(req, timeout=20) as reply:
-        return json.loads(reply.read())
+    try:
+        with urllib.request.urlopen(req, timeout=20) as reply:
+            return json.loads(reply.read())
+    except urllib.error.HTTPError as err:  # GitHub says what is wrong in the body
+        try:
+            return json.loads(err.read())
+        except ValueError:
+            raise err from None
 
 
 def github_api(method, path, token, body=None):
@@ -1660,6 +1666,8 @@ def share_start(slug, repo):
     except (OSError, ValueError) as err:
         return {"error": f"GitHub is not reachable: {err}"}
     if "device_code" not in answer:
+        if answer.get("error") == "device_flow_disabled":
+            return {"error": "The GitHub app has the device flow turned off (its settings: Enable Device Flow)."}
         return {"error": str(answer.get("error_description") or answer.get("error") or "GitHub refused")}
     share_id = secrets.token_urlsafe(9)
     now = time.time()

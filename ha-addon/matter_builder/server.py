@@ -586,6 +586,19 @@ def running_line(text):
     return (text.strip().splitlines() or [""])[0]
 
 
+def restarted_since(proxy, moment):
+    """Whether the device started after `moment`, by its uptime ("system
+    json"); firmware without it counts as restarted after a minute."""
+    status, text = command(proxy, "system json", timeout=10)
+    try:
+        uptime = json.loads(text).get("uptime") if status == 200 else None
+    except ValueError:
+        uptime = None
+    if not isinstance(uptime, (int, float)):
+        return status == 200 and time.time() - moment > 60
+    return uptime < time.time() - moment - 2
+
+
 def fetch_over_wifi(proxy, image):
     """True when the device fetched and booted the image; False to go over Thread."""
     data = image.read_bytes()
@@ -603,6 +616,7 @@ def fetch_over_wifi(proxy, image):
     second = f" {release['url']}" if release and str(release.get("url", "")).startswith("https://") else ""
     _, before = command(proxy, "system", timeout=10)
     log("== Fetching over Wi-Fi: the device downloads the firmware itself (a minute or so)")
+    sent = time.time()
     status, text = command(proxy, f"wifi fetch {url} {sha}{second}")
     if status == 200 and not text.startswith("restarting"):
         log(f"   {text.strip()}")
@@ -613,7 +627,10 @@ def fetch_over_wifi(proxy, image):
     end = time.time() + 300  # Wi-Fi join, download, restart, back on Thread
     while time.time() < end:
         status, now = command(proxy, "system", timeout=10)
-        if status == 200:
+        # Back means: it answers and it has restarted since the command. An
+        # answer from before its restart (it can take a while to get to it)
+        # says nothing yet
+        if status == 200 and restarted_since(proxy, sent):
             back = True
             break
         time.sleep(5)
@@ -627,7 +644,11 @@ def fetch_over_wifi(proxy, image):
     except ValueError:
         result = ""
     switched = running_line(now).split(":")[1:2] != running_line(before).split(":")[1:2]  # "running: app1 ..." slot
-    if result.startswith("fetch ok") and switched:
+    # The image's version running from the other slot is proof enough, also
+    # when the device's own note of the result got lost
+    version = image.stem.rsplit("-", 1)[-1]
+    runs_it = f" {version} " in running_line(now) + " " and f" {version} " not in running_line(before) + " "
+    if switched and (result.startswith("fetch ok") or runs_it):
         if "internet" in result:
             log("   fetched from GitHub: this Wi-Fi does not reach Home Assistant")
         log(running_line(now))
@@ -1173,6 +1194,43 @@ def name_parts_in_ha(node_id, wait=90):
 HA_VENDOR = 0x134B  # Nabu Casa: the vendor of Home Assistant's Matter fabric
 
 
+def ha_knows_device(proxy):
+    """Whether Home Assistant's Matter integration has this device: True,
+    False, or None when that cannot be told. A paired Matter device announces
+    itself on the network as "<fabric>-<node>" for every controller it
+    belongs to (discovery keeps those per host); Home Assistant's devices
+    carry the same pair in their identifiers."""
+    if not SUPERVISOR_TOKEN:
+        return None
+    with lock:
+        hosts = {d.get("host") for d in found.values() if d.get("id") == proxy.get("device_id")} | {proxy.get("local")}
+        announced = set().union(*[discovery.nodes.get(h, set()) for h in hosts if h]) if hosts else set()
+    if not announced:
+        return None  # not seen announcing itself (yet): not sure
+    try:
+        call, sock = ha_core_session()
+    except OSError:
+        return None
+    try:
+        known = set()
+        for device in call("config/device_registry/list"):
+            for identifier in device.get("identifiers", []):
+                match = re.match(r"^deviceid_([0-9A-F]{16}-[0-9A-F]{16})", str(identifier[1]) if len(identifier) > 1 and identifier[0] == "matter" else "")
+                if match:
+                    known.add(match.group(1))
+        if not known:
+            return None  # no Matter devices at all: its fabric is not known here
+        fabrics = {pair.split("-")[0] for pair in known}
+        mine = {pair for pair in announced if pair.split("-")[0] in fabrics}
+        # Announcing itself on Home Assistant's fabric under a node Home Assistant
+        # does not have: Home Assistant forgot it
+        return bool(mine & known) if mine else None
+    except (OSError, ValueError, KeyError, IndexError):
+        return None
+    finally:
+        sock.close()
+
+
 def drop_stale_ha_fabric(proxy):
     """Removes Home Assistant's fabric from the device ("matter fabrics" /
     "matter remove"), when Home Assistant no longer has the device."""
@@ -1209,13 +1267,23 @@ def add_to_ha(proxy):
     try:
         node = matter_server("commission_with_code", {"code": code, "network_only": True})
     except (OSError, ValueError) as err:
-        if "already commissioned into this fabric" in str(err):
+        already = "already commissioned into this fabric" in str(err)
+        known = ha_knows_device(proxy) if already else None
+        for _ in range(6):  # it announces itself anew after opening the window: give that a moment
+            if not already or known is not None:
+                break
+            time.sleep(4)
+            known = ha_knows_device(proxy)
+        if already and known is not False:
             log("== Already in Home Assistant")
             return True
         # Home Assistant forgot the device (removed while it was offline), but
         # the device still holds Home Assistant's old key: that key goes, then
-        # once more. Only on this error, so a device Home Assistant knows stays.
-        if not re.search(r"conflict|fabric.*exist|already.*fabric", str(err), re.I) or not drop_stale_ha_fabric(proxy):
+        # once more. Only when Home Assistant has no device at its address, so
+        # a device Home Assistant knows stays as it is.
+        if already:
+            log("== The device still has Home Assistant's key, but Home Assistant has no such device")
+        if not (already or re.search(r"conflict|fabric.*exist|already.*fabric", str(err), re.I)) or not drop_stale_ha_fabric(proxy):
             log(f"!! {err}")
             return False
         command(proxy, "matter open")
@@ -1421,6 +1489,7 @@ class Discovery:
     def __init__(self):
         self.zc = None
         self.asked = {}
+        self.nodes = {}  # host -> the "<fabric>-<node>" pairs it announces (_matter._tcp)
 
     def start(self):
         if Zeroconf is None:
@@ -1440,6 +1509,11 @@ class Discovery:
         ServiceBrowser(self.zc, self.TYPES, handlers=[self.on_change])
 
     def on_change(self, zeroconf, service_type, name, state_change):
+        if state_change is ServiceStateChange.Removed:
+            pair = re.match(r"^([0-9A-F]{16}-[0-9A-F]{16})\._matter\._tcp", name)
+            with lock:
+                for pairs in self.nodes.values():
+                    pairs.discard(pair.group(1) if pair else None)
         if state_change is not ServiceStateChange.Removed:
             threading.Thread(target=self.check, args=(service_type, name), daemon=True).start()
 
@@ -1448,7 +1522,10 @@ class Discovery:
         if not info:
             return
         host = (info.server or "").rstrip(".")
+        pair = re.match(r"^([0-9A-F]{16}-[0-9A-F]{16})\._matter\._tcp", name)
         with lock:
+            if pair and host:
+                self.nodes.setdefault(host, set()).add(pair.group(1))
             if time.time() - self.asked.get(host, 0) < 600:
                 return
             self.asked[host] = time.time()
@@ -2514,6 +2591,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self.reply({"token": proxy["token"]})
             if parts[3] == "health":
                 return self.reply(health_reply(proxy))
+            if parts[3] == "in_ha":  # whether Home Assistant has a Matter device at its address
+                return self.reply({"known": ha_knows_device(proxy)})
         if len(parts) == 3 and parts[:2] == ["api", "link"]:
             return self.reply(link_poll(parts[2]))
         self.reply({"error": "not found"}, 404)

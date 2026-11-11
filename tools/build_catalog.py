@@ -160,8 +160,9 @@ def source(repo, official, verified):
             "url": info["html_url"], "key_sha256": key}
     items = []
     try:
+        # A source with only recipes has no key and no release
         release = get_json(f"{API}/repos/{repo}/releases/latest") if key else None
-        assets = {a["name"]: a for a in release.get("assets", [])}
+        assets = {a["name"]: a for a in (release or {}).get("assets", [])}
         manifest = get(assets["manifest.json"]["browser_download_url"], accept="application/octet-stream")
         signature = get(assets["manifest.json.sig"]["browser_download_url"], accept="application/octet-stream")
     except (OSError, KeyError):
@@ -206,7 +207,7 @@ def main(out):
             continue
         try:
             got = source(repo, repo == OFFICIAL, verified)
-        except (OSError, ValueError, KeyError) as err:
+        except Exception as err:  # one source that goes wrong must not stop the catalog
             print(f"  {repo}: skipped: {err}")
             continue
         items += got or []

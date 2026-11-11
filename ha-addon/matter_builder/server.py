@@ -1989,6 +1989,14 @@ def memory_link(ok):
     with_memory = [s for s in ok if isinstance(s.get("heap_min"), int)]
     if not with_memory:
         return None
+    # Since its last restart only: the lowest point is counted from each
+    # start, and a restart (an update, say) begins with a clean slate
+    start = 0
+    for i in range(1, len(with_memory)):
+        before, now = with_memory[i - 1].get("uptime"), with_memory[i].get("uptime")
+        if isinstance(before, (int, float)) and isinstance(now, (int, float)) and now < before:
+            start = i
+    with_memory = with_memory[start:]
     last = with_memory[-1]
     lowest = min(s["heap_min"] for s in with_memory)
     block, free = last.get("heap_block"), last.get("heap")

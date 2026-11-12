@@ -17,6 +17,7 @@ namespace net {
 
 void start();
 std::string describe();
+bool up();  // on the network (Thread attached, or Wi-Fi with an address)
 
 // How the network is doing, as a JSON object (in "system json"), for the
 // add-on's network health: Thread (role, parent signal, route to the home

@@ -62,6 +62,10 @@ jobs:
               bash /src/ha-addon/matter_builder/build.sh generic
               MB_NETWORK=wifi bash /src/ha-addon/matter_builder/build.sh generic
               MB_CHIP=esp32 bash /src/ha-addon/matter_builder/build.sh generic
+              # Untested chips (no board to try them on): built so they can be
+              MB_CHIP=esp32s3 bash /src/ha-addon/matter_builder/build.sh generic
+              MB_CHIP=esp32c3 bash /src/ha-addon/matter_builder/build.sh generic
+              MB_CHIP=esp32c5 bash /src/ha-addon/matter_builder/build.sh generic
               bash /src/ha-addon/matter_builder/build.sh bridge
               chown -R '"$(id -u):$(id -g)"' /mb'
 
@@ -74,7 +78,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes "Signed firmware for the ESP32-C6 (Thread or Wi-Fi) and the classic ESP32 (Wi-Fi)" \
+          gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes "Signed firmware for the ESP32-C6 (Thread or Wi-Fi) and the classic ESP32 (Wi-Fi), and untested builds for the ESP32-S3, C3 and C5 (Wi-Fi)" \
             /mnt/mb/firmware/*.bin /mnt/mb/firmware/factory/*.bin /mnt/mb/firmware/manifest.json /mnt/mb/firmware/manifest.json.sig
           # A release made with this token starts no other workflow by itself
           gh workflow run catalog.yml --ref main

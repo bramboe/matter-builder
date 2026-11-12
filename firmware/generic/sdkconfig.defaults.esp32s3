@@ -1,0 +1,5 @@
+# The ESP32-S3 (Wi-Fi and Bluetooth, two cores, usually with extra memory):
+# Matter over Wi-Fi, with everything the ESP32-C6 on Wi-Fi has. 8 MB of flash
+# or more (partitions_8mb.csv). Built and listed as experimental: the project
+# has no ESP32-S3 to test on.
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y

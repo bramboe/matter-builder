@@ -167,6 +167,8 @@ void start() {
     }
 }
 
+bool up() { return attached; }
+
 std::string describe() {
     std::string out = std::string("thread: ") + (attached ? "attached" : "not attached");
     if (esp_openthread_lock_acquire(pdMS_TO_TICKS(1000))) {

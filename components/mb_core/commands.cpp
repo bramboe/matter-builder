@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "boot_guard.h"
+#include "device_status.h"
 #include "esp_app_desc.h"
 #include "esp_chip_info.h"
 #include "esp_console.h"
@@ -141,6 +142,7 @@ std::string system_json() {
                       ",\"nvs_used\":" + std::to_string(nvs.used_entries) + ",\"nvs_total\":" + std::to_string(nvs.total_entries) +
                       ",\"net\":" + net::health_json() +
                       ",\"stacks\":" + stacks_json() +
+                      ",\"matter\":" + device_status::json() +
                       ",\"network\":\"" +
 #if CONFIG_OPENTHREAD_ENABLED
                       "thread"

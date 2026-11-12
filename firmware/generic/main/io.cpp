@@ -1,5 +1,6 @@
 #include "io.h"
 #include "sdkconfig.h"
+#include "device_status.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -50,6 +51,18 @@ constexpr uint32_t BLUETOOTH_MIN_HEAP = 60 * 1024;  // free memory the Bluetooth
 // 15) or the input-only pins (34-39). GPIO 2 is a strapping pin too, but only
 // matters while flashing: it is the on-board LED of most boards.
 constexpr uint8_t SAFE_PINS[] = {2, 4, 5, 13, 14, 16, 17, 18, 19, 21, 22, 23, 25, 26, 27, 32, 33};
+#elif CONFIG_IDF_TARGET_ESP32S3
+// ESP32-S3: not the strapping pins (0, 3, 45, 46), USB (19, 20), the flash
+// and extra memory (26-37) or the serial console (43, 44)
+constexpr uint8_t SAFE_PINS[] = {1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 21, 38, 39, 40, 41, 42, 47, 48};
+#elif CONFIG_IDF_TARGET_ESP32C3
+// ESP32-C3: not the strapping pins (2, 8, 9), the flash (11-17), USB (18, 19)
+// or the serial console (20, 21)
+constexpr uint8_t SAFE_PINS[] = {0, 1, 3, 4, 5, 6, 7, 10};
+#elif CONFIG_IDF_TARGET_ESP32C5
+// ESP32-C5: not the strapping pins (2, 3, 7, 25-28), the serial console (11,
+// 12), USB (13, 14) or the flash (15-22)
+constexpr uint8_t SAFE_PINS[] = {0, 1, 4, 5, 6, 8, 9, 10, 23, 24};
 #else
 // Pins a connection may use on the ESP32-C6: not the strapping pins (8, 9,
 // 15), USB (12, 13), the serial console (16, 17) or the flash (24-30)
@@ -173,6 +186,7 @@ void set_trial_boots(uint8_t value) {
 }
 
 bool safe_pin(int pin) {
+    if (pin == device_status::led_pin()) return false;  // the status LED has it
     for (const uint8_t p : SAFE_PINS) {
         if (p == pin) return true;
     }
@@ -1272,6 +1286,20 @@ std::string state_json() {
         out += (i ? "," : "") + slot_json(draft[i], i, false);
     }
     return out + "]}}";
+}
+
+bool pin_free_for_led(int pin) {
+    bool listed = false;
+    for (const uint8_t p : SAFE_PINS) listed = listed || p == pin;
+    if (!listed) return false;
+    std::lock_guard<std::mutex> guard(lock);
+    for (int i = 0; i < SLOTS; ++i) {
+        for (const Slot* s : {&running[i], &draft[i]}) {
+            if (s->type == Type::none || is_ble(s->type)) continue;
+            if (s->pin == pin || (s->type == Type::sht4x && s->pin2 == pin)) return false;
+        }
+    }
+    return true;
 }
 
 }  // namespace io

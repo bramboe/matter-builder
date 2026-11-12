@@ -173,6 +173,7 @@ extern "C" void app_main() {
     app.config_mode_start = io::start;  // the connections work without Matter
     app.state_json = io::state_json;
     app.ble_pairing = ble_pairing_enabled;
+    app.status_led_pin_ok = io::pin_free_for_led;
     mb_core::init(app);
     // Also in configuration mode
     add_command("io", "io [json|set|clear|test|simulate|apply|confirm|cancel]  connections\n", io::command);

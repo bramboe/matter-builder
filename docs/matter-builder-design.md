@@ -337,13 +337,13 @@ Every profile fixes: target, partition table, sdkconfig fragment, BLE limits, an
 - Always a full flash backup (`esptool read_flash 0 ALL`) before the first Matter flash on an existing device. Backups never go into git.
 - USB speed set per board.
 - `boot_guard` is part of `mb_core`: after repeated crashes the device starts in a safe mode with only network and OTA.
-- The BOOT button has three clearly different functions, so nothing is wiped by accident:
+- The BOOT button has three clearly different presses, so nothing is wiped by accident:
 
   | Press | Function |
   |---|---|
   | short | confirm a link (§7.4), only while one is pending |
-  | hold 5 s | recovery: setup network, new page password |
-  | hold 10 s | Matter factory reset |
+  | hold 3 s | a menu, shown on the status LED as blinks: 1 leave, 2 restart, 3 setup network (recovery, new page password), 4 unpair, 5 forget the network. A short press goes to the next, holding 3 s does it |
+  | hold 10 s | factory reset |
 
   Switching the power off and on three times (within 10 s each) counts as a short press, for devices whose button cannot be reached.
 - Only signed firmware is accepted once adoption exists (§7.4).

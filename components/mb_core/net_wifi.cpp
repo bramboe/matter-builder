@@ -216,6 +216,8 @@ void start() {
     }
 }
 
+bool up() { return connected; }
+
 std::string describe() {
     wifi_ap_record_t ap = {};
     const bool up = connected && esp_wifi_sta_get_ap_info(&ap) == ESP_OK;

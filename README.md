@@ -114,7 +114,49 @@ installing from the page works in Chrome or Edge. To update Matter Builder,
 |---|---|---|---|
 | ESP32-C6 | Thread or Wi-Fi, chosen when installing | 8 MB | Everything: relays, LEDs, buttons, contacts, motion, SHT4x, infrared, Bluetooth thermometers, presence and commands, 12 rules that can be Matter switches, pairing over Bluetooth. The Octo bed bridge runs on it (Thread). |
 | Classic ESP32 | Wi-Fi | 4 MB | Relays, LEDs, buttons, contacts, motion, SHT4x and infrared, and 12 rules that can be Matter switches. No Bluetooth (connections or pairing): next to Matter it takes more memory than the chip has. |
-| ESP32-S3, C3, H2 | | | Not yet. |
+| ESP32-S3 | Wi-Fi | 8 MB | As the ESP32-C6 on Wi-Fi, Bluetooth included. **Untested**: see below. |
+| ESP32-C3 | Wi-Fi | 4 MB | As the classic ESP32: no Bluetooth (it does not fit 4 MB next to Matter), 8 usable pins. **Untested.** |
+| ESP32-C5 | Wi-Fi (2.4 and 5 GHz) | 8 MB | As the ESP32-C6 on Wi-Fi, 10 usable pins. Its Thread radio is not used yet. **Untested.** |
+| ESP32-H2, S2, C2, C61, P4 | | | No. H2: no Wi-Fi and 4 MB at most, the Thread firmware does not fit twice. S2: no Bluetooth and no configuration in Espressif's Matter SDK. C2: too little memory. C61 and P4: not built. |
+
+**Untested** means: built in every release from Espressif's documentation
+(pins, flash layout, BOOT button), but the project has no such board, so
+nobody has seen it run. Keep the backup the wizard makes, and please open an
+issue with how it went. The wizard's first step can **recognise your board**
+over USB: it says which chip it is, whether there is firmware for it and
+what does and does not work on it, and picks the right firmware.
+
+### Status LED and BOOT button
+
+A device shows where it is without the page. Set a **status LED** on its
+page (System; any free pin, the on-board LED for instance):
+
+| LED | State |
+|---|---|
+| two quick blinks every second | its setup network is open |
+| 1 s on, 1 s off | joining Wi-Fi or Thread |
+| two blinks every 3 s | on the network, not paired with a Matter controller |
+| on, two short dips every 3 s | paired, but no controller is connected ("No Response") |
+| on (or off, with "quiet") | a controller is connected |
+
+The page and the add-on show the same per controller: connected and since
+when, or when it was last seen.
+
+The **BOOT button**: a short press confirms a link. Held 3 seconds it opens
+a menu, shown on the status LED as a number of blinks; a short press goes to
+the next action, holding 3 seconds does it, and after 2 minutes it closes:
+
+| Blinks | Action |
+|---|---|
+| 1 | leave the menu |
+| 2 | restart |
+| 3 | open the setup network (Wi-Fi, Thread or the password again) |
+| 4 | unpair: forget every Matter controller |
+| 5 | forget the network, then the setup network |
+
+Held 10 seconds (the LED goes out): factory reset. In the setup network a
+new Wi-Fi network is **tried before it is saved**: a wrong password is told
+on the page instead of leaving the device unreachable.
 
 Updates go over Wi-Fi in a minute or two; a Thread device switches to Wi-Fi
 for that moment when it can reach it, otherwise the update goes over Thread

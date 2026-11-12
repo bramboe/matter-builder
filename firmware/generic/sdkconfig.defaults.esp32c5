@@ -1,0 +1,5 @@
+# The ESP32-C5 (dual-band Wi-Fi 6, Bluetooth and an 802.15.4 radio): Matter
+# over Wi-Fi for now, with everything the ESP32-C6 on Wi-Fi has. 8 MB of
+# flash (partitions_8mb.csv). Built and listed as experimental: the project
+# has no ESP32-C5 to test on.
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y

@@ -1341,11 +1341,42 @@ def serial_ports():
 
 
 CHIP_NAMES = {"esp32c6": "ESP32-C6", "esp32h2": "ESP32-H2", "esp32s3": "ESP32-S3", "esp32c3": "ESP32-C3",
-              "esp32": "ESP32"}
-# Flash for two app slots: 3 MB each on the C6 (partitions_8mb.csv), 1984 KB
-# each on the classic ESP32 (partitions_4mb.csv)
-MIN_FLASH_MB = {"esp32": 4}
+              "esp32c5": "ESP32-C5", "esp32": "ESP32"}
+# Chips there is firmware for (firmware/generic/CMakeLists.txt)
+BUILD_CHIPS = ("esp32c6", "esp32", "esp32s3", "esp32c3", "esp32c5")
+# Flash for two app slots: 3 MB each (partitions_8mb.csv), 1984 KB each on
+# the classic ESP32 and the ESP32-C3 (partitions_4mb.csv)
+MIN_FLASH_MB = {"esp32": 4, "esp32c3": 4}
 DEFAULT_MIN_FLASH_MB = 8
+# What esptool calls a chip, most specific first; anything else that starts
+# with ESP32 is the classic one, which reports its die (ESP32-D0WD-V3,
+# ESP32-PICO-…, ESP32-U4WDH)
+CHIP_PREFIXES = (("ESP32-C61", "esp32c61"), ("ESP32-C6", "esp32c6"), ("ESP32-C5", "esp32c5"),
+                 ("ESP32-C3", "esp32c3"), ("ESP8685", "esp32c3"), ("ESP32-C2", "esp32c2"),
+                 ("ESP8684", "esp32c2"), ("ESP32-H2", "esp32h2"), ("ESP32-H4", "esp32h4"),
+                 ("ESP32-S3", "esp32s3"), ("ESP32-S2", "esp32s2"), ("ESP32-P4", "esp32p4"),
+                 ("ESP8266", "esp8266"), ("ESP8285", "esp8266"), ("ESP32", "esp32"))
+
+
+def chip_key(name):
+    """esptool's name for a chip as the firmware's (esp32c6, esp32, …), or ""."""
+    upper = name.upper()
+    return next((key for prefix, key in CHIP_PREFIXES if upper.startswith(prefix)), "")
+
+
+def read_board(port):
+    """What is on a USB port, asked with esptool: its name as esptool gives
+    it, the chip, and the megabytes of flash (0 when unknown). None when no
+    ESP32 answered. The second value is esptool's output."""
+    result = subprocess.run(["python3", "-m", "esptool", "-p", port, "flash_id"],
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=60)
+    text = result.stdout
+    if result.returncode != 0:
+        return None, text
+    found = re.search(r"Chip (?:is|type:)\s*(ESP[-\w]*)", text)
+    name = found.group(1).upper() if found else ""
+    size = re.search(r"Detected flash size:\s*(\d+)MB", text)
+    return {"name": name, "chip": chip_key(name), "flash_mb": int(size.group(1)) if size else 0}, text
 
 
 def chip_and_network(app):
@@ -1353,7 +1384,7 @@ def chip_and_network(app):
     them (tools/release_manifest.py), for images and builds without them."""
     if app.endswith("_wifi"):
         return "esp32c6", "wifi"
-    for chip in ("esp32c6", "esp32h2", "esp32s3", "esp32c3", "esp32"):
+    for chip in CHIP_NAMES:
         if app.endswith("_" + chip):
             return chip, "thread" if chip == "esp32h2" else "wifi"
     return "esp32c6", "thread"
@@ -1368,25 +1399,18 @@ def image_summary(image):
 def check_board(port, chip):
     """The board on the port is the image's chip, with flash enough for two
     images; the reason when it is not, else None."""
-    result = subprocess.run(["python3", "-m", "esptool", "-p", port, "flash_id"],
-                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=60)
-    text = result.stdout
+    board, text = read_board(port)
     with JOB_LOG.open("a") as out:
         out.write(text)
-    if result.returncode != 0:
+    if board is None:
         return "no ESP32 answered on that port (hold BOOT while plugging it in, and try again)"
-    found = re.search(r"Chip (?:is|type:)\s*(ESP32[-\w]*)", text)
-    name = found.group(1).upper() if found else ""
     wanted = CHIP_NAMES.get(chip, chip.upper())
-    # The classic ESP32 reports its die (ESP32-D0WD-V3, ESP32-PICO-…, ESP32-U4WDH)
-    same = (name == "ESP32" or name.startswith(("ESP32-D", "ESP32-U", "ESP32-PICO"))) if wanted == "ESP32" \
-        else name.startswith(wanted)
-    if name and not same:
-        return f"this board is an {name}, the firmware is for the {wanted}: choose the firmware for the {name}"
-    size = re.search(r"Detected flash size:\s*(\d+)MB", text)
+    if board["name"] and board["chip"] != chip:
+        return (f"this board is an {board['name']}, the firmware is for the {wanted}: "
+                f"choose the firmware for the {board['name']}")
     need = MIN_FLASH_MB.get(chip, DEFAULT_MIN_FLASH_MB)
-    if size and int(size.group(1)) < need:
-        return (f"this board has {size.group(1)} MB of flash; the firmware needs {need} MB "
+    if board["flash_mb"] and board["flash_mb"] < need:
+        return (f"this board has {board['flash_mb']} MB of flash; the firmware needs {need} MB "
                 f"(room for an update next to it): look for a module with {need} MB or more")
     return None
 
@@ -1997,6 +2021,9 @@ def health_sample(proxy):
                 sample["stacks"] = {str(k): v for k, v in info["stacks"].items() if isinstance(v, int)}
             if isinstance(info.get("reset"), str):
                 sample["reset"] = info["reset"]
+            # Matter: paired with how many controllers, how many are connected now
+            if isinstance(info.get("matter"), dict):
+                sample["matter"] = {k: info["matter"].get(k) for k in ("state", "fabrics", "connected")}
         except ValueError:
             sample["error"] = "no answer it understands"
     else:
@@ -2102,6 +2129,35 @@ def memory_link(ok):
     return {"name": name, "state": "ok", "text": f"{kb(free) if isinstance(free, int) else kb(lowest)} free, {kb(lowest)} at its lowest{detail}."}
 
 
+def controllers_link(ok):
+    """Paired is not the same as connected: a controller that is paired but
+    holds no connection is what Apple Home shows as "No Response". None when
+    the firmware does not say."""
+    with_matter = [s for s in ok if isinstance(s.get("matter"), dict) and isinstance(s["matter"].get("fabrics"), int)]
+    if not with_matter:
+        return None
+    last = with_matter[-1]["matter"]
+    fabrics, connected = last["fabrics"], last.get("connected") or 0
+    name = "Matter controllers"
+    if fabrics == 0:
+        return {"name": name, "state": "unknown", "text": "Not paired with a controller yet."}
+    # How long none has been connected: the checks in a row that say so
+    silent = 0
+    for sample in reversed(with_matter):
+        if (sample["matter"].get("connected") or 0) > 0 or not sample["matter"].get("fabrics"):
+            break
+        silent += 1
+    plural = "s" if fabrics != 1 else ""
+    if connected == 0 and silent >= 2:
+        since = clock_text(with_matter[-silent]["t"])
+        return {"name": name, "state": "warn",
+                "text": f"Paired with {fabrics} controller{plural}, but none has been connected since {since} "
+                        "(Apple Home shows that as “No Response”). Check the controller, or its way to this device."}
+    if connected == 0:
+        return {"name": name, "state": "ok", "text": f"Paired with {fabrics} controller{plural}; none connected at this moment."}
+    return {"name": name, "state": "ok", "text": f"{connected} of {fabrics} controller{plural} connected."}
+
+
 def clock_text(t):
     return time.strftime("%H:%M", time.localtime(t))
 
@@ -2177,6 +2233,9 @@ def health_verdict(samples, others_down=False):
                           "text": f"Signal {rssi} dBm." if isinstance(rssi, int) else "Connected."})
     if rebooted:
         links[0] = dict(links[0], note=f"Restarted {rebooted}× in the last day.")
+    controllers = controllers_link(ok)
+    if controllers:
+        links.append(controllers)
     memory = memory_link(ok)
     if memory:
         links.append(memory)
@@ -2646,6 +2705,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path == "/api/releases/check":
             check_releases()
             return self.reply({"ok": release_state["error"] is None, "error": release_state["error"]})
+        if path == "/api/board":
+            # Which ESP32 is on a USB port of this machine, for the wizard
+            port = str(data.get("port", ""))
+            if port not in [p["path"] for p in serial_ports()]:
+                return self.reply({"error": "unknown USB port"}, 400)
+            with lock:
+                busy = job["running"]
+            if busy:
+                return self.reply({"error": "busy with another job"}, 409)
+            try:
+                board, _ = read_board(port)
+            except (OSError, subprocess.SubprocessError) as err:
+                return self.reply({"error": str(err)}, 502)
+            return self.reply({"board": board})
         if path == "/api/flash":
             port = str(data.get("port", ""))
             if port not in [p["path"] for p in serial_ports()]:
@@ -2712,8 +2785,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             # The generic device for another chip or network than the default
             # (ESP32-C6 on Thread): {"chip": "esp32"}, {"network": "wifi"}
             chip, network = str(data.get("chip", "")), str(data.get("network", ""))
-            if chip not in ("", "esp32c6", "esp32") or network not in ("", "thread", "wifi"):
-                return self.reply({"error": "chip esp32c6 or esp32, network thread or wifi"}, 400)
+            if chip not in ("", *BUILD_CHIPS) or network not in ("", "thread", "wifi"):
+                return self.reply({"error": f"chip one of {', '.join(BUILD_CHIPS)}, network thread or wifi"}, 400)
             env = {k: v for k, v in (("MB_CHIP", chip), ("MB_NETWORK", network)) if v}
             started = start_job("build", "generic", lambda: run_script("build.sh", "generic", env=env))
             return self.reply({"started": started})

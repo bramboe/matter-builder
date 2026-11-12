@@ -1,3 +1,7 @@
+#include "config_mode.h"
+#include "device_status.h"
+#include "matter_info.h"
+#include "mb_core.h"
 #include "program_access.h"
 
 #include <cinttypes>
@@ -35,6 +39,8 @@ constexpr int64_t POWER_ON_LIMIT_US = 10 * SECOND_US;
 
 #if CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S3
 constexpr gpio_num_t BOOT_GPIO = GPIO_NUM_0;
+#elif CONFIG_IDF_TARGET_ESP32C5
+constexpr gpio_num_t BOOT_GPIO = GPIO_NUM_28;
 #else
 constexpr gpio_num_t BOOT_GPIO = GPIO_NUM_9;  // C6, C3, H2
 #endif
@@ -136,17 +142,82 @@ void factory_reset() {
     esp_restart();
 }
 
-// Acted on when the button is released, so a stuck button does nothing
+// The BOOT button without the page (it is out of reach, or the password is
+// lost). A short press confirms that someone is at the device (linking a
+// program). Held 3 s it opens a menu, shown on the status LED as blinks:
+//
+//   1  leave the menu
+//   2  restart
+//   3  open the setup network (to set Wi-Fi, Thread or the password again)
+//   4  unpair: forget every Matter controller
+//   5  forget the network (Wi-Fi and Thread), then the setup network
+//
+// In the menu a short press goes to the next action, holding 3 s does the
+// chosen one; after 2 minutes it closes by itself. Held 10 s (the LED goes
+// out): factory reset. Everything acts when the button is released, so a
+// stuck button does nothing.
+constexpr int MENU_ACTIONS = 5;
+constexpr int64_t MENU_HOLD_US = 3 * SECOND_US;
+constexpr int64_t RESET_HOLD_US = 10 * SECOND_US;
+bool menu_open = false;
+int menu_action = 1;
+int64_t menu_touched_us = 0;
+
+void close_menu() {
+    menu_open = false;
+    device_status::show_menu(0);
+}
+
+void restart_task(void*) {
+    vTaskDelay(pdMS_TO_TICKS(300));
+    mb_core::stop();
+    esp_restart();
+}
+
+void do_action(int action) {
+    ESP_LOGW(TAG, "BOOT menu: action %d", action);
+    close_menu();
+    switch (action) {
+        case 2:
+            xTaskCreate(restart_task, "restart", 2048, nullptr, 5, nullptr);
+            break;
+        case 3:
+            if (on_recovery != nullptr) on_recovery();
+            break;
+        case 4:
+            ESP_LOGW(TAG, "%s", matter_info::remove_all_fabrics().c_str());
+            break;
+        case 5:
+            config_mode::forget_network();
+            if (on_recovery != nullptr) on_recovery();
+            break;
+        default:
+            break;
+    }
+}
+
 void released(int64_t held_us) {
-    if (held_us < 2 * SECOND_US) {
-        presence("BOOT button");
-    } else if (held_us >= 5 * SECOND_US && held_us < 10 * SECOND_US) {
-        ESP_LOGW(TAG, "BOOT held %" PRId64 " s: recovery", held_us / SECOND_US);
-        if (on_recovery != nullptr) {
-            on_recovery();
-        }
-    } else if (held_us >= 10 * SECOND_US && held_us < 30 * SECOND_US) {
+    device_status::show_hold(false);
+    if (held_us >= RESET_HOLD_US && held_us < 30 * SECOND_US) {
         factory_reset();
+    } else if (held_us >= MENU_HOLD_US && held_us < RESET_HOLD_US) {
+        if (!menu_open) {
+            ESP_LOGW(TAG, "BOOT held %" PRId64 " s: menu", held_us / SECOND_US);
+            menu_open = true;
+            menu_action = 1;
+            menu_touched_us = esp_timer_get_time();
+            device_status::show_menu(menu_action);
+        } else {
+            do_action(menu_action);
+        }
+    } else if (held_us < 2 * SECOND_US) {
+        if (menu_open) {
+            menu_action = menu_action % MENU_ACTIONS + 1;
+            menu_touched_us = esp_timer_get_time();
+            device_status::show_menu(menu_action);
+        } else {
+            presence("BOOT button");
+        }
     } else {
         ESP_LOGI(TAG, "BOOT held %" PRId64 " s: nothing to do", held_us / SECOND_US);
     }
@@ -172,9 +243,16 @@ void button_task(void*) {
             armed = released_since >= 0 && now - released_since > SECOND_US;
         } else if (down && pressed_since < 0) {
             pressed_since = now;
+        } else if (down) {
+            // What letting go now would do: flicker for the menu, dark for a reset
+            const int64_t held = now - pressed_since;
+            if (held >= MENU_HOLD_US && held < 30 * SECOND_US) device_status::show_hold(true, held >= RESET_HOLD_US);
         } else if (!down && pressed_since >= 0) {
             released(now - pressed_since);
             pressed_since = -1;
+        }
+        if (menu_open && now - menu_touched_us > 120 * SECOND_US) {
+            close_menu();
         }
     }
 }
@@ -244,6 +322,7 @@ std::string json_text(const char* text) {
 
 void start(void (*recovery)()) {
     on_recovery = recovery;
+    device_status::start();  // the status LED, in every mode
     {
         std::lock_guard<std::mutex> guard(lock);
         load_clients();

@@ -13,7 +13,9 @@
 #include "esp_app_desc.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
+#include "device_status.h"
 #include "matter_thread.h"
+#include "freertos/task.h"
 #include "mb_core.h"
 #include "net.h"
 #include "sdkconfig.h"
@@ -103,6 +105,24 @@ std::string remove_fabric(unsigned index) {
                                 : std::string("could not remove fabric: ") + err.AsString() + "\n";
 }
 
+std::string remove_all_fabrics() {
+    if (xTaskGetHandle(CHIP_DEVICE_CONFIG_CHIP_TASK_NAME) == nullptr) return "Matter is not running: nothing unpaired\n";
+    int removed = 0;
+    const bool ran = matter_thread::run([&] {
+        auto& table = chip::Server::GetInstance().GetFabricTable();
+        chip::FabricIndex indexes[CHIP_CONFIG_MAX_FABRICS];
+        int count = 0;
+        for (const auto& fabric : table) {
+            if (count < CHIP_CONFIG_MAX_FABRICS) indexes[count++] = fabric.GetFabricIndex();
+        }
+        for (int i = 0; i < count; ++i) {
+            if (table.Delete(indexes[i]) == CHIP_NO_ERROR) ++removed;
+        }
+    }, 60000);
+    if (!ran) return BUSY;
+    return "unpaired from " + std::to_string(removed) + " controller" + (removed == 1 ? "" : "s") + "\n";
+}
+
 std::string matter_json() {
     const mb_core::App& app = mb_core::app();
     char qr[64] = {};
@@ -126,7 +146,11 @@ std::string matter_json() {
             const chip::CharSpan label = fabric.GetFabricLabel();
             fabrics += std::string(fabrics.empty() ? "" : ",") + "{\"index\":" + std::to_string(fabric.GetFabricIndex()) +
                        ",\"vendor\":" + json_text(vendor != nullptr ? vendor : hex) + ",\"vendor_id\":" + json_text(hex) +
-                       ",\"label\":" + json_text(std::string(label.data(), label.size())) + "}";
+                       ",\"label\":" + json_text(std::string(label.data(), label.size()));
+            // Connected now (it holds a subscription), since when, or when last
+            const device_status::Controller c = device_status::controller(fabric.GetFabricIndex());
+            fabrics += std::string(",\"connected\":") + (c.connected ? "true" : "false") + ",\"since\":" + std::to_string(c.since_s) +
+                       ",\"last_seen\":" + std::to_string(c.last_seen_s) + "}";
         }
     });
 

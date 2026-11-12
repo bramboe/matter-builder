@@ -1,0 +1,14 @@
+# The ESP32-C3 (Wi-Fi and Bluetooth, one core, 4 MB of flash on the common
+# boards): Matter over Wi-Fi in two 1984 KB app slots (partitions_4mb.csv),
+# made smaller to fit them, and without Bluetooth as on the classic ESP32:
+# with it the firmware does not fit 4 MB next to Matter. Pairing goes over
+# the network with the code. Built and listed as experimental: the project
+# has no ESP32-C3 to test on.
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=n
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions_4mb.csv"
+CONFIG_BT_ENABLED=n
+CONFIG_ENABLE_CHIPOBLE=n
+CONFIG_COMPILER_OPTIMIZATION_ASSERTIONS_SILENT=y
+CONFIG_ESP_ERR_TO_NAME_LOOKUP=n
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_CMN=y

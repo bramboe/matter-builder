@@ -241,6 +241,13 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
       <div class="row"><div class="label"><span data-t="network"></span><div class="sub" id="pageUrl"></div></div><div id="netKind">–</div></div>
       <div class="row"><div class="label" data-t="freeMemory"></div><div id="heap">–</div></div>
       <div class="row"><div class="label" data-t="uptime"></div><div id="uptime">–</div></div>
+      <div class="row" id="ledRow" hidden style="display:block">
+        <div class="label"><span data-t="statusLed"></span><span class="sub" style="display:block" data-t="statusLedHelp"></span></div>
+        <form id="ledForm" style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:8px">
+          <label class="field" style="flex:1 1 140px"><span data-t="ledPin"></span><input id="ledPin" type="number" min="0" max="48" inputmode="numeric"></label>
+          <label class="sub" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="ledInverted"><span data-t="ledInverted"></span></label>
+          <label class="sub" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="ledQuiet"><span data-t="ledQuiet"></span></label>
+          <button type="submit" data-t="save"></button></form></div>
       <details id="techDetails"><summary data-t="techTitle"></summary><div id="techRows"></div></details>
     </div></details>
   </div>
@@ -255,6 +262,10 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
 // the page and the preset names in Home Assistant use the same one.
 const TEXT = {
   en: {
+    tryPassword: 'The Wi-Fi network refused the password. Nothing was saved.', tryNotFound: 'That Wi-Fi network was not found. Nothing was saved.', tryNoConnect: 'Could not get on that Wi-Fi network. Nothing was saved.',
+    ctlConnected: d => `connected for ${d}`, ctlLast: d => `not connected · last seen ${d} ago`, ctlNever: 'not connected since the device started',
+    valConnected: (c, n) => `${c} of ${n} connected`, statusLed: 'Status LED', statusLedHelp: 'A LED that shows the state: two quick blinks = setup network open, slow blinking = joining the network, two blinks every 3 s = not paired, on with two dips = paired but no controller connected, on = connected.',
+    ledPin: 'Pin (empty: none)', ledInverted: 'Lights when low', ledQuiet: 'Off when all is well', ledSaved: 'Saved',
     configInfoAp: s => `Setup network “${s}”. Set your own Wi-Fi and the Thread network below; the beds can be added already.`, configApGo: 'Continue on my Wi-Fi', configApMoved: h => `The bridge restarts on your Wi-Fi. Connect this phone to your own Wi-Fi again and open http://${h}/`, configApDone: h => `The bridge goes to Thread. Connect this phone to your own Wi-Fi again; the page is then at http://${h}/`,
     threadTitle: 'Thread network', threadChange: 'Set network', threadHelp: 'Paste the dataset from Home Assistant: Settings › Devices & services › Thread › Configure, then (i) at the preferred network.', threadDataset: 'Dataset (hex)', threadNone: 'No Thread network set yet: the bridge stays in configuration mode until you paste one.', threadNow: (name, ch, src) => `Network '${name}', channel ${ch}` + (src === 'secrets' ? ' (built into the firmware)' : ''), threadSaved: 'Saved: the bridge joins it at the next start', threadSavedConfig: 'Saved: the bridge joins it when you finish configuration mode', threadBad: 'This is not a Thread dataset. Copy the whole hex text from Home Assistant.',
     title: 'Octo beds',
@@ -737,7 +748,8 @@ async function loadMatter() {
   try { m = JSON.parse(await cmd('matter json')); } catch (e) { return; }
   finally { loadingMatter = false; }
   matter = m;
-  $('#matterCard .val').textContent = m.config_mode ? '' : m.fabrics.length ? '✓ ' + m.fabrics.length : '–';
+  $('#matterCard .val').textContent = m.config_mode ? '' : m.fabrics.length ? (m.fabrics[0].connected === undefined ? '✓ ' + m.fabrics.length
+    : t('valConnected', m.fabrics.filter(f => f.connected).length, m.fabrics.length)) : '–';
   updatePairing();
   $('#manual').textContent = m.manual.replace(/^(\d{4})(\d{3})(\d{4})$/, '$1-$2-$3') || '–';
   const n = m.qr_size;
@@ -747,7 +759,8 @@ async function loadMatter() {
   $('#openWindow').hidden = m.window_open || !!m.config_mode;
   $('#pairHelp').textContent = m.config_mode ? '' : m.fabrics.length ? t('pairExtra') : t('pairFirst');
   $('#fabrics').innerHTML = m.fabrics.map(f => `<div class="row"><div class="label">${esc(f.vendor)}
-      <div class="sub">Controller ${f.index}${f.label ? ' · ' + esc(f.label) : ''}</div></div>
+      <div class="sub">Controller ${f.index}${f.label ? ' · ' + esc(f.label) : ''}</div>
+      ${f.connected === undefined ? '' : `<div class="sub" style="color:${f.connected ? 'var(--ok, #43a047)' : 'var(--warn, #e68a00)'}">${f.connected ? t('ctlConnected', span(f.since)) : f.last_seen >= 0 ? t('ctlLast', span(f.last_seen)) : t('ctlNever')}</div>`}</div>
       <button class="warn" onclick="removeFabric(${f.index}, '${quote(f.vendor)}')">${t('disconnect')}</button></div>`).join('');
   $('#product').textContent = `${m.product} ${m.version}`;
   $('#ids').textContent = `${m.vid} / ${m.pid}`;
@@ -769,6 +782,26 @@ const netDetail = n => n.kind === 'thread'
      n.role ? `route ${n.route && n.omr ? '✓' : '✗'} (${n.border_routers} BR)` : '', n.srp ? `SRP ${n.srp}` : '',
      `drops ${n.detaches}`].filter(Boolean).join(' · ')
   : [n.attached ? `${n.rssi} dBm` : 'not connected', `drops ${n.disconnects}`].join(' · ');
+// A time span in words: 42 s, 5 min, 3 h, 2 d
+const span = s => s < 90 ? `${s} s` : s < 5400 ? `${Math.round(s / 60)} min` : s < 129600 ? `${Math.round(s / 3600)} h` : `${Math.round(s / 86400)} d`;
+
+// The status LED ("led"): firmware from before it has no such command
+async function loadLed() {
+  let l;
+  try { l = JSON.parse(await cmd('led json')); } catch (e) { return; }
+  $('#ledRow').hidden = false;
+  if ($('#ledForm').contains(document.activeElement)) return;
+  $('#ledPin').value = l.pin === null ? '' : l.pin;
+  $('#ledInverted').checked = l.inverted; $('#ledQuiet').checked = l.quiet;
+}
+$('#ledForm').onsubmit = async e => {
+  e.preventDefault();
+  const pin = $('#ledPin').value.trim();
+  const reply = (await cmd(`led set ${pin === '' ? 'none' : pin}${$('#ledInverted').checked ? ' inverted' : ''}${$('#ledQuiet').checked ? ' quiet' : ''}`)).trim();
+  toast(reply === 'ok' ? t('ledSaved') : reply.replace(/^error: /, ''));
+  document.activeElement.blur(); loadLed();
+};
+
 // Technical details ("system json"), loaded when opened
 async function loadTech() {
   let s;
@@ -791,6 +824,7 @@ async function loadTech() {
   $('#techRows').innerHTML = rows.map(([k, v]) => `<div class="row"><div class="label">${esc(k)}</div><div class="sub" style="text-align:right;white-space:pre-line;word-break:break-word">${esc(v)}</div></div>`).join('');
 }
 $('#techDetails').addEventListener('toggle', () => { if ($('#techDetails').open) loadTech(); });
+$('#systemCard').addEventListener('toggle', () => { if ($('#systemCard').open) loadLed(); });
 
 // Programs with a token of their own (the Home Assistant add-on, scripts)
 let access = null;
@@ -954,6 +988,26 @@ async function scanWifi(id, button) {
 async function saveWifi(ssidEl = $('#wifiSsid'), passEl = $('#wifiPass')) {
   const ssid = ssidEl.value.trim(), pass = passEl.value;
   if (!ssid) { toast(t('configNeedsWifi')); return false; }
+  // From the setup network the device tries the network first and keeps it
+  // only when it gets on: a wrong password shows here, not after a restart
+  let w = null;
+  try { w = JSON.parse(await cmd('wifi json')); } catch (e) {}
+  if (w && w.ap && w.try !== undefined && pass) {
+    const started = (await cmd(`wifi try ${hex(ssid)} ${hex(pass)}`)).trim();
+    if (started !== 'trying') throw new Error(started.replace(/^error: /, ''));
+    for (let i = 0; i < 20; i++) {
+      await new Promise(r => setTimeout(r, 1500));
+      let now = null;
+      // The setup network may drop for a moment while the device joins the other one
+      try { now = JSON.parse(await cmd('wifi json')).try; } catch (e) { continue; }
+      if (now === 'trying') continue;
+      if (now !== 'ok') throw new Error(t(now === 'password' ? 'tryPassword' : now === 'notfound' ? 'tryNotFound' : 'tryNoConnect'));
+      passEl.value = '';
+      await loadWifi();
+      return true;
+    }
+    throw new Error(t('tryNoConnect'));
+  }
   // As hex, so spaces and other characters arrive exactly as typed
   for (const line of ['wifi ssid-hex ' + hex(ssid)].concat(pass ? ['wifi password-hex ' + hex(pass)] : [])) {
     const reply = await cmd(line);

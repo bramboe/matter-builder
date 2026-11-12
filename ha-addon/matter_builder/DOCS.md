@@ -16,6 +16,11 @@ ESP32 (Wi-Fi); see *Chips and networks*.
   is connected, and *Update to …* when a newer firmware of their kind exists.
   Devices found on the network but not linked yet show up with *Adopt*.
 - **New device**: a wizard that installs firmware on a new ESP32 and links it.
+  It asks which ESP32 you have (or recognises it over USB), then how you want
+  to start: from scratch, from a template (a recipe), from one of your
+  configs, or with ready-made firmware such as the Octo bed bridge. The
+  firmware is picked for you, and what does not work on your board (Bluetooth
+  on a classic ESP32, for instance) is shown and cannot be chosen.
 - **Linking**: give the address and password of a device's page, then press
   its BOOT button briefly (or switch its power off and on three times; six
   times is recovery, like holding BOOT, for a device in a wall box). The
@@ -73,7 +78,7 @@ Each firmware in a release also has a **factory image** for a new ESP32.
 The ESP32 then opens its setup network, where you choose its password and
 network; link it afterwards, and the wizard continues with its connections.
 Before installing, the wizard checks that the board is the firmware's chip
-and has flash enough (8 MB for the C6, 4 MB for the classic ESP32), and says
+and has flash enough (8 MB, or 4 MB for the classic ESP32 and the C3), and says
 so when it is not.
 
 ## Chips and networks
@@ -82,10 +87,18 @@ so when it is not.
 |---|---|---|
 | ESP32-C6 | Thread or Wi-Fi, chosen in the wizard | `mb_generic` (Thread), `mb_generic_wifi` (Wi-Fi) |
 | Classic ESP32 | Wi-Fi (no Bluetooth connections: too little memory next to Matter) | `mb_generic_esp32` |
+| ESP32-S3 (untested) | Wi-Fi | `mb_generic_esp32s3` |
+| ESP32-C3 (untested) | Wi-Fi (no Bluetooth connections: it does not fit 4 MB of flash) | `mb_generic_esp32c3` |
+| ESP32-C5 (untested) | Wi-Fi, 2.4 and 5 GHz (its Thread radio is not used yet) | `mb_generic_esp32c5` |
+
+Untested: built from Espressif's documentation, without such a board to try
+it on. The ESP32-H2, S2, C2, C61 and P4 are not supported. **Recognise my
+board**, in the wizard's first step, asks the ESP32 over USB what it is and
+shows whether it is supported and what works on it.
 
 The flash must hold the firmware twice (an update goes into the second
-copy): the **ESP32-C6 needs 8 MB**, the **classic ESP32 4 MB** (the common
-boards; its firmware is made smaller to fit). The wizard checks it before
+copy): the **ESP32-C6, S3 and C5 need 8 MB**, the **classic ESP32 and the
+C3 4 MB** (the common boards; their firmware is made smaller to fit). The wizard checks it before
 installing.
 
 **Thread** needs a Thread border router (Home Assistant Connect ZBT-1/ZBT-2,

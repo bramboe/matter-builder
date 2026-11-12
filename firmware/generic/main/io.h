@@ -88,6 +88,9 @@ void register_components();
 // A type by its name: built-in or from a component (Type::none: unknown)
 Type type_named(const char* name);
 
+// Whether a pin can be the status LED: usable on this board, and no
+// connection (running or in the draft) is on it
+bool pin_free_for_led(int pin);
 // The device's name, shown by controllers and on the page
 std::string name();
 // A group's name ("io group <g> <name>"); "" when none was given

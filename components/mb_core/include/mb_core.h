@@ -36,6 +36,9 @@ struct App {
     // network then waits for a phone to pair it, which brings the network,
     // instead of going to configuration mode
     bool (*ble_pairing)();
+    // Whether a pin may be the status LED: free and usable on this board
+    // (nullptr: any pin)
+    bool (*status_led_pin_ok)(int pin);
 };
 
 // Call first thing in app_main, before anything else of mb_core

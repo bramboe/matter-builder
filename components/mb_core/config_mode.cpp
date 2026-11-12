@@ -1,3 +1,4 @@
+#include "device_status.h"
 #include "config_mode.h"
 
 #include <algorithm>
@@ -228,6 +229,7 @@ std::string setup_ap_name() {
 void start_ap() {
     std::strncpy(ap_ssid, setup_ap_name().c_str(), sizeof(ap_ssid) - 1);
     ap_mode = true;
+    device_status::set_setup(true);
     esp_wifi_disconnect();
     esp_wifi_stop();
     wifi_config_t config = {};
@@ -247,8 +249,48 @@ void start_ap() {
     ESP_LOGW(TAG, "Setup access point '%s': join it and open http://192.168.4.1/", ap_ssid);
 }
 
+// Trying a Wi-Fi network from the setup network, before it is stored: the
+// station side joins it while the setup network stays up. Only when that
+// works are the name and password kept; a wrong password shows at once
+// instead of after a restart and minutes of waiting.
+std::string try_state;  // "", "trying", "ok", "password", "notfound", "noconnect"
+std::string try_ssid, try_password;
+int64_t try_started_us = 0;
+constexpr int64_t TRY_LIMIT_US = 20 * 1000000LL;
+
+void end_try(const char* result) {
+    try_state = result;
+    esp_wifi_disconnect();
+    ESP_LOGW(TAG, "Trying Wi-Fi '%s': %s", try_ssid.c_str(), result);
+    try_password.clear();
+}
+
+std::string start_try(const std::string& ssid, const std::string& password) {
+    if (!ap_mode) return "error: only from the setup network\n";
+    if (try_state == "trying") return "error: still trying the last one\n";
+    try_ssid = ssid;
+    try_password = password;
+    wifi_config_t config = {};
+    std::strncpy(reinterpret_cast<char*>(config.sta.ssid), ssid.c_str(), sizeof(config.sta.ssid));
+    std::strncpy(reinterpret_cast<char*>(config.sta.password), password.c_str(), sizeof(config.sta.password));
+    config.sta.scan_method = WIFI_ALL_CHANNEL_SCAN;
+    config.sta.sort_method = WIFI_CONNECT_AP_BY_SIGNAL;
+    last_reason = 0;
+    try_started_us = esp_timer_get_time();
+    try_state = "trying";
+    esp_wifi_disconnect();
+    if (esp_wifi_set_config(WIFI_IF_STA, &config) != ESP_OK || esp_wifi_connect() != ESP_OK) {
+        end_try("noconnect");
+        return "error: could not start\n";
+    }
+    return "trying\n";
+}
+
 void on_check(void*) {
     const int64_t now = esp_timer_get_time();
+    if (try_state == "trying" && now - try_started_us > TRY_LIMIT_US) {
+        end_try(last_reason == WIFI_REASON_NO_AP_FOUND ? "notfound" : "noconnect");
+    }
     if (!ap_mode && ip_text[0] == '\0' && !http_started && now > CONNECT_LIMIT_US) {
         ESP_LOGE(TAG, "No Wi-Fi connection after %lld s (reason %d)", CONNECT_LIMIT_US / 1000000, last_reason);
         // 15/202/204: the password was refused; 201: network not found
@@ -388,6 +430,25 @@ void fetch_task(void*) {
 }
 
 void on_event(void*, esp_event_base_t base, int32_t id, void* data) {
+    if (ap_mode && try_state == "trying") {
+        if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
+            last_reason = static_cast<wifi_event_sta_disconnected_t*>(data)->reason;
+            // 15/202/204: the password was refused; 201: not found. Anything
+            // else may pass: tried again until the limit
+            if (last_reason == WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT || last_reason == WIFI_REASON_AUTH_FAIL ||
+                last_reason == WIFI_REASON_HANDSHAKE_TIMEOUT) {
+                end_try("password");
+            } else if (last_reason == WIFI_REASON_NO_AP_FOUND) {
+                end_try("notfound");
+            } else {
+                esp_wifi_connect();
+            }
+        } else if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
+            const bool kept = store("ssid", try_ssid) && store("pass", try_password);
+            end_try(kept ? "ok" : "noconnect");
+        }
+        return;
+    }
     if (base == WIFI_EVENT && id == WIFI_EVENT_STA_START && !ap_mode) {
         esp_wifi_connect();
     } else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED && !ap_mode) {
@@ -559,6 +620,7 @@ bool requested() {
 
 void run() {
     running = true;
+    device_status::set_setup(false);  // joining Wi-Fi, until the setup network opens
     const Network network = stored_network();
     ESP_LOGW(TAG, "Configuration mode on Wi-Fi '%s', back to normal after %lld idle minutes", network.ssid.c_str(),
              idle_limit_us / MINUTE_US);
@@ -701,6 +763,15 @@ std::string command(const std::vector<std::string>& args) {
         }
         return store("pass", value) ? "ok\n" : "storing failed\n";
     }
+    // From the setup network: try it first, keep it only when it works
+    if ((args.size() == 3 || args.size() == 4) && args[1] == "try") {
+        std::string password;
+        if (!from_hex(args[2], value) || value.empty() || value.size() > 32) return "error: the network name must be 1 to 32 bytes\n";
+        if (args.size() == 4 && (!from_hex(args[3], password) || password.size() < 8 || password.size() > 64)) {
+            return "error: a Wi-Fi password is 8 to 64 characters\n";
+        }
+        return start_try(value, password);
+    }
     // An empty value used to erase the stored one (an empty password field
     // then forgot the network's password); forgetting is "wifi clear" only
     if (args.size() >= 2 && (args[1] == "ssid" || args[1] == "password") && args.size() == 2) {
@@ -729,6 +800,7 @@ std::string command(const std::vector<std::string>& args) {
                "\",\"password_set\":" + (network.password.empty() ? "false" : "true") +
                ",\"skipped\":" + (stored_text("skip").empty() ? "false" : "true") +
                ",\"last_result\":" + json_text(stored_text("result")) +
+               ",\"ap\":" + (ap_mode ? "true" : "false") + ",\"try\":" + json_text(try_state) +
                ",\"minutes\":" + std::to_string(DEFAULT_MINUTES) + ",\"fetch\":true" +
                ",\"network\":\"" + (has_thread_radio() ? "thread" : "wifi") + "\"" +
                ",\"host\":" + json_text(std::string(hostname()) + ".local") + "}";
@@ -778,6 +850,14 @@ bool page_network(std::string& ssid, std::string& password) {
 
 bool store_network(const std::string& ssid, const std::string& password) {
     return store("ssid", ssid) && store("pass", password);
+}
+
+void forget_network() {
+    store("ssid", "");
+    store("pass", "");
+#if CONFIG_OPENTHREAD_ENABLED
+    thread_dataset::command({"thread", "clear"});
+#endif
 }
 
 bool request(int minutes, bool setup_ap) {

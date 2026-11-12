@@ -30,7 +30,7 @@ if [ "$IDF_PATH" != /opt/esp/idf ]; then
     # The compilers and the Python environment in one go
     echo "== ESP-IDF tools ($IDF_TOOLS_PATH) and Python environment ($IDF_PYTHON_ENV_PATH)"
     mkdir -p "$IDF_PYTHON_ENV_PATH"  # ESP-IDF lists it before it creates it
-    "$IDF_PATH/install.sh" esp32c6,esp32 > /dev/null
+    "$IDF_PATH/install.sh" esp32c6,esp32,esp32s3,esp32c3,esp32c5 > /dev/null
 else
     echo "== ESP-IDF Python environment ($IDF_PYTHON_ENV_PATH)"
     mkdir -p "$IDF_PYTHON_ENV_PATH"

@@ -42,7 +42,7 @@ def as_list(value):
     return [v.strip() for v in text.split(",") if v.strip()]
 
 
-CHIPS = ("esp32c6", "esp32h2", "esp32s3", "esp32c3", "esp32")
+CHIPS = ("esp32c6", "esp32h2", "esp32s3", "esp32c3", "esp32c5", "esp32")
 
 
 def chip_and_network(app):

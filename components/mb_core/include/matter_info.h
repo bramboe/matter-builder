@@ -14,6 +14,8 @@ std::string open_commissioning_window();
 // to drop one that was removed without unpairing
 std::string fabrics_text();
 std::string remove_fabric(unsigned index);
+// Every controller: the device is unpaired (the BOOT button's menu)
+std::string remove_all_fabrics();
 
 // "matter json": pairing codes (with the QR code as an SVG path), the
 // commissioning window, controllers and network, for the settings page

@@ -26,6 +26,7 @@ for v in "${@:-thread wifi esp32}"; do
             thread) build build-thread esp32c6 thread ;;
             wifi) build build-wifi esp32c6 wifi ;;
             esp32) build build-esp32 esp32 wifi ;;
+            esp32s3|esp32c3|esp32c5) build "build-$w" "$w" wifi ;;
             *) echo "unknown variant: $w"; status=2 ;;
         esac
     done

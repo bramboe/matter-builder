@@ -1,6 +1,6 @@
 #!/bin/bash
 # Builds one application from the sources in the image, for the ESP32-C6
-# unless MB_CHIP says otherwise (esp32, esp32s3, esp32c3, esp32h2), on the
+# unless MB_CHIP says otherwise (esp32, esp32s3, esp32c3, esp32c5), on the
 # chip's own network unless MB_NETWORK says otherwise (thread|wifi):
 #   build.sh generic         the generic device   (mb_generic-<version>.bin; on
 #                            another chip or Wi-Fi mb_generic_<chip>/_wifi)

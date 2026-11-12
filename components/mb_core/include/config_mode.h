@@ -39,6 +39,9 @@ std::string command(const std::vector<std::string>& args);
 // Ask for configuration mode at the next start. Without a Wi-Fi network, or
 // with `setup_ap` (recovery), it opens the setup access point. False when
 // storing failed.
+// Wi-Fi and Thread as set on the page: forgotten (the BOOT button's menu)
+void forget_network();
+
 bool request(int minutes, bool setup_ap = false);
 
 // The Wi-Fi network set on the page (false: none). On a Wi-Fi device it is

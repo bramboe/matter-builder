@@ -7,7 +7,7 @@ namespace mb_core {
 namespace {
 
 App current = {"Matter Builder", "Matter Builder", "matter-builder", "Matter-Builder", nullptr, nullptr, nullptr, nullptr, "", "",
-               nullptr, nullptr, nullptr};
+               nullptr, nullptr, nullptr, nullptr};
 
 }  // namespace
 

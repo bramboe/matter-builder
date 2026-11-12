@@ -34,7 +34,7 @@ constexpr size_t TOKEN_BYTES = 24;  // 48 hex characters
 constexpr int64_t SECOND_US = 1000000;
 constexpr int64_t WINDOW_US = 120 * SECOND_US;
 constexpr int POWER_ONS = 3;            // a press of the BOOT button (linking a program)
-constexpr int RECOVERY_POWER_ONS = 6;   // BOOT held 5-10 s: recovery, for a device out of reach (in a wall box)
+constexpr int RECOVERY_POWER_ONS = 6;   // recovery for a device out of reach (in a wall box)
 constexpr int64_t POWER_ON_LIMIT_US = 10 * SECOND_US;
 
 #if CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S3
@@ -155,12 +155,22 @@ void factory_reset() {
 // In the menu a short press goes to the next action, holding 3 s does the
 // chosen one; after 2 minutes it closes by itself. Held 10 s (the LED goes
 // out): factory reset. Everything acts when the button is released, so a
-// stuck button does nothing.
+// stuck button does nothing. The reset is available from 10 to 30 s
+// only on boards with a configured status LED.
 constexpr int MENU_ACTIONS = 5;
 const char* const MENU_NAMES[] = {"", "leave the menu", "restart", "open the setup network", "unpair every controller",
                                   "forget the network"};
 constexpr int64_t MENU_HOLD_US = 3 * SECOND_US;
 constexpr int64_t RESET_HOLD_US = 10 * SECOND_US;
+constexpr int64_t MAX_HOLD_US = 30 * SECOND_US;
+using device_status::BootHold;
+
+BootHold release_preview(int64_t held_us) {
+    if (held_us < MENU_HOLD_US) return BootHold::none;
+    if (held_us < RESET_HOLD_US) return BootHold::menu;
+    if (held_us < MAX_HOLD_US && device_status::led_pin() >= 0) return BootHold::factory_reset;
+    return BootHold::no_action;
+}
 bool menu_open = false;
 int menu_action = 1;
 int64_t menu_touched_us = 0;
@@ -208,18 +218,11 @@ void do_action(int action) {
 }
 
 void released(int64_t held_us) {
-    device_status::show_hold(false);
-    if (held_us >= RESET_HOLD_US && held_us < 30 * SECOND_US) {
-        // Only with a status LED: it goes dark at 10 s, so you see that
-        // letting go now erases everything. Without one nothing warns (it
-        // happened testing the menu): then the reset is on the page only
-        if (device_status::led_pin() >= 0) {
-            factory_reset();
-        } else {
-            ESP_LOGW(TAG, "BOOT held %" PRId64 " s: no status LED to warn first, so no factory reset (it is on the page)",
-                     held_us / SECOND_US);
-        }
-    } else if (held_us >= MENU_HOLD_US && held_us < RESET_HOLD_US) {
+    device_status::show_hold(BootHold::none);
+    const BootHold result = release_preview(held_us);
+    if (result == BootHold::factory_reset) {
+        factory_reset();
+    } else if (result == BootHold::menu) {
         if (!menu_open) {
             ESP_LOGW(TAG, "BOOT held %" PRId64 " s: menu open at action 1 (%s); a short press goes to the next",
                      held_us / SECOND_US, MENU_NAMES[1]);
@@ -265,11 +268,7 @@ void button_task(void*) {
         } else if (down && pressed_since < 0) {
             pressed_since = now;
         } else if (down) {
-            // What letting go now would do: flicker for the menu, dark for a reset
-            const int64_t held = now - pressed_since;
-            if (held >= MENU_HOLD_US && held < 30 * SECOND_US) {
-                device_status::show_hold(true, held >= RESET_HOLD_US && device_status::led_pin() >= 0);
-            }
+            device_status::show_hold(release_preview(now - pressed_since));
         } else if (!down && pressed_since >= 0) {
             released(now - pressed_since);
             pressed_since = -1;

@@ -562,7 +562,9 @@ const TEXT = {
   newDevice: 'New device', newDeviceHelp: 'Install firmware or link one', browseCatalog: 'Browse the catalog',
   discovered: (n, v) => `Discovered: ${n}${v ? ' · ' + v : ''}`, adopt: 'Adopt',
   bootMenuChip: a => `BOOT menu: ${a}`, bootHeld: 'BOOT held: let go for the menu', bootLong: 'BOOT held over 10 s',
-  bootAction1: 'leave', bootAction2: 'restart', bootAction3: 'setup network', bootAction4: 'unpair', bootAction5: 'forget network',
+  bootReset: 'BOOT held: release to erase all settings', bootNothing: 'BOOT held: releasing does nothing',
+  bootAction1: 'leave', bootAction2: 'restart', bootAction3: 'setup network and clear page password',
+  bootAction4: 'unpair', bootAction5: 'forget network and clear page password',
   online: 'Online', offlineFor: d => `Offline ${d}`, notReachable: 'Not reachable on the network', offline: 'Offline', checking: 'Checking', keyRejected: 'Key refused', configMode: 'Configuration mode',
   updating: 'Updating', updatingPct: n => `Updating · ${n} %`, updateStarting: 'Starting the update…', updateQueued: 'Waiting for its turn',
   opening: n => `Opening the page of ${n}…`, openingAny: 'Opening the page…', openingSlow: 'The device answers slowly (on Thread this can take a few seconds). It opens by itself.',
@@ -910,7 +912,11 @@ function statusChip(s) {
   if (!s.ok) return `<span class="chip" ${s.last_seen ? `title="${esc(date(s.last_seen))}"` : ''}>${s.last_seen ? t('offlineFor', ago(s.last_seen)) : t('offline')}</span>`;
   // The BOOT button's menu, open on the device itself (seen also without a status LED)
   const d = s.device;
-  if (d && (d.menu || d.hold)) return `<span class="chip accent">${d.hold === 2 ? t('bootLong') : d.menu ? t('bootMenuChip', t('bootAction' + d.menu)) : t('bootHeld')}</span>`;
+  if (d && (d.menu || d.hold)) {
+    const label = d.hold === 4 ? t('bootReset') : d.hold === 3 ? t('bootNothing') : d.hold === 2 ? t('bootLong')
+      : d.menu ? t('bootMenuChip', t('bootAction' + d.menu)) : t('bootHeld');
+    return `<span class="chip accent">${label}</span>`;
+  }
   return running(s).config ? `<span class="chip warn">${t('configMode')}</span>` : `<span class="chip ok">${t('online')}</span>`;
 }
 

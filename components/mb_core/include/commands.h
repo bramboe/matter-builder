@@ -15,7 +15,9 @@ void add_command(const char* name, const char* help_line, CommandHandler handler
 // An empty reply hands the line on to the built-ins. nullptr removes it.
 void set_command_override(CommandHandler handler);
 
-// Execute one command line and return its output.
+// Parse once when the caller needs to authorize the same arguments it executes.
+std::vector<std::string> parse_command(const std::string& line);
+std::string run_command(const std::vector<std::string>& args);
 std::string run_command(const std::string& line);
 
 // Start the interactive serial console (USB/UART).

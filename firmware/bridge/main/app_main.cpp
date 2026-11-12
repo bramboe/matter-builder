@@ -72,7 +72,7 @@ std::string cmd_matter(const std::vector<std::string>& args) {
     return matter_bridge::describe();
 }
 
-// BOOT held 5-10 s: forget the page password and open the setup access
+// BOOT menu or six quick power-ons: forget the page password and open the setup access
 // point, so the owner can choose a new one with the bridge in hand
 void recovery() {
     http_api::reset_password();

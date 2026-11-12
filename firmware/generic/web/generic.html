@@ -536,7 +536,7 @@ const TEXT = {
   resultNotFound: c => `Last time the Wi-Fi network was not found (code ${c}). Check the name: the device only uses 2.4 GHz.`,
   resultNoConnect: c => `Last time there was no Wi-Fi connection within a minute (code ${c}).`,
   windowOpen: 'Pairing window open', windowClosed: 'Pairing window closed',
-  shareOther: 'Share with another app', factoryReset: 'Factory reset…', factoryHelp: 'Erase every setting and start again', factoryConfirm: 'Erase every setting: network, Matter pairings, connections, password and programs. The device then opens its setup network. Continue?', pinLabel: 'PIN', pinTitle: 'Quick access', pinHelp: 'Enter the PIN to look and operate. Changing settings needs the password.', usePassword: 'Sign in with the admin password', usePin: 'Use the PIN instead', wrongPin: 'Wrong PIN', pinLocked: 'Too many wrong tries: the PIN is locked for a while. Use the password.', unlockTitle: 'Password needed', unlockHelp: 'This changes the device: enter its password.', viewerBadge: 'Quick access · unlock', lockedVal: '•••• locked', pinSetting: 'Quick access PIN', pinSettingHelp: '4 to 6 digits to look at this page and operate what is connected; changes still need the password.', pinSave: 'Save PIN', pinRemove: 'Remove PIN', pinSaved: 'PIN saved', pinRemoved: 'PIN removed', pinIsSet: 'A PIN is set', pinNotSet: 'No PIN', bootOpen: (n, name) => `BOOT menu open: ${n} — ${name}`, bootHelp: 'Short press: next · hold 3 s: do it · closes by itself after 2 minutes', bootHoldMenu: 'Let go now: the BOOT menu opens', bootHoldAction: name => `Let go now: “${name}” is done`, bootHoldLong: 'Held past 10 s: letting go does nothing on a board without a status LED', menu1: 'Leave the menu', menu2: 'Restart', menu3: 'Open the setup network', menu4: 'Unpair every controller', menu5: 'Forget the network', shareHelp: 'Add this device to another app (Apple Home, Google Home, Alexa, another Home Assistant) with a one-time code; its own pairing code stays secret.', shareStart: 'Share device', shareCode: 'One-time code', shareLeft: s => `Valid for ${s}`, shareHow: 'Scan the QR code in the other app or enter the code. In Apple Home: + → Add Accessory → More options… → enter the code.', shareApple: 'Add to Apple Home', shareCopy: 'Copy code', shareCopied: 'Code copied', shareAppleHint: 'Code copied: in Apple Home choose More options… and enter it', shareStop: 'Stop sharing',
+  shareOther: 'Share with another app', factoryReset: 'Factory reset…', factoryHelp: 'Erase every setting and start again', factoryConfirm: 'Erase every setting: network, Matter pairings, connections, password and programs. The device then opens its setup network. Continue?', pinLabel: 'PIN', pinTitle: 'Quick access', pinHelp: 'Enter the PIN to look and operate. Changing settings needs the password.', usePassword: 'Sign in with the admin password', usePin: 'Use the PIN instead', wrongPin: 'Wrong PIN', pinLocked: 'Too many wrong tries: the PIN is locked for a while. Use the password.', unlockTitle: 'Password needed', unlockHelp: 'This changes the device: enter its password.', viewerBadge: 'Quick access · unlock', lockedVal: '•••• locked', pinSetting: 'Quick access PIN', pinSettingHelp: '4 to 6 digits to look at this page and operate what is connected; changes still need the password.', pinSave: 'Save PIN', pinRemove: 'Remove PIN', pinSaved: 'PIN saved', pinRemoved: 'PIN removed', pinIsSet: 'A PIN is set', pinNotSet: 'No PIN', bootOpen: (n, name) => `BOOT menu open: ${n} — ${name}`, bootHelp: 'Short press: next · hold 3 s: do it · closes by itself after 2 minutes', bootHoldMenu: 'Let go now: the BOOT menu opens', bootHoldAction: name => `Let go now: “${name}” is done`, bootHoldReset: 'Let go now: factory reset erases all settings', bootHoldNothing: 'Let go now: nothing happens', menu1: 'Leave the menu', menu2: 'Restart', menu3: 'Open the setup network and clear the page password', menu4: 'Unpair every controller', menu5: 'Forget the network and clear the page password', shareHelp: 'Add this device to another app (Apple Home, Google Home, Alexa, another Home Assistant) with a one-time code; its own pairing code stays secret.', shareStart: 'Share device', shareCode: 'One-time code', shareLeft: s => `Valid for ${s}`, shareHow: 'Scan the QR code in the other app or enter the code. In Apple Home: + → Add Accessory → More options… → enter the code.', shareApple: 'Add to Apple Home', shareCopy: 'Copy code', shareCopied: 'Code copied', shareAppleHint: 'Code copied: in Apple Home choose More options… and enter it', shareStop: 'Stop sharing',
   pairExtra: 'For another controller (e.g. Apple Home): open the pairing window and scan the code within 5 minutes.',
   accessTitle: 'Programs with access',
   accessHelp: 'Programs such as the Home Assistant add-on get a key of their own. They ask with this password and need a press of the BOOT button.',
@@ -724,7 +724,8 @@ function boot(first, rest) {
   ready();
   track(Promise.resolve(first()).catch(() => {})).then(async () => {
     booting = false;
-    if (signedIn) showApp();
+    if (!signedIn) return;
+    showApp();
     for (const load of rest) { try { await load(); } catch (e) {} }
     document.body.classList.add('loaded');  // a value still empty now is empty, not coming
   });
@@ -763,8 +764,8 @@ function renderBoot(st) {
   $('#bootBanner').hidden = !menu && !hold;
   if (!menu && !hold) return;
   const name = n => t(BOOT_MENU[n] || 'menu1');
-  $('#bootTitle').textContent = hold === 2 ? t('bootHoldLong') : hold === 1 ? (menu ? t('bootHoldAction', name(menu)) : t('bootHoldMenu')) : t('bootOpen', menu, name(menu));
-  $('#bootHelp').textContent = menu && hold !== 2 ? t('bootHelp') : '';
+  $('#bootTitle').textContent = hold === 4 ? t('bootHoldReset') : hold === 3 ? t('bootHoldNothing') : hold === 1 ? (menu ? t('bootHoldAction', name(menu)) : t('bootHoldMenu')) : t('bootOpen', menu, name(menu));
+  $('#bootHelp').textContent = menu && hold < 2 ? t('bootHelp') : '';
 }
 
 // The PIN as a box per digit (the device says how many, 4 to 6). One real
@@ -791,16 +792,24 @@ async function cmd(line) {
   const headers = token ? {'X-Octo-Token': token} : pinCode ? {'X-Octo-Pin': pinCode} : {};
   const r = await track(fetch('cmd', {method: 'POST', headers, body: line}));
   const text = await r.text();
-  if (r.status === 429) { toast(t('pinLocked')); throw new Error(t('pinLocked')); }
+  if (r.status === 429) {
+    keepPin('');
+    showLogin(t('pinLocked'), 'pin');
+    throw new Error(t('pinLocked'));
+  }
   if (r.status === 403 && !token && pinCode) {
     if (byUser) askPassword();
     const err = new Error(text.trim()); err.needsPassword = true; throw err;
   }
   if (r.status === 401) {
     if (!token && pinCode) { keepPin(''); showLogin(true, 'pin'); throw new Error(t('wrongPin')); }
-    showLogin(!text.startsWith('no password') && !!token, text.startsWith('no password') ? 'setup' : pinAvailable ? 'pin' : 'login');
+    const setup = text.startsWith('no password');
+    const wrongPassword = !setup && !!token;
+    keepToken('');
+    showLogin(wrongPassword, setup ? 'setup' : 'login');
     throw new Error(t('passwordRefused'));
   }
+  if (!r.ok) throw new Error(text.trim() || r.statusText);
   signedInOk();
   return text;
 }
@@ -1419,7 +1428,7 @@ async function loadMatter() {
     : t('valConnected', m.fabrics.filter(f => f.connected).length, m.fabrics.length)) : t('valNotPaired');
   updatePairing();
   if (hasShare()) renderShare();
-  $('#manual').textContent = m.manual.replace(/^(\d{4})(\d{3})(\d{4})$/, '$1-$2-$3') || '–';
+  $('#manual').textContent = viewer ? t('lockedVal') : (m.manual || '').replace(/^(\d{4})(\d{3})(\d{4})$/, '$1-$2-$3') || '–';
   const n = m.qr_size;
   $('#qr').innerHTML = n ? `<svg viewBox="-2 -2 ${n + 4} ${n + 4}" shape-rendering="crispEdges" role="img" aria-label="${esc(m.qr)}">
     <rect x="-2" y="-2" width="${n + 4}" height="${n + 4}" fill="#fff"/><path fill="#000" d="${m.qr_path}"/></svg>` : '';
@@ -1432,9 +1441,10 @@ async function loadMatter() {
       <button class="warn" onclick="removeFabric(${f.index}, '${quote(f.vendor)}')">${t('disconnect')}</button></div>`).join('');
   $('#product').textContent = `${m.product} ${m.version}`;
   $('#ids').textContent = `${m.vid} / ${m.pid}`;
-  $('#network').textContent = m.network.trim();
+  const network = (m.network || '').trim();
+  $('#network').textContent = viewer ? t('lockedVal') : network;
   // "thread: attached, role child, …" or "wifi: connected, ip …, rssi -60, …"
-  const net = m.network.trim().split('\n')[0];
+  const net = network.split('\n')[0];
   const role = (net.match(/role (\w+)/) || [])[1], rssi = (net.match(/rssi (-?\d+)/) || [])[1];
   $('#netKind').textContent = net.startsWith('thread') ? t('thread') + (role ? ' · ' + role : '')
     : net.startsWith('wifi') ? t('wifi') + (rssi ? ` · ${rssi} dBm` : '') : '–';
@@ -1958,7 +1968,7 @@ $('#pinRemove').onclick = async () => {
   loadPin();
 };
 $('#viewerBadge').onclick = askPassword;
-function startApp() { setViewer(!token && !!pinCode); boot(() => refresh().then(loadRules), [loadMatter, loadWifi, loadThread, loadAccess, loadBle, loadPin]); }
+function startApp() { setViewer(!token && !!pinCode); boot(() => refresh().then(() => signedIn && loadRules()), [loadMatter, loadWifi, loadThread, loadAccess, loadBle, loadPin]); }
 function keepToken(value) {
   token = value;
   try { localStorage.setItem('mbToken', token); } catch (err) {}
@@ -1985,7 +1995,7 @@ $('#loginForm').onsubmit = e => {
   const value = $('#password').value.trim();
   if (loginMode === 'setup' || loginMode === 'change') { choosePassword(value); return; }
   keepToken(value);
-  if (loginMode === 'unlock') { showApp(); }
+  signedIn = false;
   startApp();
 };
 // A device without a password asks for one first; older firmware has no /auth

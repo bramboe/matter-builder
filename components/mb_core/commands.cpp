@@ -178,12 +178,18 @@ void set_command_override(CommandHandler handler) {
     override_handler = handler;
 }
 
-std::string run_command(const std::string& line) {
+std::vector<std::string> parse_command(const std::string& line) {
     Args args;
     std::istringstream stream(line);
     for (std::string word; stream >> word;) {
         args.push_back(word);
     }
+    return args;
+}
+
+std::string run_command(const std::string& line) { return run_command(parse_command(line)); }
+
+std::string run_command(const std::vector<std::string>& args) {
     if (override_handler != nullptr) {
         std::string out = override_handler(args);
         if (!out.empty()) {

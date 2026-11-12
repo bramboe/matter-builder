@@ -78,6 +78,19 @@ idf.py -C "$PROJECT_DIR" -B "$BUILD" -D SDKCONFIG="$BUILD/sdkconfig" -D IDF_TARG
 # The project's name as built: the generic device's depends on chip and network
 PROJECT=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["project_name"])' "$BUILD/project_description.json")
 
+if [ -n "${MB_OTA_REPORT:-}" ]; then
+    PARTTOOL="$IDF_PATH/components/partition_table/parttool.py"
+    TABLE="$BUILD/partition_table/partition-table.bin"
+    slot0=$(python "$PARTTOOL" --partition-table-file "$TABLE" get_partition_info --partition-type app --partition-subtype ota_0 --info size)
+    slot1=$(python "$PARTTOOL" --partition-table-file "$TABLE" get_partition_info --partition-type app --partition-subtype ota_1 --info size)
+    : "${slot0:?Missing OTA slot 0}" "${slot1:?Missing OTA slot 1}"
+    slot=$((slot0 < slot1 ? slot0 : slot1))
+    size=$(stat -c %s "$BUILD/$PROJECT.bin")
+    free=$((slot - size))
+    printf '%s %s — %d bytes used, %d bytes free (%d%%) in a %d-byte OTA slot\n' \
+        "$PROJECT" "$VERSION" "$size" "$free" "$((100 * free / slot))" "$slot" | tee "$MB_OTA_REPORT"
+fi
+
 cp "$BUILD/$PROJECT.bin" "$DATA/firmware/$PROJECT-$VERSION.bin"
 # Bootloader, partition table and app in one image, for a new ESP32 over USB
 (cd "$BUILD" && python -m esptool --chip "$CHIP" merge_bin -o "$DATA/firmware/factory/$PROJECT-$VERSION-factory.bin" @flash_args)

@@ -50,7 +50,7 @@ int pin = -1;
 bool inverted = false;
 bool quiet = false;
 std::atomic<int> menu_action{0};
-std::atomic<int> hold{0};  // 1: flicker, 2: off
+std::atomic<BootHold> hold{BootHold::none};
 
 struct Step {
     uint16_t ms;
@@ -84,9 +84,9 @@ bool menu_level(int action, int64_t ms) {
 }
 
 bool led_level(int64_t ms) {
-    const int held = hold.load();
-    if (held == 2) return false;
-    if (held == 1) return level(FLICKER, ms);
+    const BootHold held = hold.load();
+    if (held == BootHold::factory_reset) return false;
+    if (held == BootHold::menu) return level(FLICKER, ms);
     const int action = menu_action.load();
     if (action > 0) return menu_level(action, ms);
     switch (current.load()) {
@@ -239,11 +239,10 @@ Controller controller(unsigned fabric_index) {
 
 std::string json() {
     std::lock_guard<std::mutex> guard(lock);
-    // The BOOT button's menu (action, 0: closed) and a press being held
-    // (1: letting go opens the menu or does the action, 2: past 10 s)
+    // The BOOT menu action (0: closed) and the result of releasing a held press.
     return std::string("{\"state\":\"") + state_name() + "\",\"fabrics\":" + std::to_string(fabric_count) +
            ",\"connected\":" + std::to_string(connected_count) + ",\"menu\":" + std::to_string(menu_action.load()) +
-           ",\"hold\":" + std::to_string(hold.load()) + "}";
+           ",\"hold\":" + std::to_string(static_cast<int>(hold.load())) + "}";
 }
 
 void show_menu(int action) { menu_action = action; }
@@ -258,7 +257,7 @@ void note_restart(const char* why) {
 
 const char* last_restart() { return last_why; }
 
-void show_hold(bool holding, bool off) { hold = !holding ? 0 : off ? 2 : 1; }
+void show_hold(BootHold result) { hold = result; }
 
 int led_pin() { return pin; }
 

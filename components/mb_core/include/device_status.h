@@ -54,7 +54,10 @@ std::string json();
 // The BOOT button's menu on the LED: action n as n blinks (0: back to the
 // state), and a fast flicker while the button is held long enough to act
 void show_menu(int action);
-void show_hold(bool holding, bool off = false);
+// Values are also used in the device status JSON.
+// Older firmware used 2 for a long hold.
+enum class BootHold { none = 0, menu = 1, no_action = 3, factory_reset = 4 };
+void show_hold(BootHold result);
 
 // "led": json | set <pin>|none [inverted] [quiet]
 std::string led_command(const std::vector<std::string>& args);

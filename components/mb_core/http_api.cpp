@@ -2,7 +2,9 @@
 
 #include "sdkconfig.h"
 
+#include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <memory>
 
@@ -44,6 +46,12 @@ char pin[7] = {};
 int pin_failures = 0;
 int64_t pin_locked_until_us = 0;
 int64_t pin_lock_us = 60 * 1000000LL;
+
+void reset_pin_limit() {
+    pin_failures = 0;
+    pin_locked_until_us = 0;
+    pin_lock_us = 60 * 1000000LL;
+}
 
 httpd_handle_t server = nullptr;
 char redirect_url[32] = "";  // see redirect_unknown_to()
@@ -104,14 +112,14 @@ Who who(httpd_req_t* req) {
     char token[MAX_PASSWORD_LEN + 1] = {};
     if (httpd_req_get_hdr_value_str(req, "X-Octo-Token", token, sizeof(token)) != ESP_OK) {
         char given[7] = {};
-        if (pin[0] == '\0' || httpd_req_get_hdr_value_str(req, "X-Octo-Pin", given, sizeof(given)) != ESP_OK) {
+        if (password[0] == '\0' || pin[0] == '\0' ||
+            httpd_req_get_hdr_value_str(req, "X-Octo-Pin", given, sizeof(given)) != ESP_OK) {
             return Who::nobody;
         }
         const int64_t now = esp_timer_get_time();
         if (now < pin_locked_until_us) return Who::locked;
         if (std::strcmp(given, pin) == 0) {
-            pin_failures = 0;
-            pin_lock_us = 60 * 1000000LL;
+            reset_pin_limit();
             return Who::viewer;
         }
         if (++pin_failures >= 5) {
@@ -119,6 +127,7 @@ Who who(httpd_req_t* req) {
             pin_locked_until_us = now + pin_lock_us;
             ESP_LOGW(TAG, "Wrong PIN 5 times: locked for %lld s", pin_lock_us / 1000000);
             pin_lock_us = pin_lock_us * 2 > 900 * 1000000LL ? 900 * 1000000LL : pin_lock_us * 2;
+            return Who::locked;
         }
         return Who::nobody;
     }
@@ -250,21 +259,38 @@ esp_err_t handle_auth_post(httpd_req_t* req) {
 
 // What a viewer (the PIN) may send: looking, and operating what is
 // connected; nothing that changes settings, access, the network or firmware
-bool viewer_may(const char* line) {
-    static const char* const READ[] = {"json", "system json", "matter json", "led json", "rule json", "bledev json",
-                                       "status", "language", "preset list"};
-    for (const char* r : READ) {
-        if (std::strcmp(line, r) == 0) return true;
+enum class ViewerReply { forbidden, text, masked_json };
+
+ViewerReply viewer_reply(const std::vector<std::string>& args) {
+    if (args.empty()) return ViewerReply::forbidden;
+    const auto& command = args[0];
+    if ((args.size() == 1 && command == "json") ||
+        (args.size() == 2 && args[1] == "json" &&
+         (command == "system" || command == "matter" || command == "led" || command == "rule" || command == "bledev")) ||
+        (args.size() == 2 && command == "preset" && args[1] == "list")) {
+        return ViewerReply::masked_json;
     }
-    // Operating: an output on or off (generic), the bed's light, presets, moving, stop (bridge)
-    static const char* const OPERATE[] = {"io test ", "light", "stop", "preset ", "move "};
-    for (const char* o : OPERATE) {
-        if (std::strncmp(line, o, std::strlen(o)) == 0 && std::strncmp(line, "preset set", 10) != 0 &&
-            std::strncmp(line, "preset clear", 12) != 0) {
-            return true;
-        }
+    if (args.size() == 1 && command == "language") return ViewerReply::text;
+    if (args.size() == 4 && command == "io" && args[1] == "test" &&
+        args[2].size() == 1 && args[2][0] >= '0' && args[2][0] <= '7' &&
+        (args[3] == "on" || args[3] == "off")) {
+        return ViewerReply::text;
     }
-    return false;
+    if (args.size() < 2 || (args[1] != "0" && args[1] != "1")) return ViewerReply::forbidden;
+    if ((args.size() == 2 && command == "stop") ||
+        (args.size() == 3 && command == "light" && (args[2] == "on" || args[2] == "off")) ||
+        (args.size() == 3 && command == "preset" &&
+         (args[2] == "flat" || args[2] == "match" || args[2] == "1" || args[2] == "2" || args[2] == "3"))) {
+        return ViewerReply::text;
+    }
+    if (args.size() == 5 && command == "move" &&
+        (args[2] == "head" || args[2] == "feet" || args[2] == "legs" || args[2] == "both") &&
+        (args[3] == "up" || args[3] == "down")) {
+        char* end = nullptr;
+        const float seconds = std::strtof(args[4].c_str(), &end);
+        if (*end == '\0' && std::isfinite(seconds) && seconds >= 0.3f) return ViewerReply::text;
+    }
+    return ViewerReply::forbidden;
 }
 
 // What a viewer gets left out: addresses, network names, pairing and sharing
@@ -272,29 +298,42 @@ bool viewer_may(const char* line) {
 const char* const HIDDEN[] = {"mac", "ip", "ssid", "qr", "qr_path", "qr_size", "manual", "share", "network", "dataset",
                               "passcode", "discriminator", "token", "hostname", "address", "parent", "neighbors"};
 void hide(cJSON* node) {
-    if (node == nullptr) return;
-    if (cJSON_IsObject(node)) {
-        for (const char* key : HIDDEN) {
-            cJSON* item = cJSON_GetObjectItemCaseSensitive(node, key);
-            // "network" is also the plain kind ("wifi"/"thread") in system json: keep that
-            if (item != nullptr && !(std::strcmp(key, "network") == 0 && cJSON_IsString(item) &&
-                                     (std::strcmp(item->valuestring, "wifi") == 0 || std::strcmp(item->valuestring, "thread") == 0))) {
-                cJSON_DeleteItemFromObjectCaseSensitive(node, key);
+    for (cJSON* child = node->child; child != nullptr;) {
+        cJSON* next = child->next;
+        bool hidden = false;
+        if (cJSON_IsObject(node)) {
+            for (const char* key : HIDDEN) {
+                if (std::strcmp(child->string, key) != 0) continue;
+                // Keep the network kind reported by system json.
+                hidden = std::strcmp(key, "network") != 0 || !cJSON_IsString(child) ||
+                         (std::strcmp(child->valuestring, "wifi") != 0 && std::strcmp(child->valuestring, "thread") != 0);
+                break;
             }
         }
+        if (hidden) {
+            cJSON_Delete(cJSON_DetachItemViaPointer(node, child));
+        } else {
+            hide(child);
+        }
+        child = next;
     }
-    for (cJSON* child = node->child; child != nullptr; child = child->next) hide(child);
 }
 
-std::string for_viewer(const std::string& reply) {
-    cJSON* root = cJSON_Parse(reply.c_str());
-    if (root == nullptr) return reply;  // plain text (status lines, "ok")
-    hide(root);
-    char* text = cJSON_PrintUnformatted(root);
-    std::string out = text != nullptr ? std::string(text) + "\n" : reply;
-    cJSON_free(text);
+esp_err_t send_viewer_json(httpd_req_t* req, const std::string& reply) {
+    cJSON* root = cJSON_ParseWithOpts(reply.c_str(), nullptr, true);
+    char* text = nullptr;
+    if (cJSON_IsObject(root)) {
+        hide(root);
+        text = cJSON_PrintUnformatted(root);
+    }
     cJSON_Delete(root);
-    return out;
+    if (text == nullptr) {
+        httpd_resp_set_status(req, "503 Service Unavailable");
+        return httpd_resp_sendstr(req, "masked response unavailable\n");
+    }
+    const esp_err_t result = httpd_resp_sendstr(req, text);
+    cJSON_free(text);
+    return result;
 }
 
 // "pin json" | "pin set <4-6 digits>" | "pin clear": only with the password
@@ -303,6 +342,7 @@ std::string pin_command(const char* line) {
     if (std::strcmp(line, "pin clear") == 0) {
         if (!store_pin("")) return "storing failed\n";
         pin[0] = '\0';
+        reset_pin_limit();
         return "ok\n";
     }
     if (std::strncmp(line, "pin set ", 8) == 0) {
@@ -313,6 +353,7 @@ std::string pin_command(const char* line) {
         if (!digits) return "error: a PIN is 4 to 6 digits\n";
         if (!store_pin(value)) return "storing failed\n";
         std::strcpy(pin, value);
+        reset_pin_limit();
         return "ok\n";
     }
     return "pin json | pin set <4-6 digits> | pin clear\n";
@@ -324,8 +365,9 @@ esp_err_t handle_cmd(httpd_req_t* req) {
         httpd_resp_set_status(req, "429 Too Many Requests");
         return httpd_resp_sendstr(req, "PIN locked for a while after wrong tries: try again later or use the password\n");
     }
-    if (caller != Who::viewer && !authorized(req)) {
-        return ESP_OK;
+    if (caller == Who::nobody) {
+        httpd_resp_set_status(req, "401 Unauthorized");
+        return httpd_resp_sendstr(req, password[0] == '\0' ? "no password set\n" : "missing or wrong X-Octo-Token\n");
     }
     if (req->content_len == 0 || req->content_len > MAX_COMMAND_LEN) {
         httpd_resp_set_status(req, "400 Bad Request");
@@ -340,8 +382,14 @@ esp_err_t handle_cmd(httpd_req_t* req) {
         }
         got += r;
     }
+    if (std::memchr(line, '\0', got) != nullptr) {
+        httpd_resp_set_status(req, "400 Bad Request");
+        return httpd_resp_sendstr(req, "body must be one command line\n");
+    }
+    const auto args = parse_command(line);
     // Which programs have access is for the owner to change
-    if (caller == Who::program && std::strncmp(line, "access ", 7) == 0 && std::strcmp(line, "access json") != 0) {
+    if (caller == Who::program && !args.empty() && args[0] == "access" &&
+        !(args.size() == 2 && args[1] == "json")) {
         httpd_resp_set_status(req, "403 Forbidden");
         return httpd_resp_sendstr(req, "only with the page password\n");
     }
@@ -354,13 +402,15 @@ esp_err_t handle_cmd(httpd_req_t* req) {
         return httpd_resp_sendstr(req, pin_command(line).c_str());
     }
     if (caller == Who::viewer) {
-        if (!viewer_may(line)) {
+        const ViewerReply mode = viewer_reply(args);
+        if (mode == ViewerReply::forbidden) {
             httpd_resp_set_status(req, "403 Forbidden");
             return httpd_resp_sendstr(req, "the password is needed for this\n");
         }
-        return httpd_resp_sendstr(req, for_viewer(run_command(line)).c_str());
+        const std::string reply = run_command(args);
+        return mode == ViewerReply::masked_json ? send_viewer_json(req, reply) : httpd_resp_sendstr(req, reply.c_str());
     }
-    return httpd_resp_sendstr(req, run_command(line).c_str());
+    return httpd_resp_sendstr(req, run_command(args).c_str());
 }
 
 // Body = the program's name; the reply's id is polled with GET /link

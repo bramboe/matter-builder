@@ -2592,13 +2592,12 @@ const BOARDS = {
   esp32c61: {name: 'ESP32-C61', support: 'no', why: 'Not built yet. It is close to the ESP32-C6 without Thread; ask for it on GitHub if you have one.'},
   esp32p4: {name: 'ESP32-P4', support: 'no', why: 'It has no radio of its own: Wi-Fi comes from a second chip on the board, which this firmware does not drive.'},
   esp32h4: {name: 'ESP32-H4', support: 'no', why: 'Not built yet, and without Wi-Fi like the ESP32-H2.'},
-  esp8266: {name: 'ESP8266', support: 'no', why: 'Matter does not run on the ESP8266: it needs an ESP32.'},
 };
 // esptool's name for a chip as the firmware's; the classic ESP32 reports its
 // die (ESP32-D0WD-V3, ESP32-PICO-…, ESP32-U4WDH)
 const CHIP_PREFIXES = [['ESP32-C61', 'esp32c61'], ['ESP32-C6', 'esp32c6'], ['ESP32-C5', 'esp32c5'], ['ESP32-C3', 'esp32c3'], ['ESP8685', 'esp32c3'],
   ['ESP32-C2', 'esp32c2'], ['ESP8684', 'esp32c2'], ['ESP32-H2', 'esp32h2'], ['ESP32-H4', 'esp32h4'], ['ESP32-S3', 'esp32s3'], ['ESP32-S2', 'esp32s2'],
-  ['ESP32-P4', 'esp32p4'], ['ESP8266', 'esp8266'], ['ESP8285', 'esp8266'], ['ESP32', 'esp32']];
+  ['ESP32-P4', 'esp32p4'], ['ESP32', 'esp32']];
 const chipKey = name => (CHIP_PREFIXES.find(([prefix]) => String(name || '').toUpperCase().startsWith(prefix)) || [])[1] || '';
 const supportChip = b => `<span class="chip ${b.support === 'tested' ? 'ok' : b.support === 'experimental' ? 'warn' : 'bad'}">${t(b.support === 'tested' ? 'boardTested' : b.support === 'experimental' ? 'boardExperimental' : 'boardNo')}</span>`;
 const boardFacts = b => b.support === 'no' ? `<div class="sub">${esc(b.why)}</div>`

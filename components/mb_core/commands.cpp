@@ -139,6 +139,7 @@ std::string system_json() {
                       ",\"heap_block\":" + std::to_string(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)) +
                       ",\"uptime\":" + std::to_string(esp_timer_get_time() / 1000000) +
                       ",\"reset\":" + json_escaped(reset_reason_name(esp_reset_reason())) +
+                      ",\"why\":" + json_escaped(device_status::last_restart()) +
                       ",\"running\":" + slot_json(esp_ota_get_running_partition()) +
                       ",\"other\":" + slot_json(esp_ota_get_next_update_partition(nullptr)) +
                       ",\"nvs_used\":" + std::to_string(nvs.used_entries) + ",\"nvs_total\":" + std::to_string(nvs.total_entries) +
@@ -203,6 +204,7 @@ std::string run_command(const std::string& line) {
     if (cmd == "log") return log_buffer::read(args.size() > 1 ? std::strtoul(args[1].c_str(), nullptr, 10) : 0, 4096);
     if (cmd == "factory" && args.size() >= 2 && args[1] == "reset") return program_access::factory_reset_command(args);
     if (cmd == "reboot") {
+        device_status::note_restart("restarted from the page or a program");
         mb_core::stop();
         xTaskCreate(restart_soon, "restart", 2048, nullptr, 5, nullptr);
         return "rebooting\n";

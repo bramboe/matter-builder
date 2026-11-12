@@ -1270,6 +1270,8 @@ std::string state_json() {
                       ",\"heap\":" + std::to_string(esp_get_free_heap_size()) +
                       // of all there is: the page shows how full it is
                       ",\"heap_total\":" + std::to_string(heap_caps_get_total_size(MALLOC_CAP_DEFAULT)) +
+                      // the state and the BOOT menu (open action, a press held), for the page and the add-on
+                      ",\"status\":" + device_status::json() +
                       ",\"io\":{\"name\":" + json_text(name().c_str()) + ",\"trial\":";
     const int64_t left = in_trial ? (trial_end_us - esp_timer_get_time()) / 1000000 : 0;
     out += std::to_string(left > 0 ? left : 0) + ",\"problem\":" + json_text(problem.c_str()) + ",\"changed\":";

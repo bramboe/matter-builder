@@ -561,6 +561,8 @@ const TEXT = {
   emptyText: 'Matter Builder turns an ESP32-C6 into a standard Matter device for Home Assistant, Apple Home and Google Home. Every device keeps working without Home Assistant and has a settings page of its own.',
   newDevice: 'New device', newDeviceHelp: 'Install firmware or link one', browseCatalog: 'Browse the catalog',
   discovered: (n, v) => `Discovered: ${n}${v ? ' · ' + v : ''}`, adopt: 'Adopt',
+  bootMenuChip: a => `BOOT menu: ${a}`, bootHeld: 'BOOT held: let go for the menu', bootLong: 'BOOT held over 10 s',
+  bootAction1: 'leave', bootAction2: 'restart', bootAction3: 'setup network', bootAction4: 'unpair', bootAction5: 'forget network',
   online: 'Online', offlineFor: d => `Offline ${d}`, notReachable: 'Not reachable on the network', offline: 'Offline', checking: 'Checking', keyRejected: 'Key refused', configMode: 'Configuration mode',
   updating: 'Updating', updatingPct: n => `Updating · ${n} %`, updateStarting: 'Starting the update…', updateQueued: 'Waiting for its turn',
   opening: n => `Opening the page of ${n}…`, openingAny: 'Opening the page…', openingSlow: 'The device answers slowly (on Thread this can take a few seconds). It opens by itself.',
@@ -906,6 +908,9 @@ function statusChip(s) {
   if (!s) return `<span class="chip">${t('checking')}</span>`;
   if (!s.ok && s.auth) return `<span class="chip warn">${t('keyRejected')}</span>`;
   if (!s.ok) return `<span class="chip" ${s.last_seen ? `title="${esc(date(s.last_seen))}"` : ''}>${s.last_seen ? t('offlineFor', ago(s.last_seen)) : t('offline')}</span>`;
+  // The BOOT button's menu, open on the device itself (seen also without a status LED)
+  const d = s.device;
+  if (d && (d.menu || d.hold)) return `<span class="chip accent">${d.hold === 2 ? t('bootLong') : d.menu ? t('bootMenuChip', t('bootAction' + d.menu)) : t('bootHeld')}</span>`;
   return running(s).config ? `<span class="chip warn">${t('configMode')}</span>` : `<span class="chip ok">${t('online')}</span>`;
 }
 
@@ -2095,6 +2100,9 @@ async function loadStatuses() {
     try { statuses[p.id] = await api(`api/proxy/${p.id}/status`); } catch (e) { statuses[p.id] = {ok: false, error: e.message}; }
   }));
   render();
+  // A BOOT menu open somewhere: follow it every few seconds until it closes
+  clearTimeout(loadStatuses.soon);
+  if (Object.values(statuses).some(s => s && s.device && (s.device.menu || s.device.hold))) loadStatuses.soon = setTimeout(loadStatuses, 3000);
 }
 
 // ---------------------------------------------------------------- task bar

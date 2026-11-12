@@ -209,7 +209,8 @@ def proxy_status(proxy):
     if not (PAGES / f"{proxy['id']}.html").exists() or proxy.get("page_version") != running_version:
         remember(proxy, page_version=running_version)
         prefetch_page(proxy)
-    return {"ok": True, "system": system, "beds": beds, "io": state.get("io")}
+    # "device": its state and the BOOT menu (open action, a press held), from newer firmware
+    return {"ok": True, "system": system, "beds": beds, "io": state.get("io"), "device": state.get("status")}
 
 
 # One missed answer over Thread is common; "offline" only after two in a row,

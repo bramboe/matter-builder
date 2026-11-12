@@ -151,7 +151,21 @@ void tick(void*) {
     }
 }
 
+// Why the last restart happened, noted just before it and read once at start
+char last_why[64] = "";
+
 void load() {
+    nvs_handle_t rw;
+    if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &rw) == ESP_OK) {
+        size_t size = sizeof(last_why);
+        if (nvs_get_str(rw, "why", last_why, &size) == ESP_OK) {
+            nvs_erase_key(rw, "why");
+            nvs_commit(rw);
+        } else {
+            last_why[0] = '\0';
+        }
+        nvs_close(rw);
+    }
     nvs_handle_t nvs;
     if (nvs_open(NVS_NAMESPACE, NVS_READONLY, &nvs) != ESP_OK) return;
     int8_t stored = -1;
@@ -225,11 +239,24 @@ Controller controller(unsigned fabric_index) {
 
 std::string json() {
     std::lock_guard<std::mutex> guard(lock);
+    // The BOOT button's menu (action, 0: closed) and a press being held
+    // (1: letting go opens the menu or does the action, 2: past 10 s)
     return std::string("{\"state\":\"") + state_name() + "\",\"fabrics\":" + std::to_string(fabric_count) +
-           ",\"connected\":" + std::to_string(connected_count) + "}";
+           ",\"connected\":" + std::to_string(connected_count) + ",\"menu\":" + std::to_string(menu_action.load()) +
+           ",\"hold\":" + std::to_string(hold.load()) + "}";
 }
 
 void show_menu(int action) { menu_action = action; }
+
+void note_restart(const char* why) {
+    nvs_handle_t nvs;
+    if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs) != ESP_OK) return;
+    nvs_set_str(nvs, "why", why);
+    nvs_commit(nvs);
+    nvs_close(nvs);
+}
+
+const char* last_restart() { return last_why; }
 
 void show_hold(bool holding, bool off) { hold = !holding ? 0 : off ? 2 : 1; }
 

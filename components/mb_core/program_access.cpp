@@ -157,6 +157,8 @@ void factory_reset() {
 // out): factory reset. Everything acts when the button is released, so a
 // stuck button does nothing.
 constexpr int MENU_ACTIONS = 5;
+const char* const MENU_NAMES[] = {"", "leave the menu", "restart", "open the setup network", "unpair every controller",
+                                  "forget the network"};
 constexpr int64_t MENU_HOLD_US = 3 * SECOND_US;
 constexpr int64_t RESET_HOLD_US = 10 * SECOND_US;
 bool menu_open = false;
@@ -175,10 +177,19 @@ void restart_task(void*) {
 }
 
 void do_action(int action) {
-    ESP_LOGW(TAG, "BOOT menu: action %d", action);
+    ESP_LOGW(TAG, "BOOT menu: action %d (%s)", action, MENU_NAMES[action]);
     close_menu();
     switch (action) {
+        case 3:
+        case 5:
+            device_status::note_restart(action == 3 ? "BOOT menu: open the setup network" : "BOOT menu: forget the network");
+            break;
+        default:
+            break;
+    }
+    switch (action) {
         case 2:
+            device_status::note_restart("BOOT menu: restart");
             xTaskCreate(restart_task, "restart", 2048, nullptr, 5, nullptr);
             break;
         case 3:
@@ -210,7 +221,8 @@ void released(int64_t held_us) {
         }
     } else if (held_us >= MENU_HOLD_US && held_us < RESET_HOLD_US) {
         if (!menu_open) {
-            ESP_LOGW(TAG, "BOOT held %" PRId64 " s: menu", held_us / SECOND_US);
+            ESP_LOGW(TAG, "BOOT held %" PRId64 " s: menu open at action 1 (%s); a short press goes to the next",
+                     held_us / SECOND_US, MENU_NAMES[1]);
             menu_open = true;
             menu_action = 1;
             menu_touched_us = esp_timer_get_time();
@@ -223,6 +235,7 @@ void released(int64_t held_us) {
             menu_action = menu_action % MENU_ACTIONS + 1;
             menu_touched_us = esp_timer_get_time();
             device_status::show_menu(menu_action);
+            ESP_LOGW(TAG, "BOOT menu: at action %d (%s); hold 3 s to do it", menu_action, MENU_NAMES[menu_action]);
         } else {
             presence("BOOT button");
         }
@@ -301,6 +314,7 @@ void count_power_ons() {
     if (count >= RECOVERY_POWER_ONS) {
         store_power_ons(0);
         ESP_LOGW(TAG, "Power switched on %d times: recovery", RECOVERY_POWER_ONS);
+        device_status::note_restart("power switched on 6 times quickly: recovery");
         if (on_recovery != nullptr) {
             on_recovery();  // restarts on the setup access point
         }

@@ -75,6 +75,21 @@ button.pri.busy::after{border-color:#fff;border-right-color:transparent}
 .membar{height:6px;max-width:220px;margin-top:6px;border-radius:3px;background:var(--fill);overflow:hidden}
 .membar i{display:block;height:100%;background:var(--primary);transition:width .4s}
 .membar.low i{background:var(--bad)}
+
+/* Quick access with the PIN: what needs the password is masked and locked */
+body.viewer .settings details.set.lockable > summary .val{visibility:hidden}
+body.viewer .settings details.set.lockable > summary .val::before{content:attr(data-locked);visibility:visible}
+body.viewer .settings details.set.lockable > .body{display:none}
+body.viewer .owner-only,body.viewer #pairing,body.viewer #shareBox,body.viewer #blePairingRow,body.viewer #factoryReset{display:none!important}
+.viewer-badge{display:none;margin-left:8px;padding:2px 10px;border-radius:12px;background:var(--chip);color:var(--primary);font-size:12px;font-weight:500;cursor:pointer;border:0}
+body.viewer .viewer-badge{display:inline-block}
+#bootBanner{margin:12px 0 4px;border-color:var(--primary);background:color-mix(in srgb,var(--primary) 8%,var(--card))}
+#bootBanner b{font-weight:500}
+.pinboxes{position:relative;display:flex;gap:8px;margin:4px 0}
+.pinboxes span{display:grid;place-items:center;width:44px;height:52px;border-bottom:2px solid var(--mute);border-radius:4px 4px 0 0;background:var(--fill);font-size:22px}
+.pinboxes span.on{border-bottom-color:var(--primary)}
+/* The real input lies over the boxes, invisible: every key, paste and autofill lands in it */
+.pinboxes input{position:absolute;inset:0;width:100%;height:100%;opacity:0;border:0;padding:0;font-size:16px;letter-spacing:40px;caret-color:transparent}
 /* Until an answer is in: the shape of what comes (cards, values) instead of empty space */
 .skel{display:block;height:12px;border-radius:6px;background:linear-gradient(90deg,var(--fill) 25%,var(--line) 50%,var(--fill) 75%);background-size:300% 100%;animation:shimmer 1.4s ease-in-out infinite}
 .skelcard{display:grid;gap:12px;padding:16px;margin-bottom:8px}
@@ -158,7 +173,7 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
 <header>
   <!-- Back to Matter Builder, as Home Assistant's pages do: only when opened from the add-on -->
   <a class="icon-btn back" id="backBtn" href="#" aria-label="Back" hidden><svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2Z"/></svg></a>
-  <h1><span data-t="title"></span> <div class="sub" id="sys"></div></h1>
+  <h1><span data-t="title"></span><button type="button" class="viewer-badge" id="viewerBadge" data-t="viewerBadge"></button> <div class="sub" id="sys"></div></h1>
   <button class="icon-btn" id="menuBtn" aria-label="Menu"><svg><use href="#i-menu"/></svg></button>
   <div class="menu" id="menu">
     <button id="token" data-t="changePassword"></button>
@@ -176,15 +191,18 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
     <h3 id="loginTitle"></h3>
     <div class="sub" id="loginHelp"></div>
     <form id="loginForm" class="form" style="grid-template-columns:1fr">
-      <label class="field"><span id="passwordLabel"></span><input id="password" type="password" autocomplete="current-password"></label>
+      <label class="field" id="passwordField"><span id="passwordLabel"></span><input id="password" type="password" autocomplete="current-password"></label>
+      <div id="pinField" hidden><div class="sub" data-t="pinLabel"></div><div class="pinboxes" id="pinBoxes"></div><input type="hidden" id="pinInput"></div>
       <label class="field" id="repeatField" hidden><span data-t="repeatPassword"></span><input id="password2" type="password" autocomplete="new-password"></label>
       <div class="sub" id="loginError" style="color:var(--bad)"></div>
       <div class="features" style="margin-top:0"><button class="pri" type="submit" id="loginBtn"></button>
         <button type="button" id="loginCancel" data-t="cancel" hidden></button></div>
+      <button type="button" class="text" id="loginSwitch" hidden style="justify-self:start;padding:0"></button>
     </form>
   </div>
 </div>
 <div id="app">
+<div class="card" id="bootBanner" hidden role="status"><b id="bootTitle"></b><div class="sub" id="bootHelp"></div></div>
 <div class="section" id="cfgView" hidden>
   <div class="section-head"><h2 data-t="configMode"></h2></div>
   <div class="grid"><div class="card">
@@ -263,7 +281,7 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
         <pre id="network"></pre>
       </details>
     </div></details>
-    <details class="set" id="cfgCard">
+    <details class="set lockable" id="cfgCard">
       <summary><span id="cfgCardTitle"></span><span class="val"></span></summary><div class="body">
       <div class="sub" id="cfgCardHelp" data-t="configHelp"></div>
       <form id="wifiForm" class="form" style="grid-template-columns:1fr">
@@ -275,7 +293,7 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
           <button type="button" class="pri" id="cfgStart" data-t="configStart"></button></div>
       </form>
     </div></details>
-    <details class="set" id="threadCard" hidden>
+    <details class="set lockable" id="threadCard" hidden>
       <summary><span data-t="threadTitle"></span><span class="val"></span></summary><div class="body">
       <div class="sub" id="threadNow"></div>
       <details id="threadEdit" style="margin-top:8px"><summary data-t="threadChange"></summary>
@@ -286,11 +304,15 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
         </form>
       </details>
     </div></details>
-    <details class="set" id="accessCard" hidden>
+    <details class="set lockable" id="accessCard" hidden>
       <summary><span data-t="accessTitle"></span><span class="val"></span></summary><div class="body">
       <div class="sub" data-t="accessHelp"></div>
       <div class="sub" id="accessPending" style="margin-top:8px;color:var(--primary)" hidden></div>
       <div id="accessList" style="margin-top:4px"></div>
+      <form class="row owner-only" id="pinRow" hidden style="flex-wrap:wrap;gap:8px"><div class="label" style="flex:1 1 100%"><span data-t="pinSetting"></span>
+        <div class="sub" data-t="pinSettingHelp"></div><div class="sub" id="pinState"></div></div>
+        <label class="field short" style="width:140px"><span data-t="pinLabel"></span><input id="pinNew" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off"></label>
+        <button type="submit" data-t="pinSave"></button><button type="button" class="warn" id="pinRemove" data-t="pinRemove" hidden></button></form>
     </div></details>
     <details class="set" id="systemCard">
       <summary><span data-t="system"></span><span class="val"></span></summary><div class="body">
@@ -328,7 +350,7 @@ const TEXT = {
     title: 'Octo beds',
     network: 'Network', thread: 'Thread', wifi: 'Wi-Fi',
     pairLater: 'Add a bed first. The pairing code shows up here once a bed is connected, so the beds reach Home Assistant and Apple Home with their names.',
-    loginTitle: 'Sign in', loginHelp: "Enter the password of this bridge. Forgot it? Hold the BOOT button for 5 to 10 seconds and let go (or switch its power off and on 6 times, within 10 seconds each): the bridge opens its setup network, where you choose a new one.", password: 'Password', login: 'Sign in', wrongPassword: 'Wrong password.', stateIdle: 'Not connected', stateBusy: 'Connecting…', weakSignal: 'Weak signal: place the bridge closer to the bed.', changePassword: 'Change password', restart: 'Restart', language: 'Language',
+    loginTitle: 'Sign in', loginHelp: "Enter the password of this bridge. Forgot it? Switch its power off and on 6 times (within 10 seconds each), or choose “open the setup network” in the BOOT menu (hold BOOT 3 s, press twice, hold 3 s): the bridge opens its setup network, where you choose a new one.", password: 'Password', login: 'Sign in', wrongPassword: 'Wrong password.', stateIdle: 'Not connected', stateBusy: 'Connecting…', weakSignal: 'Weak signal: place the bridge closer to the bed.', changePassword: 'Change password', restart: 'Restart', language: 'Language',
     settings: 'Settings', pairingCode: 'Pairing code', openWindow: 'Open pairing window',
     deviceNetwork: 'Device and network', device: 'Device', vidPid: 'Vendor / product ID',
     testIds: 'Test IDs of the Matter standard', techTitle: 'Technical details', techFirmware: 'Firmware', techChip: 'Chip', techFlash: 'Flash', techMac: 'MAC address', techMemory: 'Memory (free · lowest · largest block)', techReset: 'Last restart', techSlots: 'Firmware slots', techNvs: 'Settings storage', techIdf: 'ESP-IDF', techNetwork: 'Network', techEntries: 'entries', techRunning: 'running', system: 'System', freeMemory: 'Free memory', uptime: 'Running',
@@ -367,7 +389,7 @@ const TEXT = {
     wizSkip: 'Skip', wizGo: 'Continue over Wi-Fi', wizMovingTitle: 'Switching to Wi-Fi…', wizSkipped: 'Skipped: everything works over Thread, but it can be slower.',
     resultPassword: c => `Last time the Wi-Fi password was refused (code ${c}). Check the password.`, resultNotFound: c => `Last time the Wi-Fi network was not found (code ${c}). Check the name: the bridge only uses 2.4 GHz.`, resultNoConnect: c => `Last time there was no Wi-Fi connection within a minute (code ${c}).`,
     windowOpen: 'Pairing window open', windowClosed: 'Pairing window closed',
-    shareOther: 'Share with another app', factoryReset: 'Factory reset…', factoryHelp: 'Erase every setting and start again', factoryConfirm: 'Erase every setting: network, Matter pairings, connections, password and programs. The device then opens its setup network. Continue?', shareHelp: 'Add this device to another app (Apple Home, Google Home, Alexa, another Home Assistant) with a one-time code; its own pairing code stays secret.', shareStart: 'Share device', shareCode: 'One-time code', shareLeft: s => `Valid for ${s}`, shareHow: 'Scan the QR code in the other app or enter the code. In Apple Home: + → Add Accessory → More options… → enter the code.', shareApple: 'Add to Apple Home', shareCopy: 'Copy code', shareCopied: 'Code copied', shareAppleHint: 'Code copied: in Apple Home choose More options… and enter it', shareStop: 'Stop sharing',
+    shareOther: 'Share with another app', factoryReset: 'Factory reset…', factoryHelp: 'Erase every setting and start again', factoryConfirm: 'Erase every setting: network, Matter pairings, connections, password and programs. The device then opens its setup network. Continue?', pinLabel: 'PIN', pinTitle: 'Quick access', pinHelp: 'Enter the PIN to look and operate. Changing settings needs the password.', usePassword: 'Sign in with the admin password', usePin: 'Use the PIN instead', wrongPin: 'Wrong PIN', pinLocked: 'Too many wrong tries: the PIN is locked for a while. Use the password.', unlockTitle: 'Password needed', unlockHelp: 'This changes the device: enter its password.', viewerBadge: 'Quick access · unlock', lockedVal: '•••• locked', pinSetting: 'Quick access PIN', pinSettingHelp: '4 to 6 digits to look at this page and operate what is connected; changes still need the password.', pinSave: 'Save PIN', pinRemove: 'Remove PIN', pinSaved: 'PIN saved', pinRemoved: 'PIN removed', pinIsSet: 'A PIN is set', pinNotSet: 'No PIN', bootOpen: (n, name) => `BOOT menu open: ${n} — ${name}`, bootHelp: 'Short press: next · hold 3 s: do it · closes by itself after 2 minutes', bootHoldMenu: 'Let go now: the BOOT menu opens', bootHoldAction: name => `Let go now: “${name}” is done`, bootHoldLong: 'Held past 10 s: letting go does nothing on a board without a status LED', menu1: 'Leave the menu', menu2: 'Restart', menu3: 'Open the setup network', menu4: 'Unpair every controller', menu5: 'Forget the network', shareHelp: 'Add this device to another app (Apple Home, Google Home, Alexa, another Home Assistant) with a one-time code; its own pairing code stays secret.', shareStart: 'Share device', shareCode: 'One-time code', shareLeft: s => `Valid for ${s}`, shareHow: 'Scan the QR code in the other app or enter the code. In Apple Home: + → Add Accessory → More options… → enter the code.', shareApple: 'Add to Apple Home', shareCopy: 'Copy code', shareCopied: 'Code copied', shareAppleHint: 'Code copied: in Apple Home choose More options… and enter it', shareStop: 'Stop sharing',
     pairExtra: 'For another controller (e.g. Apple Home): open the pairing window and scan the code within 5 minutes.',
     accessTitle: 'Programs with access', accessHelp: 'Programs such as the Home Assistant add-on get a key of their own. They ask with this password and need a press of the BOOT button.', accessNone: 'No programs linked.', accessPending: (n, s) => `${n} asks for access: press the BOOT button briefly (${s} s left).`, revoke: 'Revoke', confirmRevoke: n => `Revoke the access of ${n}?`, pairAfterConfig: 'Pairing works once the bridge is back on Thread.',
     pairFirst: 'Not paired yet. Scan the code in Home Assistant (Add Matter device) or in Apple Home.',
@@ -381,7 +403,7 @@ const TEXT = {
     title: 'Octo bedden',
     network: 'Netwerk', thread: 'Thread', wifi: 'Wi-Fi',
     pairLater: 'Voeg eerst een bed toe. De koppelcode verschijnt hier zodra een bed verbonden is, zodat de bedden met hun naam in Home Assistant en Apple Home komen.',
-    loginTitle: 'Inloggen', loginHelp: "Vul het wachtwoord van deze bridge in. Vergeten? Houd de BOOT-knop 5 tot 10 seconden ingedrukt en laat los (of zet de stroom 6 keer uit en aan, steeds binnen 10 seconden): de bridge opent zijn setup-netwerk, waar je een nieuw wachtwoord kiest.", password: 'Wachtwoord', login: 'Inloggen', wrongPassword: 'Onjuist wachtwoord.', stateIdle: 'Niet verbonden', stateBusy: 'Verbinden…', weakSignal: 'Zwak signaal: zet de bridge dichter bij het bed.', changePassword: 'Wachtwoord wijzigen', restart: 'Herstarten', language: 'Taal',
+    loginTitle: 'Inloggen', loginHelp: "Vul het wachtwoord van deze bridge in. Vergeten? Zet de stroom 6 keer uit en aan (steeds binnen 10 seconden), of kies „setup-netwerk openen” in het BOOT-menu (BOOT 3 s vasthouden, 2× drukken, 3 s vasthouden): de bridge opent zijn setup-netwerk, waar je een nieuw wachtwoord kiest.", password: 'Wachtwoord', login: 'Inloggen', wrongPassword: 'Onjuist wachtwoord.', stateIdle: 'Niet verbonden', stateBusy: 'Verbinden…', weakSignal: 'Zwak signaal: zet de bridge dichter bij het bed.', changePassword: 'Wachtwoord wijzigen', restart: 'Herstarten', language: 'Taal',
     settings: 'Instellingen', pairingCode: 'Koppelcode', openWindow: 'Koppelvenster openen',
     deviceNetwork: 'Apparaat en netwerk', device: 'Apparaat', vidPid: 'Vendor-/product-ID',
     testIds: "Test-ID's van de Matter-standaard", techTitle: 'Technische details', techFirmware: 'Firmware', techChip: 'Chip', techFlash: 'Flash', techMac: 'MAC-adres', techMemory: 'Geheugen (vrij · laagste · grootste blok)', techReset: 'Laatste herstart', techSlots: 'Firmware-slots', techNvs: 'Opslag instellingen', techIdf: 'ESP-IDF', techNetwork: 'Netwerk', techEntries: 'items', techRunning: 'actief', system: 'Systeem', freeMemory: 'Vrij geheugen', uptime: 'Actief',
@@ -420,7 +442,7 @@ const TEXT = {
     wizSkip: 'Overslaan', wizGo: 'Verder via Wi-Fi', wizMovingTitle: 'Overstappen naar Wi-Fi…', wizSkipped: 'Overgeslagen: alles werkt via Thread, maar dat kan langzamer gaan.',
     resultPassword: c => `Vorige keer werd het Wi-Fi-wachtwoord geweigerd (code ${c}). Controleer het wachtwoord.`, resultNotFound: c => `Vorige keer werd het Wi-Fi-netwerk niet gevonden (code ${c}). Controleer de naam: de bridge gebruikt alleen 2,4 GHz.`, resultNoConnect: c => `Vorige keer kwam er binnen een minuut geen Wi-Fi-verbinding (code ${c}).`,
     windowOpen: 'Koppelvenster open', windowClosed: 'Koppelvenster gesloten',
-    shareOther: 'Delen met andere app', factoryReset: 'Fabrieksreset…', factoryHelp: 'Alle instellingen wissen en opnieuw beginnen', factoryConfirm: 'Alle instellingen wissen: netwerk, Matter-koppelingen, aansluitingen, wachtwoord en programma’s. Het apparaat opent daarna zijn setup-netwerk. Doorgaan?', shareHelp: 'Voeg dit apparaat toe aan een andere app (Apple Home, Google Home, Alexa, nog een Home Assistant) met een eenmalige code; de eigen koppelcode blijft geheim.', shareStart: 'Apparaat delen', shareCode: 'Eenmalige code', shareLeft: s => `Geldig nog ${s}`, shareHow: 'Scan de QR-code in de andere app of voer de code in. In Apple Home: + → Accessoire toevoegen → Meer opties… → code invoeren.', shareApple: 'Toevoegen aan Apple Home', shareCopy: 'Code kopiëren', shareCopied: 'Code gekopieerd', shareAppleHint: 'Code gekopieerd: kies in Apple Home Meer opties… en voer hem in', shareStop: 'Stoppen met delen',
+    shareOther: 'Delen met andere app', factoryReset: 'Fabrieksreset…', factoryHelp: 'Alle instellingen wissen en opnieuw beginnen', factoryConfirm: 'Alle instellingen wissen: netwerk, Matter-koppelingen, aansluitingen, wachtwoord en programma’s. Het apparaat opent daarna zijn setup-netwerk. Doorgaan?', pinLabel: 'Pincode', pinTitle: 'Snelle toegang', pinHelp: 'Voer de pincode in om te kijken en te bedienen. Instellingen wijzigen vraagt het wachtwoord.', usePassword: 'Inloggen met het beheerderswachtwoord', usePin: 'Toch de pincode gebruiken', wrongPin: 'Verkeerde pincode', pinLocked: 'Te vaak fout: de pincode is even geblokkeerd. Gebruik het wachtwoord.', unlockTitle: 'Wachtwoord nodig', unlockHelp: 'Dit verandert het apparaat: voer het wachtwoord in.', viewerBadge: 'Snelle toegang · ontgrendelen', lockedVal: '•••• vergrendeld', pinSetting: 'Pincode voor snelle toegang', pinSettingHelp: '4 tot 6 cijfers om deze pagina te bekijken en te bedienen; wijzigen blijft het wachtwoord vragen.', pinSave: 'Pincode opslaan', pinRemove: 'Pincode verwijderen', pinSaved: 'Pincode opgeslagen', pinRemoved: 'Pincode verwijderd', pinIsSet: 'Pincode ingesteld', pinNotSet: 'Geen pincode', bootOpen: (n, name) => `BOOT-menu open: ${n} — ${name}`, bootHelp: 'Kort drukken: volgende · 3 s vasthouden: uitvoeren · sluit vanzelf na 2 minuten', bootHoldMenu: 'Nu loslaten: het BOOT-menu opent', bootHoldAction: name => `Nu loslaten: „${name}” wordt uitgevoerd`, bootHoldLong: 'Langer dan 10 s: loslaten doet niets op een bord zonder status-LED', menu1: 'Menu verlaten', menu2: 'Herstarten', menu3: 'Setup-netwerk openen', menu4: 'Alle controllers ontkoppelen', menu5: 'Netwerk vergeten', shareHelp: 'Voeg dit apparaat toe aan een andere app (Apple Home, Google Home, Alexa, nog een Home Assistant) met een eenmalige code; de eigen koppelcode blijft geheim.', shareStart: 'Apparaat delen', shareCode: 'Eenmalige code', shareLeft: s => `Geldig nog ${s}`, shareHow: 'Scan de QR-code in de andere app of voer de code in. In Apple Home: + → Accessoire toevoegen → Meer opties… → code invoeren.', shareApple: 'Toevoegen aan Apple Home', shareCopy: 'Code kopiëren', shareCopied: 'Code gekopieerd', shareAppleHint: 'Code gekopieerd: kies in Apple Home Meer opties… en voer hem in', shareStop: 'Stoppen met delen',
     pairExtra: 'Voor een extra controller (bijv. Apple Home): open het koppelvenster en scan de code binnen 5 minuten.',
     accessTitle: 'Programma’s met toegang', accessHelp: 'Programma’s zoals de Home Assistant-add-on krijgen een eigen sleutel. Ze vragen die aan met dit wachtwoord en een druk op de BOOT-knop.', accessNone: 'Geen programma’s gekoppeld.', accessPending: (n, s) => `${n} vraagt toegang: druk kort op de BOOT-knop (nog ${s} s).`, revoke: 'Intrekken', confirmRevoke: n => `Toegang van ${n} intrekken?`, pairAfterConfig: 'Koppelen kan zodra de bridge weer op Thread is.',
     pairFirst: 'Nog niet gekoppeld. Scan de code in Home Assistant (Matter-apparaat toevoegen) of in Apple Home.',
@@ -434,7 +456,7 @@ const TEXT = {
     title: 'Octo-Betten',
     network: 'Netzwerk', thread: 'Thread', wifi: 'WLAN',
     pairLater: 'Fügen Sie zuerst ein Bett hinzu. Der Kopplungscode erscheint hier, sobald ein Bett verbunden ist, damit die Betten mit ihrem Namen in Home Assistant und Apple Home ankommen.',
-    loginTitle: 'Anmelden', loginHelp: "Geben Sie das Passwort dieser Bridge ein. Vergessen? Halten Sie die BOOT-Taste 5 bis 10 Sekunden gedrückt und lassen Sie los (oder schalten Sie den Strom 6-mal aus und ein, jeweils innerhalb von 10 Sekunden): Die Bridge öffnet ihr Einrichtungsnetz, dort wählen Sie ein neues.", password: 'Passwort', login: 'Anmelden', wrongPassword: 'Falsches Passwort.', stateIdle: 'Nicht verbunden', stateBusy: 'Verbinde…', weakSignal: 'Schwaches Signal: Stellen Sie die Bridge näher ans Bett.', changePassword: 'Passwort ändern', restart: 'Neu starten', language: 'Sprache',
+    loginTitle: 'Anmelden', loginHelp: "Geben Sie das Passwort dieser Bridge ein. Vergessen? Schalten Sie den Strom 6-mal aus und ein (jeweils innerhalb von 10 Sekunden) oder wählen Sie „Setup-Netzwerk öffnen“ im BOOT-Menü (BOOT 3 s halten, 2× drücken, 3 s halten): Die Bridge öffnet ihr Einrichtungsnetz, dort wählen Sie ein neues.", password: 'Passwort', login: 'Anmelden', wrongPassword: 'Falsches Passwort.', stateIdle: 'Nicht verbunden', stateBusy: 'Verbinde…', weakSignal: 'Schwaches Signal: Stellen Sie die Bridge näher ans Bett.', changePassword: 'Passwort ändern', restart: 'Neu starten', language: 'Sprache',
     settings: 'Einstellungen', pairingCode: 'Kopplungscode', openWindow: 'Kopplungsfenster öffnen',
     deviceNetwork: 'Gerät und Netzwerk', device: 'Gerät', vidPid: 'Hersteller-/Produkt-ID',
     testIds: 'Test-IDs des Matter-Standards', techTitle: 'Technische Details', techFirmware: 'Firmware', techChip: 'Chip', techFlash: 'Flash', techMac: 'MAC-Adresse', techMemory: 'Speicher (frei · niedrigster · größter Block)', techReset: 'Letzter Neustart', techSlots: 'Firmware-Slots', techNvs: 'Einstellungsspeicher', techIdf: 'ESP-IDF', techNetwork: 'Netzwerk', techEntries: 'Einträge', techRunning: 'aktiv', system: 'System', freeMemory: 'Freier Speicher', uptime: 'Laufzeit',
@@ -473,7 +495,7 @@ const TEXT = {
     wizSkip: 'Überspringen', wizGo: 'Weiter über WLAN', wizMovingTitle: 'Wechsel zum WLAN…', wizSkipped: 'Übersprungen: Alles funktioniert über Thread, kann aber langsamer sein.',
     resultPassword: c => `Beim letzten Mal wurde das WLAN-Passwort abgelehnt (Code ${c}). Prüfen Sie das Passwort.`, resultNotFound: c => `Beim letzten Mal wurde das WLAN nicht gefunden (Code ${c}). Prüfen Sie den Namen: Die Bridge nutzt nur 2,4 GHz.`, resultNoConnect: c => `Beim letzten Mal kam innerhalb einer Minute keine WLAN-Verbindung zustande (Code ${c}).`,
     windowOpen: 'Kopplungsfenster offen', windowClosed: 'Kopplungsfenster geschlossen',
-    shareOther: 'Mit anderer App teilen', factoryReset: 'Werkseinstellungen…', factoryHelp: 'Alle Einstellungen löschen und neu beginnen', factoryConfirm: 'Alle Einstellungen löschen: Netzwerk, Matter-Kopplungen, Anschlüsse, Passwort und Programme. Danach öffnet das Gerät sein Setup-Netzwerk. Fortfahren?', shareHelp: 'Dieses Gerät mit einem Einmalcode zu einer anderen App hinzufügen (Apple Home, Google Home, Alexa, ein weiteres Home Assistant); der eigene Kopplungscode bleibt geheim.', shareStart: 'Gerät teilen', shareCode: 'Einmalcode', shareLeft: s => `Noch ${s} gültig`, shareHow: 'Den QR-Code in der anderen App scannen oder den Code eingeben. In Apple Home: + → Gerät hinzufügen → Weitere Optionen… → Code eingeben.', shareApple: 'Zu Apple Home hinzufügen', shareCopy: 'Code kopieren', shareCopied: 'Code kopiert', shareAppleHint: 'Code kopiert: in Apple Home Weitere Optionen… wählen und eingeben', shareStop: 'Teilen beenden',
+    shareOther: 'Mit anderer App teilen', factoryReset: 'Werkseinstellungen…', factoryHelp: 'Alle Einstellungen löschen und neu beginnen', factoryConfirm: 'Alle Einstellungen löschen: Netzwerk, Matter-Kopplungen, Anschlüsse, Passwort und Programme. Danach öffnet das Gerät sein Setup-Netzwerk. Fortfahren?', pinLabel: 'PIN', pinTitle: 'Schnellzugriff', pinHelp: 'PIN eingeben, um anzusehen und zu bedienen. Einstellungen ändern braucht das Passwort.', usePassword: 'Mit dem Admin-Passwort anmelden', usePin: 'Doch die PIN verwenden', wrongPin: 'Falsche PIN', pinLocked: 'Zu viele Fehlversuche: die PIN ist eine Weile gesperrt. Passwort verwenden.', unlockTitle: 'Passwort nötig', unlockHelp: 'Das ändert das Gerät: Passwort eingeben.', viewerBadge: 'Schnellzugriff · entsperren', lockedVal: '•••• gesperrt', pinSetting: 'PIN für Schnellzugriff', pinSettingHelp: '4 bis 6 Ziffern, um diese Seite anzusehen und zu bedienen; Änderungen brauchen weiter das Passwort.', pinSave: 'PIN speichern', pinRemove: 'PIN entfernen', pinSaved: 'PIN gespeichert', pinRemoved: 'PIN entfernt', pinIsSet: 'PIN gesetzt', pinNotSet: 'Keine PIN', bootOpen: (n, name) => `BOOT-Menü offen: ${n} — ${name}`, bootHelp: 'Kurz drücken: weiter · 3 s halten: ausführen · schließt nach 2 Minuten von selbst', bootHoldMenu: 'Jetzt loslassen: das BOOT-Menü öffnet sich', bootHoldAction: name => `Jetzt loslassen: „${name}“ wird ausgeführt`, bootHoldLong: 'Länger als 10 s: Loslassen tut nichts auf einer Platine ohne Status-LED', menu1: 'Menü verlassen', menu2: 'Neu starten', menu3: 'Setup-Netzwerk öffnen', menu4: 'Alle Controller entkoppeln', menu5: 'Netzwerk vergessen', shareHelp: 'Dieses Gerät mit einem Einmalcode zu einer anderen App hinzufügen (Apple Home, Google Home, Alexa, ein weiteres Home Assistant); der eigene Kopplungscode bleibt geheim.', shareStart: 'Gerät teilen', shareCode: 'Einmalcode', shareLeft: s => `Noch ${s} gültig`, shareHow: 'Den QR-Code in der anderen App scannen oder den Code eingeben. In Apple Home: + → Gerät hinzufügen → Weitere Optionen… → Code eingeben.', shareApple: 'Zu Apple Home hinzufügen', shareCopy: 'Code kopieren', shareCopied: 'Code kopiert', shareAppleHint: 'Code kopiert: in Apple Home Weitere Optionen… wählen und eingeben', shareStop: 'Teilen beenden',
     pairExtra: 'Für einen weiteren Controller (z. B. Apple Home): Kopplungsfenster öffnen und den Code innerhalb von 5 Minuten scannen.',
     accessTitle: 'Programme mit Zugriff', accessHelp: 'Programme wie das Home-Assistant-Add-on erhalten einen eigenen Schlüssel. Sie fragen mit diesem Passwort und einem Druck auf die BOOT-Taste an.', accessNone: 'Keine Programme verbunden.', accessPending: (n, s) => `${n} bittet um Zugriff: BOOT-Taste kurz drücken (noch ${s} s).`, revoke: 'Entziehen', confirmRevoke: n => `Zugriff von ${n} entziehen?`, pairAfterConfig: 'Koppeln geht, sobald die Bridge wieder im Thread-Netz ist.',
     pairFirst: 'Noch nicht gekoppelt. Scannen Sie den Code in Home Assistant (Matter-Gerät hinzufügen) oder in Apple Home.',
@@ -487,7 +509,7 @@ const TEXT = {
     title: 'Camas Octo',
     network: 'Red', thread: 'Thread', wifi: 'Wi-Fi',
     pairLater: 'Añada primero una cama. El código de vinculación aparece aquí cuando una cama esté conectada, para que las camas lleguen a Home Assistant y Apple Home con su nombre.',
-    loginTitle: 'Iniciar sesión', loginHelp: "Introduzca la contraseña de este puente. ¿La olvidó? Mantenga pulsado el botón BOOT de 5 a 10 segundos y suéltelo (o corte y dé la corriente 6 veces, cada vez en menos de 10 segundos): el puente abre su red de configuración, donde elige una nueva.", password: 'Contraseña', login: 'Entrar', wrongPassword: 'Contraseña incorrecta.', stateIdle: 'No conectada', stateBusy: 'Conectando…', weakSignal: 'Señal débil: acerque el puente a la cama.', changePassword: 'Cambiar contraseña', restart: 'Reiniciar', language: 'Idioma',
+    loginTitle: 'Iniciar sesión', loginHelp: "Introduzca la contraseña de este puente. ¿La olvidó? Corte y dé la corriente 6 veces (cada vez en menos de 10 segundos) o elija «abrir la red de configuración» en el menú BOOT (mantener BOOT 3 s, pulsar 2 veces, mantener 3 s): el puente abre su red de configuración, donde elige una nueva.", password: 'Contraseña', login: 'Entrar', wrongPassword: 'Contraseña incorrecta.', stateIdle: 'No conectada', stateBusy: 'Conectando…', weakSignal: 'Señal débil: acerque el puente a la cama.', changePassword: 'Cambiar contraseña', restart: 'Reiniciar', language: 'Idioma',
     settings: 'Ajustes', pairingCode: 'Código de vinculación', openWindow: 'Abrir ventana de vinculación',
     deviceNetwork: 'Dispositivo y red', device: 'Dispositivo', vidPid: 'ID de fabricante / producto',
     testIds: 'IDs de prueba del estándar Matter', techTitle: 'Detalles técnicos', techFirmware: 'Firmware', techChip: 'Chip', techFlash: 'Flash', techMac: 'Dirección MAC', techMemory: 'Memoria (libre · mínima · bloque mayor)', techReset: 'Último reinicio', techSlots: 'Ranuras de firmware', techNvs: 'Almacén de ajustes', techIdf: 'ESP-IDF', techNetwork: 'Red', techEntries: 'entradas', techRunning: 'activa', system: 'Sistema', freeMemory: 'Memoria libre', uptime: 'Activo',
@@ -526,7 +548,7 @@ const TEXT = {
     wizSkip: 'Omitir', wizGo: 'Seguir por Wi-Fi', wizMovingTitle: 'Cambiando a Wi-Fi…', wizSkipped: 'Omitido: todo funciona por Thread, pero puede ir más lento.',
     resultPassword: c => `La última vez se rechazó la contraseña Wi-Fi (código ${c}). Revisa la contraseña.`, resultNotFound: c => `La última vez no se encontró la red Wi-Fi (código ${c}). Revisa el nombre: el puente solo usa 2,4 GHz.`, resultNoConnect: c => `La última vez no hubo conexión Wi-Fi en un minuto (código ${c}).`,
     windowOpen: 'Ventana de vinculación abierta', windowClosed: 'Ventana de vinculación cerrada',
-    shareOther: 'Compartir con otra app', factoryReset: 'Restablecer de fábrica…', factoryHelp: 'Borrar todos los ajustes y empezar de nuevo', factoryConfirm: 'Borrar todos los ajustes: red, vinculaciones Matter, conexiones, contraseña y programas. Después el dispositivo abre su red de configuración. ¿Continuar?', shareHelp: 'Añada este dispositivo a otra app (Apple Home, Google Home, Alexa, otro Home Assistant) con un código de un solo uso; su propio código de vinculación sigue siendo secreto.', shareStart: 'Compartir dispositivo', shareCode: 'Código de un solo uso', shareLeft: s => `Válido ${s} más`, shareHow: 'Escanee el código QR en la otra app o introduzca el código. En Apple Home: + → Añadir accesorio → Más opciones… → introducir el código.', shareApple: 'Añadir a Apple Home', shareCopy: 'Copiar código', shareCopied: 'Código copiado', shareAppleHint: 'Código copiado: en Apple Home elija Más opciones… e introdúzcalo', shareStop: 'Dejar de compartir',
+    shareOther: 'Compartir con otra app', factoryReset: 'Restablecer de fábrica…', factoryHelp: 'Borrar todos los ajustes y empezar de nuevo', factoryConfirm: 'Borrar todos los ajustes: red, vinculaciones Matter, conexiones, contraseña y programas. Después el dispositivo abre su red de configuración. ¿Continuar?', pinLabel: 'PIN', pinTitle: 'Acceso rápido', pinHelp: 'Introduzca el PIN para ver y manejar. Cambiar ajustes requiere la contraseña.', usePassword: 'Entrar con la contraseña de administrador', usePin: 'Usar el PIN', wrongPin: 'PIN incorrecto', pinLocked: 'Demasiados intentos fallidos: el PIN está bloqueado un rato. Use la contraseña.', unlockTitle: 'Contraseña necesaria', unlockHelp: 'Esto cambia el dispositivo: introduzca su contraseña.', viewerBadge: 'Acceso rápido · desbloquear', lockedVal: '•••• bloqueado', pinSetting: 'PIN de acceso rápido', pinSettingHelp: 'De 4 a 6 cifras para ver esta página y manejar lo conectado; los cambios siguen pidiendo la contraseña.', pinSave: 'Guardar PIN', pinRemove: 'Quitar PIN', pinSaved: 'PIN guardado', pinRemoved: 'PIN quitado', pinIsSet: 'PIN establecido', pinNotSet: 'Sin PIN', bootOpen: (n, name) => `Menú BOOT abierto: ${n} — ${name}`, bootHelp: 'Pulsación corta: siguiente · mantener 3 s: ejecutar · se cierra solo a los 2 minutos', bootHoldMenu: 'Soltar ahora: se abre el menú BOOT', bootHoldAction: name => `Soltar ahora: se ejecuta «${name}»`, bootHoldLong: 'Más de 10 s: soltar no hace nada en una placa sin LED de estado', menu1: 'Salir del menú', menu2: 'Reiniciar', menu3: 'Abrir la red de configuración', menu4: 'Desvincular todos los controladores', menu5: 'Olvidar la red', shareHelp: 'Añada este dispositivo a otra app (Apple Home, Google Home, Alexa, otro Home Assistant) con un código de un solo uso; su propio código de vinculación sigue siendo secreto.', shareStart: 'Compartir dispositivo', shareCode: 'Código de un solo uso', shareLeft: s => `Válido ${s} más`, shareHow: 'Escanee el código QR en la otra app o introduzca el código. En Apple Home: + → Añadir accesorio → Más opciones… → introducir el código.', shareApple: 'Añadir a Apple Home', shareCopy: 'Copiar código', shareCopied: 'Código copiado', shareAppleHint: 'Código copiado: en Apple Home elija Más opciones… e introdúzcalo', shareStop: 'Dejar de compartir',
     pairExtra: 'Para otro controlador (p. ej. Apple Home): abra la ventana de vinculación y escanee el código en 5 minutos.',
     accessTitle: 'Programas con acceso', accessHelp: 'Programas como el complemento de Home Assistant reciben una clave propia. La piden con esta contraseña y una pulsación del botón BOOT.', accessNone: 'Ningún programa vinculado.', accessPending: (n, s) => `${n} pide acceso: pulse brevemente el botón BOOT (quedan ${s} s).`, revoke: 'Revocar', confirmRevoke: n => `¿Revocar el acceso de ${n}?`, pairAfterConfig: 'La vinculación funciona cuando el puente vuelva a Thread.',
     pairFirst: 'Aún no vinculado. Escanee el código en Home Assistant (Añadir dispositivo Matter) o en Apple Home.',
@@ -580,26 +602,32 @@ function toast(text) {
 // The same card chooses the first password ('setup') or a new one ('change').
 let signedIn = false, loginMode = 'login';
 function renderLogin() {
-  const choose = loginMode !== 'login';
-  $('#loginTitle').textContent = t(loginMode === 'setup' ? 'setupTitle' : loginMode === 'change' ? 'changeTitle' : 'loginTitle');
-  $('#loginHelp').textContent = loginMode === 'setup' ? t('setupHelp') : loginMode === 'change' ? '' : t('loginHelp');
+  const choose = loginMode === 'setup' || loginMode === 'change';
+  const pinMode = loginMode === 'pin';
+  $('#passwordField').hidden = pinMode;
+  $('#pinField').hidden = !pinMode;
+  $('#loginSwitch').hidden = !pinAvailable || choose || loginMode === 'unlock';
+  $('#loginSwitch').textContent = t(pinMode ? 'usePassword' : 'usePin');
+  $('#loginTitle').textContent = t(loginMode === 'setup' ? 'setupTitle' : loginMode === 'change' ? 'changeTitle' : pinMode ? 'pinTitle' : loginMode === 'unlock' ? 'unlockTitle' : 'loginTitle');
+  $('#loginHelp').textContent = loginMode === 'setup' ? t('setupHelp') : loginMode === 'change' ? '' : pinMode ? t('pinHelp') : loginMode === 'unlock' ? t('unlockHelp') : t('loginHelp');
   $('#passwordLabel').textContent = t(choose ? 'newPassword' : 'password');
   $('#loginBtn').textContent = t(choose ? 'save' : 'login');
   $('#repeatField').hidden = !choose;
-  $('#loginCancel').hidden = loginMode !== 'change';
+  $('#loginCancel').hidden = loginMode !== 'change' && loginMode !== 'unlock';
   $('#password').autocomplete = choose ? 'new-password' : 'current-password';
 }
 function showLogin(error, mode = 'login') {
-  if (mode !== 'change') signedIn = false;
+  if (mode !== 'change' && mode !== 'unlock') signedIn = false;
   ready();
   loginMode = mode;
   renderLogin();
   $('#login').hidden = false;
   $('#app').hidden = true;
-  $('#loginError').textContent = error === true ? t('wrongPassword') : error || '';
+  $('#loginError').textContent = error === true ? t(mode === 'pin' ? 'wrongPin' : 'wrongPassword') : error || '';
   $('#password').value = '';
   $('#password2').value = '';
-  $('#password').focus();
+  $('#pinInput').value = '';
+  if (mode === 'pin') renderPinBoxes().focus(); else $('#password').focus();
 }
 function signedInOk() {
   if (signedIn) return;
@@ -659,17 +687,85 @@ function boot(first, rest) {
   });
 }
 
+
+// Quick access with the PIN (a viewer): look and operate what is connected;
+// the device itself leaves out what is sensitive and refuses changes, and
+// the page asks for the password when something would change
+let pinCode = '', viewer = false, pinAvailable = false;
+try { pinCode = localStorage.getItem('octoPinToken') || ''; } catch (e) {}
+function keepPin(value) {
+  pinCode = value;
+  try { if (value) localStorage.setItem('octoPinToken', value); else localStorage.removeItem('octoPinToken'); } catch (err) {}
+}
+function setViewer(on) {
+  viewer = on;
+  document.body.classList.toggle('viewer', on);
+  document.querySelectorAll('details.set.lockable').forEach(d => {
+    d.querySelector(':scope > summary .val').dataset.locked = t('lockedVal');
+    if (on) d.open = false;
+  });
+}
+// A change asked for with only the PIN: the password, then the change again
+function askPassword() { showLogin(false, 'unlock'); }
+document.addEventListener('toggle', e => {
+  const d = e.target;
+  if (viewer && d.open && d.classList && d.classList.contains('lockable')) { d.open = false; askPassword(); }
+}, true);
+
+// The BOOT button's menu, as the device reports it: which action is open, and
+// what letting go of a held press would do (also without a status LED)
+const BOOT_MENU = ['', 'menu1', 'menu2', 'menu3', 'menu4', 'menu5'];
+function renderBoot(st) {
+  const menu = st && st.menu || 0, hold = st && st.hold || 0;
+  $('#bootBanner').hidden = !menu && !hold;
+  if (!menu && !hold) return;
+  const name = n => t(BOOT_MENU[n] || 'menu1');
+  $('#bootTitle').textContent = hold === 2 ? t('bootHoldLong') : hold === 1 ? (menu ? t('bootHoldAction', name(menu)) : t('bootHoldMenu')) : t('bootOpen', menu, name(menu));
+  $('#bootHelp').textContent = menu && hold !== 2 ? t('bootHelp') : '';
+}
+
+// The PIN as a box per digit (the device says how many, 4 to 6). One real
+// input takes every digit, also typed fast, pasted or filled in by the phone;
+// the boxes show a dot per digit and where the next one goes
+let pinLength = 4;
+function renderPinBoxes() {
+  const holder = $('#pinBoxes');
+  holder.innerHTML = '<span></span>'.repeat(pinLength) +
+    `<input id="pinTyped" inputmode="numeric" pattern="[0-9]*" maxlength="${pinLength}" autocomplete="one-time-code" aria-label="${esc(t('pinLabel'))}">`;
+  const input = $('#pinTyped'), boxes = [...holder.querySelectorAll('span')];
+  const show = () => {
+    input.value = input.value.replace(/\D/g, '').slice(0, pinLength);
+    boxes.forEach((b, i) => { b.textContent = i < input.value.length ? '•' : ''; b.classList.toggle('on', i === Math.min(input.value.length, pinLength - 1)); });
+    $('#pinInput').value = input.value;
+    if (input.value.length === pinLength) $('#loginForm').requestSubmit();  // all filled: sign in
+  };
+  input.addEventListener('input', show);
+  show();
+  return input;
+}
 async function cmd(line) {
-  const r = await track(fetch('cmd', {method: 'POST', headers: {'X-Octo-Token': token}, body: line}));
+  const byUser = !!pressed;  // a press: worth asking for the password; a background refresh is not
+  const headers = token ? {'X-Octo-Token': token} : pinCode ? {'X-Octo-Pin': pinCode} : {};
+  const r = await track(fetch('cmd', {method: 'POST', headers, body: line}));
   const text = await r.text();
-  if (r.status === 401) { showLogin(!text.startsWith('no password') && !!token, text.startsWith('no password') ? 'setup' : 'login'); throw new Error(t('passwordRefused')); }
+  if (r.status === 429) { toast(t('pinLocked')); throw new Error(t('pinLocked')); }
+  if (r.status === 403 && !token && pinCode) {
+    if (byUser) askPassword();
+    const err = new Error(text.trim()); err.needsPassword = true; throw err;
+  }
+  if (r.status === 401) {
+    if (!token && pinCode) { keepPin(''); showLogin(true, 'pin'); throw new Error(t('wrongPin')); }
+    showLogin(!text.startsWith('no password') && !!token, text.startsWith('no password') ? 'setup' : pinAvailable ? 'pin' : 'login');
+    throw new Error(t('passwordRefused'));
+  }
   signedInOk();
   return text;
 }
 
+// true when it worked; the password being asked for needs no error message too
 async function run(line) {
-  try { toast((await cmd(line)).trim() || 'OK'); refresh(); }
-  catch (e) { toast(t('error') + ': ' + e.message); }
+  try { toast((await cmd(line)).trim() || 'OK'); refresh(); return true; }
+  catch (e) { if (!e.needsPassword) toast(t('error') + ': ' + e.message); return false; }
 }
 
 // Shown the Home Assistant way: 0 % flat, 100 % fully raised
@@ -832,6 +928,7 @@ async function refresh() {
   refreshing = true;
   try {
     state = JSON.parse(await cmd('json'));
+    renderBoot(state.status);
     showConfigMode(state.config_mode);
     if (state.config_mode) presets = null;
     // A request that fails now and then (Thread) keeps the positions it had
@@ -1032,9 +1129,9 @@ async function loadTech() {
     [t('techChip'), `${chips[s.chip] || s.chip} ${s.revision} · ${s.cores}× ${s.mhz} MHz`],
     [t('techNetwork'), (s.network === 'thread' ? 'Thread' : 'Wi-Fi') + (s.net ? '\n' + netDetail(s.net) : '')],
     [t('techFlash'), Math.round(s.flash / 1048576) + ' MB'],
-    [t('techMac'), s.mac],
+    [t('techMac'), s.mac || '••••'],
     [t('techMemory'), `${kb(s.heap)} · ${kb(s.heap_min)} · ${kb(s.heap_block)}`],
-    [t('techReset'), s.reset],
+    [t('techReset'), s.why ? `${s.why} (${s.reset})` : s.reset],
     [t('techSlots'), `${slot(s.running)} (${t('techRunning')})\n${slot(s.other)}`],
     [t('techNvs'), `${s.nvs_used} / ${s.nvs_total} ${t('techEntries')}`],
     [t('techIdf'), s.idf],
@@ -1047,6 +1144,7 @@ $('#systemCard').addEventListener('toggle', () => { if ($('#systemCard').open) l
 // Programs with a token of their own (the Home Assistant add-on, scripts)
 let access = null;
 async function loadAccess() {
+  if (viewer) return;
   try { access = JSON.parse(await cmd('access json')); } catch (e) { return; }
   $('#accessCard').hidden = false;
   $('#accessPending').hidden = !access.pending;
@@ -1082,6 +1180,7 @@ document.addEventListener('click', closeMenus);
 $('#reboot').onclick = () => { if (confirm(t('confirmRestart'))) run('reboot'); };
 $('#token').onclick = () => { closeMenus(); showLogin(false, 'change'); };
 $('#loginCancel').onclick = () => { $('#login').hidden = true; $('#app').hidden = false; };
+$('#loginSwitch').onclick = () => showLogin(false, loginMode === 'pin' ? 'login' : 'pin');
 $('#openWindow').onclick = async () => { await run('matter open'); loadMatter(); };
 $('#lang').onchange = async () => {
   lang = $('#lang').value;
@@ -1138,6 +1237,7 @@ function updateWizard(w) {
 }
 
 async function loadWifi() {
+  if (viewer) return;
   try {
     const w = JSON.parse(await cmd('wifi json'));
     wifiHost = w.host;
@@ -1160,6 +1260,7 @@ let wifiInfo = null;
 
 // The Thread network (ESP32-C6 only: the classic ESP32 has no "thread" command)
 async function loadThread() {
+  if (viewer) return;
   let th;
   try { th = JSON.parse(await cmd('thread json')); } catch (e) { return; }
   $('#threadCard').hidden = false;
@@ -1321,7 +1422,30 @@ $('#otaForm').onsubmit = e => {
 applyLanguage();
 $('#sys').textContent = t('connecting');
 if (window.mbBack) { $('#backBtn').href = window.mbBack; $('#backBtn').hidden = false; }
-function startApp() { boot(refresh, [loadMatter, loadWifi, loadThread, loadAccess, loadLanguage]); }
+
+// The PIN for quick access, set with the password
+async function loadPin() {
+  if (viewer) return;
+  let p;
+  try { p = JSON.parse(await cmd('pin json')); } catch (e) { return; }
+  $('#pinRow').hidden = false;
+  $('#pinState').textContent = p.set ? t('pinIsSet') : t('pinNotSet');
+  $('#pinRemove').hidden = !p.set;
+}
+$('#pinRow').onsubmit = async e => {
+  e.preventDefault();
+  const reply = (await cmd('pin set ' + $('#pinNew').value.trim())).trim();
+  toast(reply === 'ok' ? t('pinSaved') : reply.replace(/^error: /, ''));
+  if (reply === 'ok') $('#pinNew').value = '';
+  loadPin();
+};
+$('#pinRemove').onclick = async () => {
+  const reply = (await cmd('pin clear')).trim();
+  toast(reply === 'ok' ? t('pinRemoved') : reply);
+  loadPin();
+};
+$('#viewerBadge').onclick = askPassword;
+function startApp() { setViewer(!token && !!pinCode); boot(refresh, [loadMatter, loadWifi, loadThread, loadAccess, loadLanguage, loadPin]); }
 function keepToken(value) {
   token = value;
   try { localStorage.setItem('octoToken', token); } catch (err) {}
@@ -1344,20 +1468,27 @@ async function choosePassword(value) {
 }
 $('#loginForm').onsubmit = e => {
   e.preventDefault();
+  if (loginMode === 'pin') { keepPin($('#pinInput').value.trim()); startApp(); return; }
   const value = $('#password').value.trim();
-  if (loginMode !== 'login') { choosePassword(value); return; }
+  if (loginMode === 'setup' || loginMode === 'change') { choosePassword(value); return; }
   keepToken(value);
+  if (loginMode === 'unlock') { showApp(); }
   startApp();
 };
 // A bridge without a password asks for one first; older firmware has no /auth
 (async () => {
   try {
     const r = await fetch('auth');
-    if (r.ok && !(await r.json()).password) { showLogin(false, 'setup'); return; }
+    const a = r.ok ? await r.json() : {password: true};
+    if (!a.password) { showLogin(false, 'setup'); return; }
+    pinAvailable = !!a.pin;
+    if (a.pin >= 4 && a.pin <= 6) pinLength = a.pin;
   } catch (e) {}
-  if (!token) showLogin(false);
-  else startApp();
+  if (token || (pinAvailable && pinCode)) startApp();
+  else showLogin(false, pinAvailable ? 'pin' : 'login');
 })();
+// While the BOOT menu is open or the button is held: every second
+setInterval(() => { if (!document.hidden && signedIn && state && state.status && (state.status.menu || state.status.hold)) refresh(); }, 1000);
 setInterval(() => { if (!document.hidden && signedIn) refresh(); }, 3000);
 setInterval(() => { if (!document.hidden && signedIn) loadMatter(); }, 30000);
 // A waiting link request counts down; otherwise a slow check is enough

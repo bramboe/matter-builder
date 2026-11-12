@@ -75,6 +75,21 @@ button.pri.busy::after{border-color:#fff;border-right-color:transparent}
 .membar{height:6px;max-width:220px;margin-top:6px;border-radius:3px;background:var(--fill);overflow:hidden}
 .membar i{display:block;height:100%;background:var(--primary);transition:width .4s}
 .membar.low i{background:var(--bad)}
+
+/* Quick access with the PIN: what needs the password is masked and locked */
+body.viewer .settings details.set.lockable > summary .val{visibility:hidden}
+body.viewer .settings details.set.lockable > summary .val::before{content:attr(data-locked);visibility:visible}
+body.viewer .settings details.set.lockable > .body{display:none}
+body.viewer .owner-only,body.viewer #pairing,body.viewer #shareBox,body.viewer #blePairingRow,body.viewer #factoryReset{display:none!important}
+.viewer-badge{display:none;margin-left:8px;padding:2px 10px;border-radius:12px;background:var(--chip);color:var(--primary);font-size:12px;font-weight:500;cursor:pointer;border:0}
+body.viewer .viewer-badge{display:inline-block}
+#bootBanner{margin:12px 0 4px;border-color:var(--primary);background:color-mix(in srgb,var(--primary) 8%,var(--card))}
+#bootBanner b{font-weight:500}
+.pinboxes{position:relative;display:flex;gap:8px;margin:4px 0}
+.pinboxes span{display:grid;place-items:center;width:44px;height:52px;border-bottom:2px solid var(--mute);border-radius:4px 4px 0 0;background:var(--fill);font-size:22px}
+.pinboxes span.on{border-bottom-color:var(--primary)}
+/* The real input lies over the boxes, invisible: every key, paste and autofill lands in it */
+.pinboxes input{position:absolute;inset:0;width:100%;height:100%;opacity:0;border:0;padding:0;font-size:16px;letter-spacing:40px;caret-color:transparent}
 /* Until an answer is in: the shape of what comes (cards, values) instead of empty space */
 .skel{display:block;height:12px;border-radius:6px;background:linear-gradient(90deg,var(--fill) 25%,var(--line) 50%,var(--fill) 75%);background-size:300% 100%;animation:shimmer 1.4s ease-in-out infinite}
 .skelrow{display:flex;align-items:center;gap:12px;padding:14px 16px}
@@ -188,7 +203,7 @@ dialog > .card{border:0;padding:16px 20px}
 <header>
   <!-- Back to Matter Builder, as Home Assistant's pages do: only when opened from the add-on -->
   <a class="icon-btn back" id="backBtn" href="#" aria-label="Back" hidden><svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2Z"/></svg></a>
-  <h1><span data-t="title"></span> <div class="sub" id="sys"></div></h1>
+  <h1><span data-t="title"></span><button type="button" class="viewer-badge" id="viewerBadge" data-t="viewerBadge"></button> <div class="sub" id="sys"></div></h1>
   <button class="icon-btn" id="menuBtn" aria-label="Menu"><svg><use href="#i-menu"/></svg></button>
   <div class="menu" id="menu">
     <button id="token" data-t="changePassword"></button>
@@ -203,15 +218,18 @@ dialog > .card{border:0;padding:16px 20px}
     <h3 id="loginTitle"></h3>
     <div class="sub" id="loginHelp"></div>
     <form id="loginForm" class="form" style="grid-template-columns:1fr">
-      <label class="field"><span id="passwordLabel"></span><input id="password" type="password" autocomplete="current-password"></label>
+      <label class="field" id="passwordField"><span id="passwordLabel"></span><input id="password" type="password" autocomplete="current-password"></label>
+      <div id="pinField" hidden><div class="sub" data-t="pinLabel"></div><div class="pinboxes" id="pinBoxes"></div><input type="hidden" id="pinInput"></div>
       <label class="field" id="repeatField" hidden><span data-t="repeatPassword"></span><input id="password2" type="password" autocomplete="new-password"></label>
       <div class="sub" id="loginError" style="color:var(--bad)"></div>
       <div class="features" style="margin-top:0"><button class="pri" type="submit" id="loginBtn"></button>
         <button type="button" id="loginCancel" data-t="cancel" hidden></button></div>
+      <button type="button" class="text" id="loginSwitch" hidden style="justify-self:start;padding:0"></button>
     </form>
   </div>
 </div>
 <div id="app">
+<div class="card" id="bootBanner" hidden role="status"><b id="bootTitle"></b><div class="sub" id="bootHelp"></div></div>
 <div class="section" id="cfgView" hidden>
   <div class="section-head"><h2 data-t="configMode"></h2></div>
   <div class="grid"><div class="card">
@@ -355,7 +373,7 @@ dialog > .card{border:0;padding:16px 20px}
         <pre id="network"></pre>
       </details>
     </div></details>
-    <details class="set" id="cfgCard">
+    <details class="set lockable" id="cfgCard">
       <summary><span id="cfgCardTitle"></span><span class="val"></span></summary><div class="body">
       <div class="sub" id="cfgCardHelp" data-t="configHelp"></div>
       <form id="wifiForm" class="form" style="grid-template-columns:1fr">
@@ -396,7 +414,7 @@ dialog > .card{border:0;padding:16px 20px}
     </div>
   </div>
     </div></details>
-    <details class="set" id="threadCard" hidden>
+    <details class="set lockable" id="threadCard" hidden>
       <summary><span data-t="threadTitle"></span><span class="val"></span></summary><div class="body">
       <div class="sub" id="threadNow"></div>
       <details id="threadEdit" style="margin-top:8px"><summary data-t="threadChange"></summary>
@@ -407,11 +425,15 @@ dialog > .card{border:0;padding:16px 20px}
         </form>
       </details>
     </div></details>
-    <details class="set" id="accessCard" hidden>
+    <details class="set lockable" id="accessCard" hidden>
       <summary><span data-t="accessTitle"></span><span class="val"></span></summary><div class="body">
       <div class="sub" data-t="accessHelp"></div>
       <div class="sub" id="accessPending" style="margin-top:8px;color:var(--primary)" hidden></div>
       <div id="accessList" style="margin-top:4px"></div>
+      <form class="row owner-only" id="pinRow" hidden style="flex-wrap:wrap;gap:8px"><div class="label" style="flex:1 1 100%"><span data-t="pinSetting"></span>
+        <div class="sub" data-t="pinSettingHelp"></div><div class="sub" id="pinState"></div></div>
+        <label class="field short" style="width:140px"><span data-t="pinLabel"></span><input id="pinNew" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off"></label>
+        <button type="submit" data-t="pinSave"></button><button type="button" class="warn" id="pinRemove" data-t="pinRemove" hidden></button></form>
     </div></details>
     <details class="set" id="nameCard">
       <summary><span data-t="deviceNameTitle"></span><span class="val"></span></summary><div class="body">
@@ -484,7 +506,7 @@ const TEXT = {
   threadBad: 'This is not a Thread dataset. Copy the whole hex text from Home Assistant.',
   network: 'Network', thread: 'Thread', wifi: 'Wi-Fi',
   loginTitle: 'Sign in',
-  loginHelp: 'Enter the password of this device. Forgot it? Hold the BOOT button for 5 to 10 seconds and let go (or switch its power off and on 6 times, within 10 seconds each): the device opens its setup network, where you choose a new one.',
+  loginHelp: 'Enter the password of this device. Forgot it? Switch its power off and on 6 times (within 10 seconds each), or choose “open the setup network” in the BOOT menu (hold BOOT 3 s, press twice, hold 3 s): the device opens its setup network, where you choose a new one.',
   password: 'Password', login: 'Sign in', wrongPassword: 'Wrong password.', changePassword: 'Change password', restart: 'Restart',
   settings: 'Settings', pairingCode: 'Pairing code', openWindow: 'Open pairing window',
   deviceNetwork: 'Device and network', device: 'Device', vidPid: 'Vendor / product ID',
@@ -514,7 +536,7 @@ const TEXT = {
   resultNotFound: c => `Last time the Wi-Fi network was not found (code ${c}). Check the name: the device only uses 2.4 GHz.`,
   resultNoConnect: c => `Last time there was no Wi-Fi connection within a minute (code ${c}).`,
   windowOpen: 'Pairing window open', windowClosed: 'Pairing window closed',
-  shareOther: 'Share with another app', factoryReset: 'Factory reset…', factoryHelp: 'Erase every setting and start again', factoryConfirm: 'Erase every setting: network, Matter pairings, connections, password and programs. The device then opens its setup network. Continue?', shareHelp: 'Add this device to another app (Apple Home, Google Home, Alexa, another Home Assistant) with a one-time code; its own pairing code stays secret.', shareStart: 'Share device', shareCode: 'One-time code', shareLeft: s => `Valid for ${s}`, shareHow: 'Scan the QR code in the other app or enter the code. In Apple Home: + → Add Accessory → More options… → enter the code.', shareApple: 'Add to Apple Home', shareCopy: 'Copy code', shareCopied: 'Code copied', shareAppleHint: 'Code copied: in Apple Home choose More options… and enter it', shareStop: 'Stop sharing',
+  shareOther: 'Share with another app', factoryReset: 'Factory reset…', factoryHelp: 'Erase every setting and start again', factoryConfirm: 'Erase every setting: network, Matter pairings, connections, password and programs. The device then opens its setup network. Continue?', pinLabel: 'PIN', pinTitle: 'Quick access', pinHelp: 'Enter the PIN to look and operate. Changing settings needs the password.', usePassword: 'Sign in with the admin password', usePin: 'Use the PIN instead', wrongPin: 'Wrong PIN', pinLocked: 'Too many wrong tries: the PIN is locked for a while. Use the password.', unlockTitle: 'Password needed', unlockHelp: 'This changes the device: enter its password.', viewerBadge: 'Quick access · unlock', lockedVal: '•••• locked', pinSetting: 'Quick access PIN', pinSettingHelp: '4 to 6 digits to look at this page and operate what is connected; changes still need the password.', pinSave: 'Save PIN', pinRemove: 'Remove PIN', pinSaved: 'PIN saved', pinRemoved: 'PIN removed', pinIsSet: 'A PIN is set', pinNotSet: 'No PIN', bootOpen: (n, name) => `BOOT menu open: ${n} — ${name}`, bootHelp: 'Short press: next · hold 3 s: do it · closes by itself after 2 minutes', bootHoldMenu: 'Let go now: the BOOT menu opens', bootHoldAction: name => `Let go now: “${name}” is done`, bootHoldLong: 'Held past 10 s: letting go does nothing on a board without a status LED', menu1: 'Leave the menu', menu2: 'Restart', menu3: 'Open the setup network', menu4: 'Unpair every controller', menu5: 'Forget the network', shareHelp: 'Add this device to another app (Apple Home, Google Home, Alexa, another Home Assistant) with a one-time code; its own pairing code stays secret.', shareStart: 'Share device', shareCode: 'One-time code', shareLeft: s => `Valid for ${s}`, shareHow: 'Scan the QR code in the other app or enter the code. In Apple Home: + → Add Accessory → More options… → enter the code.', shareApple: 'Add to Apple Home', shareCopy: 'Copy code', shareCopied: 'Code copied', shareAppleHint: 'Code copied: in Apple Home choose More options… and enter it', shareStop: 'Stop sharing',
   pairExtra: 'For another controller (e.g. Apple Home): open the pairing window and scan the code within 5 minutes.',
   accessTitle: 'Programs with access',
   accessHelp: 'Programs such as the Home Assistant add-on get a key of their own. They ask with this password and need a press of the BOOT button.',
@@ -623,26 +645,32 @@ function toast(text) {
 // The same card chooses the first password ('setup') or a new one ('change').
 let signedIn = false, loginMode = 'login';
 function renderLogin() {
-  const choose = loginMode !== 'login';
-  $('#loginTitle').textContent = t(loginMode === 'setup' ? 'setupTitle' : loginMode === 'change' ? 'changeTitle' : 'loginTitle');
-  $('#loginHelp').textContent = loginMode === 'setup' ? t('setupHelp') : loginMode === 'change' ? '' : t('loginHelp');
+  const choose = loginMode === 'setup' || loginMode === 'change';
+  const pinMode = loginMode === 'pin';
+  $('#passwordField').hidden = pinMode;
+  $('#pinField').hidden = !pinMode;
+  $('#loginSwitch').hidden = !pinAvailable || choose || loginMode === 'unlock';
+  $('#loginSwitch').textContent = t(pinMode ? 'usePassword' : 'usePin');
+  $('#loginTitle').textContent = t(loginMode === 'setup' ? 'setupTitle' : loginMode === 'change' ? 'changeTitle' : pinMode ? 'pinTitle' : loginMode === 'unlock' ? 'unlockTitle' : 'loginTitle');
+  $('#loginHelp').textContent = loginMode === 'setup' ? t('setupHelp') : loginMode === 'change' ? '' : pinMode ? t('pinHelp') : loginMode === 'unlock' ? t('unlockHelp') : t('loginHelp');
   $('#passwordLabel').textContent = t(choose ? 'newPassword' : 'password');
   $('#loginBtn').textContent = t(choose ? 'save' : 'login');
   $('#repeatField').hidden = !choose;
-  $('#loginCancel').hidden = loginMode !== 'change';
+  $('#loginCancel').hidden = loginMode !== 'change' && loginMode !== 'unlock';
   $('#password').autocomplete = choose ? 'new-password' : 'current-password';
 }
 function showLogin(error, mode = 'login') {
-  if (mode !== 'change') signedIn = false;
+  if (mode !== 'change' && mode !== 'unlock') signedIn = false;
   ready();
   loginMode = mode;
   renderLogin();
   $('#login').hidden = false;
   $('#app').hidden = true;
-  $('#loginError').textContent = error === true ? t('wrongPassword') : error || '';
+  $('#loginError').textContent = error === true ? t(mode === 'pin' ? 'wrongPin' : 'wrongPassword') : error || '';
   $('#password').value = '';
   $('#password2').value = '';
-  $('#password').focus();
+  $('#pinInput').value = '';
+  if (mode === 'pin') renderPinBoxes().focus(); else $('#password').focus();
 }
 function signedInOk() {
   if (signedIn) return;
@@ -702,17 +730,85 @@ function boot(first, rest) {
   });
 }
 
+
+// Quick access with the PIN (a viewer): look and operate what is connected;
+// the device itself leaves out what is sensitive and refuses changes, and
+// the page asks for the password when something would change
+let pinCode = '', viewer = false, pinAvailable = false;
+try { pinCode = localStorage.getItem('mbPinToken') || ''; } catch (e) {}
+function keepPin(value) {
+  pinCode = value;
+  try { if (value) localStorage.setItem('mbPinToken', value); else localStorage.removeItem('mbPinToken'); } catch (err) {}
+}
+function setViewer(on) {
+  viewer = on;
+  document.body.classList.toggle('viewer', on);
+  document.querySelectorAll('details.set.lockable').forEach(d => {
+    d.querySelector(':scope > summary .val').dataset.locked = t('lockedVal');
+    if (on) d.open = false;
+  });
+}
+// A change asked for with only the PIN: the password, then the change again
+function askPassword() { showLogin(false, 'unlock'); }
+document.addEventListener('toggle', e => {
+  const d = e.target;
+  if (viewer && d.open && d.classList && d.classList.contains('lockable')) { d.open = false; askPassword(); }
+}, true);
+
+// The BOOT button's menu, as the device reports it: which action is open, and
+// what letting go of a held press would do (also without a status LED)
+const BOOT_MENU = ['', 'menu1', 'menu2', 'menu3', 'menu4', 'menu5'];
+function renderBoot(st) {
+  const menu = st && st.menu || 0, hold = st && st.hold || 0;
+  $('#bootBanner').hidden = !menu && !hold;
+  if (!menu && !hold) return;
+  const name = n => t(BOOT_MENU[n] || 'menu1');
+  $('#bootTitle').textContent = hold === 2 ? t('bootHoldLong') : hold === 1 ? (menu ? t('bootHoldAction', name(menu)) : t('bootHoldMenu')) : t('bootOpen', menu, name(menu));
+  $('#bootHelp').textContent = menu && hold !== 2 ? t('bootHelp') : '';
+}
+
+// The PIN as a box per digit (the device says how many, 4 to 6). One real
+// input takes every digit, also typed fast, pasted or filled in by the phone;
+// the boxes show a dot per digit and where the next one goes
+let pinLength = 4;
+function renderPinBoxes() {
+  const holder = $('#pinBoxes');
+  holder.innerHTML = '<span></span>'.repeat(pinLength) +
+    `<input id="pinTyped" inputmode="numeric" pattern="[0-9]*" maxlength="${pinLength}" autocomplete="one-time-code" aria-label="${esc(t('pinLabel'))}">`;
+  const input = $('#pinTyped'), boxes = [...holder.querySelectorAll('span')];
+  const show = () => {
+    input.value = input.value.replace(/\D/g, '').slice(0, pinLength);
+    boxes.forEach((b, i) => { b.textContent = i < input.value.length ? '•' : ''; b.classList.toggle('on', i === Math.min(input.value.length, pinLength - 1)); });
+    $('#pinInput').value = input.value;
+    if (input.value.length === pinLength) $('#loginForm').requestSubmit();  // all filled: sign in
+  };
+  input.addEventListener('input', show);
+  show();
+  return input;
+}
 async function cmd(line) {
-  const r = await track(fetch('cmd', {method: 'POST', headers: {'X-Octo-Token': token}, body: line}));
+  const byUser = !!pressed;  // a press: worth asking for the password; a background refresh is not
+  const headers = token ? {'X-Octo-Token': token} : pinCode ? {'X-Octo-Pin': pinCode} : {};
+  const r = await track(fetch('cmd', {method: 'POST', headers, body: line}));
   const text = await r.text();
-  if (r.status === 401) { showLogin(!text.startsWith('no password') && !!token, text.startsWith('no password') ? 'setup' : 'login'); throw new Error(t('passwordRefused')); }
+  if (r.status === 429) { toast(t('pinLocked')); throw new Error(t('pinLocked')); }
+  if (r.status === 403 && !token && pinCode) {
+    if (byUser) askPassword();
+    const err = new Error(text.trim()); err.needsPassword = true; throw err;
+  }
+  if (r.status === 401) {
+    if (!token && pinCode) { keepPin(''); showLogin(true, 'pin'); throw new Error(t('wrongPin')); }
+    showLogin(!text.startsWith('no password') && !!token, text.startsWith('no password') ? 'setup' : pinAvailable ? 'pin' : 'login');
+    throw new Error(t('passwordRefused'));
+  }
   signedInOk();
   return text;
 }
 
+// true when it worked; the password being asked for needs no error message too
 async function run(line) {
-  try { toast((await cmd(line)).trim() || 'OK'); refresh(); }
-  catch (e) { toast(t('error') + ': ' + e.message); }
+  try { toast((await cmd(line)).trim() || 'OK'); refresh(); return true; }
+  catch (e) { if (!e.needsPassword) toast(t('error') + ': ' + e.message); return false; }
 }
 
 // Shown the Home Assistant way: 0 % flat, 100 % fully raised
@@ -1168,7 +1264,7 @@ $('#nameForm').onsubmit = async e => {
   e.preventDefault();
   const name = $('#deviceName').value.trim().replace(/\s+/g, ' ');
   if (!name) return;
-  await run(`name ${name}`);
+  if (!(await run(`name ${name}`))) return;
   $('#deviceName').value = '';
   toast(t('nameSaved'));
   refresh();
@@ -1181,6 +1277,7 @@ async function refresh() {
   refreshing = true;
   try {
     state = JSON.parse(await cmd('json'));
+    renderBoot(state.status);
     showConfigMode(state.config_mode);
     const used = state.io.slots.filter(c => c.type !== 'none').length;
     $('#sys').textContent = state.io.name + ' · ' + (used ? t('connectionCount', used) : t('noConnections'));
@@ -1385,9 +1482,9 @@ async function loadTech() {
     [t('techChip'), `${chips[s.chip] || s.chip} ${s.revision} · ${s.cores}× ${s.mhz} MHz`],
     [t('techNetwork'), (s.network === 'thread' ? 'Thread' : 'Wi-Fi') + (s.net ? '\n' + netDetail(s.net) : '')],
     [t('techFlash'), Math.round(s.flash / 1048576) + ' MB'],
-    [t('techMac'), s.mac],
+    [t('techMac'), s.mac || '••••'],
     [t('techMemory'), `${kb(s.heap)} · ${kb(s.heap_min)} · ${kb(s.heap_block)}`],
-    [t('techReset'), s.reset],
+    [t('techReset'), s.why ? `${s.why} (${s.reset})` : s.reset],
     [t('techSlots'), `${slot(s.running)} (${t('techRunning')})\n${slot(s.other)}`],
     [t('techNvs'), `${s.nvs_used} / ${s.nvs_total} ${t('techEntries')}`],
     [t('techIdf'), s.idf],
@@ -1401,6 +1498,7 @@ $('#systemCard').addEventListener('toggle', () => { if ($('#systemCard').open) l
 // Programs with a token of their own (the Home Assistant add-on, scripts)
 let access = null;
 async function loadAccess() {
+  if (viewer) return;
   try { access = JSON.parse(await cmd('access json')); } catch (e) { return; }
   $('#accessCard').hidden = false;
   $('#accessPending').hidden = !access.pending;
@@ -1428,6 +1526,7 @@ document.addEventListener('click', closeMenus);
 $('#reboot').onclick = () => { if (confirm(t('confirmRestart'))) run('reboot'); };
 $('#token').onclick = () => { closeMenus(); showLogin(false, 'change'); };
 $('#loginCancel').onclick = () => { $('#login').hidden = true; $('#app').hidden = false; };
+$('#loginSwitch').onclick = () => showLogin(false, loginMode === 'pin' ? 'login' : 'pin');
 $('#openWindow').onclick = async () => { await run('matter open'); loadMatter(); };
 
 // Configuration mode: one boot on Wi-Fi for a fast first setup and updates.
@@ -1479,6 +1578,7 @@ function updateWizard(w) {
 }
 
 async function loadWifi() {
+  if (viewer) return;
   try {
     const w = JSON.parse(await cmd('wifi json'));
     wifiHost = w.host;
@@ -1503,6 +1603,7 @@ let wifiDevice = false;  // runs on Wi-Fi (no Thread): "wifi json" says so
 
 // The Thread network (ESP32-C6 only: the classic ESP32 has no "thread" command)
 async function loadThread() {
+  if (viewer) return;
   let th;
   try { th = JSON.parse(await cmd('thread json')); } catch (e) { return; }
   $('#threadCard').hidden = false;
@@ -1834,7 +1935,30 @@ document.addEventListener('submit', () => document.querySelectorAll('input[data-
 applyTexts();
 $('#sys').textContent = t('connecting');
 if (window.mbBack) { $('#backBtn').href = window.mbBack; $('#backBtn').hidden = false; }
-function startApp() { boot(() => refresh().then(loadRules), [loadMatter, loadWifi, loadThread, loadAccess, loadBle]); }
+
+// The PIN for quick access, set with the password
+async function loadPin() {
+  if (viewer) return;
+  let p;
+  try { p = JSON.parse(await cmd('pin json')); } catch (e) { return; }
+  $('#pinRow').hidden = false;
+  $('#pinState').textContent = p.set ? t('pinIsSet') : t('pinNotSet');
+  $('#pinRemove').hidden = !p.set;
+}
+$('#pinRow').onsubmit = async e => {
+  e.preventDefault();
+  const reply = (await cmd('pin set ' + $('#pinNew').value.trim())).trim();
+  toast(reply === 'ok' ? t('pinSaved') : reply.replace(/^error: /, ''));
+  if (reply === 'ok') $('#pinNew').value = '';
+  loadPin();
+};
+$('#pinRemove').onclick = async () => {
+  const reply = (await cmd('pin clear')).trim();
+  toast(reply === 'ok' ? t('pinRemoved') : reply);
+  loadPin();
+};
+$('#viewerBadge').onclick = askPassword;
+function startApp() { setViewer(!token && !!pinCode); boot(() => refresh().then(loadRules), [loadMatter, loadWifi, loadThread, loadAccess, loadBle, loadPin]); }
 function keepToken(value) {
   token = value;
   try { localStorage.setItem('mbToken', token); } catch (err) {}
@@ -1857,20 +1981,27 @@ async function choosePassword(value) {
 }
 $('#loginForm').onsubmit = e => {
   e.preventDefault();
+  if (loginMode === 'pin') { keepPin($('#pinInput').value.trim()); startApp(); return; }
   const value = $('#password').value.trim();
-  if (loginMode !== 'login') { choosePassword(value); return; }
+  if (loginMode === 'setup' || loginMode === 'change') { choosePassword(value); return; }
   keepToken(value);
+  if (loginMode === 'unlock') { showApp(); }
   startApp();
 };
 // A device without a password asks for one first; older firmware has no /auth
 (async () => {
   try {
     const r = await fetch('auth');
-    if (r.ok && !(await r.json()).password) { showLogin(false, 'setup'); return; }
+    const a = r.ok ? await r.json() : {password: true};
+    if (!a.password) { showLogin(false, 'setup'); return; }
+    pinAvailable = !!a.pin;
+    if (a.pin >= 4 && a.pin <= 6) pinLength = a.pin;
   } catch (e) {}
-  if (!token) showLogin(false);
-  else startApp();
+  if (token || (pinAvailable && pinCode)) startApp();
+  else showLogin(false, pinAvailable ? 'pin' : 'login');
 })();
+// While the BOOT menu is open or the button is held: every second
+setInterval(() => { if (!document.hidden && signedIn && state && state.status && (state.status.menu || state.status.hold)) refresh(); }, 1000);
 setInterval(() => { if (!document.hidden && signedIn) refresh(); }, 3000);
 setInterval(() => { if (!document.hidden && signedIn) loadMatter(); }, 30000);
 // A waiting link request counts down; otherwise a slow check is enough

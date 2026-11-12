@@ -133,6 +133,7 @@ std::string rest(const std::vector<std::string>& args, size_t first) {
 
 void restart_soon(void*) {
     vTaskDelay(pdMS_TO_TICKS(500));  // let the reply go out first
+    device_status::note_restart("asked for: setup network, Wi-Fi change or fetching an update");
     esp_restart();
 }
 
@@ -307,6 +308,7 @@ void on_check(void*) {
     }
     if (now - last_activity_us > idle_limit_us || now > HARD_LIMIT_US) {
         ESP_LOGW(TAG, "Time limit reached, back to %s", NORMAL);
+        device_status::note_restart("setup network closed: unused for a while");
         esp_restart();
     }
 }
@@ -337,6 +339,7 @@ std::string fetch_sha;
 [[noreturn]] void fetch_done(const std::string& result) {
     store("result", result);
     ESP_LOGW(TAG, "Fetching the firmware: %s", result.c_str());
+    device_status::note_restart(("firmware fetched over Wi-Fi: " + result).substr(0, 60).c_str());
     vTaskDelay(pdMS_TO_TICKS(300));
     esp_restart();  // the new firmware, or back to Thread with the old one
     while (true) vTaskDelay(portMAX_DELAY);

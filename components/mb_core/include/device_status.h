@@ -60,4 +60,9 @@ void show_hold(bool holding, bool off = false);
 std::string led_command(const std::vector<std::string>& args);
 int led_pin();  // -1: none
 
+// Why the device restarts, noted just before (kept in NVS); after the start
+// last_restart() tells it once ("" when nothing was noted: power, a crash)
+void note_restart(const char* why);
+const char* last_restart();
+
 }  // namespace device_status

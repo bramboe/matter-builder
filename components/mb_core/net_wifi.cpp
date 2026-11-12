@@ -27,6 +27,7 @@
 #include <platform/CHIPDeviceLayer.h>
 
 #include "config_mode.h"
+#include "device_status.h"
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_netif.h"
@@ -54,6 +55,7 @@ int last_reason = 0;
 void to_setup_mode(const char* why) {
     if (config_mode::request(FALLBACK_MINUTES)) {
         ESP_LOGW(TAG, "%s: restarting in setup mode", why);
+        device_status::note_restart(why);
         esp_restart();
     }
     ESP_LOGE(TAG, "%s, and setup mode could not be requested", why);

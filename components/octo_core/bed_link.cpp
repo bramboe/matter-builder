@@ -1,4 +1,5 @@
 #include "bed_link.h"
+#include "device_status.h"
 
 #include <cinttypes>
 #include <cstdarg>
@@ -1160,9 +1161,10 @@ std::string state_json() {
     const int64_t now = now_us();
     std::string out;
     // heap_total: of all there is, so the page can show how full it is
-    appendf(out, "{\"uptime\":%" PRId64 ",\"heap\":%u,\"heap_total\":%u,\"bed_count\":%d,\"beds\":[", now / 1000000,
+    // status: the state and the BOOT menu (open action, a press held), for the page and the add-on
+    appendf(out, "{\"uptime\":%" PRId64 ",\"heap\":%u,\"heap_total\":%u,\"status\":%s,\"bed_count\":%d,\"beds\":[", now / 1000000,
             static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_8BIT)),
-            static_cast<unsigned>(heap_caps_get_total_size(MALLOC_CAP_8BIT)), active_beds);
+            static_cast<unsigned>(heap_caps_get_total_size(MALLOC_CAP_8BIT)), device_status::json().c_str(), active_beds);
     for (int i = 0; i < active_beds; ++i) {
         const Bed& bed = beds[i];
         appendf(out,

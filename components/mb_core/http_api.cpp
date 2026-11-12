@@ -7,12 +7,15 @@
 #include <memory>
 
 #include "boot_guard.h"
+#include "cJSON.h"
 #include "commands.h"
+#include "device_status.h"
 #include "esp_app_desc.h"
 #include "esp_http_server.h"
 #include "esp_log.h"
 #include "esp_mac.h"
 #include "esp_ota_ops.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "mb_core.h"
@@ -32,6 +35,16 @@ constexpr size_t MAX_PASSWORD_LEN = 63;
 const char* NVS_NAMESPACE = "http";
 const char* NVS_KEY = "password";
 
+// The PIN: quick access for looking and operating (a viewer), never for
+// changing; the password stays needed for that. 4 to 6 digits, kept in NVS.
+const char* NVS_PIN_KEY = "pin";
+char pin[7] = {};
+// Guessing: after 5 wrong PINs it locks for a minute, each next lock twice
+// as long (at most 15 minutes); a right PIN starts the count again
+int pin_failures = 0;
+int64_t pin_locked_until_us = 0;
+int64_t pin_lock_us = 60 * 1000000LL;
+
 httpd_handle_t server = nullptr;
 char redirect_url[32] = "";  // see redirect_unknown_to()
 // The password of the page: chosen on the page and kept in NVS. Empty until
@@ -45,6 +58,11 @@ void load_password(const char* fallback) {
         if (nvs_get_str(nvs, NVS_KEY, password, &size) != ESP_OK) {
             password[0] = '\0';
         }
+        nvs_close(nvs);
+    }
+    size = sizeof(pin);
+    if (nvs_open(NVS_NAMESPACE, NVS_READONLY, &nvs) == ESP_OK) {
+        if (nvs_get_str(nvs, NVS_PIN_KEY, pin, &size) != ESP_OK) pin[0] = '\0';
         nvs_close(nvs);
     }
     // A token built in by an older firmware keeps working until a new one is set
@@ -69,12 +87,39 @@ bool store_password(const char* value) {
     return err == ESP_OK;
 }
 
-enum class Who { nobody, owner, program };
+bool store_pin(const char* value) {
+    nvs_handle_t nvs;
+    if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs) != ESP_OK) return false;
+    esp_err_t err = value[0] == '\0' ? nvs_erase_key(nvs, NVS_PIN_KEY) : nvs_set_str(nvs, NVS_PIN_KEY, value);
+    if (err == ESP_ERR_NVS_NOT_FOUND) err = ESP_OK;
+    if (err == ESP_OK) err = nvs_commit(nvs);
+    nvs_close(nvs);
+    return err == ESP_OK;
+}
+
+enum class Who { nobody, owner, program, viewer, locked };
 
 // The page password is the owner; a linked program has a token of its own
 Who who(httpd_req_t* req) {
     char token[MAX_PASSWORD_LEN + 1] = {};
     if (httpd_req_get_hdr_value_str(req, "X-Octo-Token", token, sizeof(token)) != ESP_OK) {
+        char given[7] = {};
+        if (pin[0] == '\0' || httpd_req_get_hdr_value_str(req, "X-Octo-Pin", given, sizeof(given)) != ESP_OK) {
+            return Who::nobody;
+        }
+        const int64_t now = esp_timer_get_time();
+        if (now < pin_locked_until_us) return Who::locked;
+        if (std::strcmp(given, pin) == 0) {
+            pin_failures = 0;
+            pin_lock_us = 60 * 1000000LL;
+            return Who::viewer;
+        }
+        if (++pin_failures >= 5) {
+            pin_failures = 0;
+            pin_locked_until_us = now + pin_lock_us;
+            ESP_LOGW(TAG, "Wrong PIN 5 times: locked for %lld s", pin_lock_us / 1000000);
+            pin_lock_us = pin_lock_us * 2 > 900 * 1000000LL ? 900 * 1000000LL : pin_lock_us * 2;
+        }
         return Who::nobody;
     }
     if (password[0] != '\0' && std::strcmp(token, password) == 0) {
@@ -162,7 +207,11 @@ esp_err_t handle_spec(httpd_req_t* req) {
 
 esp_err_t handle_auth_get(httpd_req_t* req) {
     httpd_resp_set_type(req, "application/json");
-    return httpd_resp_sendstr(req, password[0] != '\0' ? "{\"password\":true}" : "{\"password\":false}");
+    char out[64];
+    // pin: its length (the page shows a box per digit), 0 when there is none
+    std::snprintf(out, sizeof(out), "{\"password\":%s,\"pin\":%d}", password[0] != '\0' ? "true" : "false",
+                  password[0] != '\0' ? static_cast<int>(std::strlen(pin)) : 0);
+    return httpd_resp_sendstr(req, out);
 }
 
 // Body = the new password. The first one needs no token; changing it needs
@@ -199,9 +248,83 @@ esp_err_t handle_auth_post(httpd_req_t* req) {
     return httpd_resp_sendstr(req, "OK\n");
 }
 
+// What a viewer (the PIN) may send: looking, and operating what is
+// connected; nothing that changes settings, access, the network or firmware
+bool viewer_may(const char* line) {
+    static const char* const READ[] = {"json", "system json", "matter json", "led json", "rule json", "bledev json",
+                                       "status", "language", "preset list"};
+    for (const char* r : READ) {
+        if (std::strcmp(line, r) == 0) return true;
+    }
+    // Operating: an output on or off (generic), the bed's light, presets, moving, stop (bridge)
+    static const char* const OPERATE[] = {"io test ", "light", "stop", "preset ", "move "};
+    for (const char* o : OPERATE) {
+        if (std::strncmp(line, o, std::strlen(o)) == 0 && std::strncmp(line, "preset set", 10) != 0 &&
+            std::strncmp(line, "preset clear", 12) != 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// What a viewer gets left out: addresses, network names, pairing and sharing
+// codes. The page shows these masked; the password reveals them.
+const char* const HIDDEN[] = {"mac", "ip", "ssid", "qr", "qr_path", "qr_size", "manual", "share", "network", "dataset",
+                              "passcode", "discriminator", "token", "hostname", "address", "parent", "neighbors"};
+void hide(cJSON* node) {
+    if (node == nullptr) return;
+    if (cJSON_IsObject(node)) {
+        for (const char* key : HIDDEN) {
+            cJSON* item = cJSON_GetObjectItemCaseSensitive(node, key);
+            // "network" is also the plain kind ("wifi"/"thread") in system json: keep that
+            if (item != nullptr && !(std::strcmp(key, "network") == 0 && cJSON_IsString(item) &&
+                                     (std::strcmp(item->valuestring, "wifi") == 0 || std::strcmp(item->valuestring, "thread") == 0))) {
+                cJSON_DeleteItemFromObjectCaseSensitive(node, key);
+            }
+        }
+    }
+    for (cJSON* child = node->child; child != nullptr; child = child->next) hide(child);
+}
+
+std::string for_viewer(const std::string& reply) {
+    cJSON* root = cJSON_Parse(reply.c_str());
+    if (root == nullptr) return reply;  // plain text (status lines, "ok")
+    hide(root);
+    char* text = cJSON_PrintUnformatted(root);
+    std::string out = text != nullptr ? std::string(text) + "\n" : reply;
+    cJSON_free(text);
+    cJSON_Delete(root);
+    return out;
+}
+
+// "pin json" | "pin set <4-6 digits>" | "pin clear": only with the password
+std::string pin_command(const char* line) {
+    if (std::strcmp(line, "pin json") == 0) return pin[0] != '\0' ? "{\"set\":true}\n" : "{\"set\":false}\n";
+    if (std::strcmp(line, "pin clear") == 0) {
+        if (!store_pin("")) return "storing failed\n";
+        pin[0] = '\0';
+        return "ok\n";
+    }
+    if (std::strncmp(line, "pin set ", 8) == 0) {
+        const char* value = line + 8;
+        const size_t len = std::strlen(value);
+        bool digits = len >= 4 && len <= 6;
+        for (size_t i = 0; digits && i < len; ++i) digits = value[i] >= '0' && value[i] <= '9';
+        if (!digits) return "error: a PIN is 4 to 6 digits\n";
+        if (!store_pin(value)) return "storing failed\n";
+        std::strcpy(pin, value);
+        return "ok\n";
+    }
+    return "pin json | pin set <4-6 digits> | pin clear\n";
+}
+
 esp_err_t handle_cmd(httpd_req_t* req) {
     const Who caller = who(req);
-    if (!authorized(req)) {
+    if (caller == Who::locked) {
+        httpd_resp_set_status(req, "429 Too Many Requests");
+        return httpd_resp_sendstr(req, "PIN locked for a while after wrong tries: try again later or use the password\n");
+    }
+    if (caller != Who::viewer && !authorized(req)) {
         return ESP_OK;
     }
     if (req->content_len == 0 || req->content_len > MAX_COMMAND_LEN) {
@@ -223,6 +346,20 @@ esp_err_t handle_cmd(httpd_req_t* req) {
         return httpd_resp_sendstr(req, "only with the page password\n");
     }
     httpd_resp_set_type(req, "text/plain");
+    if (std::strncmp(line, "pin", 3) == 0 && (line[3] == ' ' || line[3] == '\0')) {
+        if (caller != Who::owner) {
+            httpd_resp_set_status(req, "403 Forbidden");
+            return httpd_resp_sendstr(req, "only with the page password\n");
+        }
+        return httpd_resp_sendstr(req, pin_command(line).c_str());
+    }
+    if (caller == Who::viewer) {
+        if (!viewer_may(line)) {
+            httpd_resp_set_status(req, "403 Forbidden");
+            return httpd_resp_sendstr(req, "the password is needed for this\n");
+        }
+        return httpd_resp_sendstr(req, for_viewer(run_command(line)).c_str());
+    }
     return httpd_resp_sendstr(req, run_command(line).c_str());
 }
 
@@ -284,6 +421,7 @@ esp_err_t handle_index(httpd_req_t* req) {
 
 void restart_task(void*) {
     vTaskDelay(pdMS_TO_TICKS(500));
+    device_status::note_restart("firmware update");
     esp_restart();
 }
 

@@ -70,6 +70,17 @@ BLE_TYPES = {"ble_sensor", "ble_presence"}
 # a command to a Bluetooth device, its number is the command (1-8)
 BUILTIN_DRIVERS = {"ble_command": {"type": "ble_command", "title": "Bluetooth command", "matter": "on_off",
                                    "pins": 0, "number": "Command (1-8)"}}
+# Addressable LED strips as Matter colour lights (main/led_strip.cpp), from
+# generic 0.1.20: one data pin, the number is how many LEDs (0: 30, at most 1000)
+LED_STRIPS = {
+    "led_strip": {"type": "led_strip", "title": "LED strip (WS2812)", "matter": "color", "pins": 1, "number": "LEDs",
+                  "description": "WS2812B, WS2811 or WS2815 (RGB) on one data pin, as a colour light."},
+    "led_strip_rgbw": {"type": "led_strip_rgbw", "title": "LED strip RGBW (SK6812)", "matter": "color", "pins": 1,
+                       "number": "LEDs", "description": "SK6812 RGBW on one data pin, as a colour light with white."},
+}
+BUILTIN_DRIVERS.update(LED_STRIPS)
+# What a type is in Matter when it is an output
+OUTPUT_MATTER = ("on_off", "dimmable", "color")
 # Options that work on the device itself (io.cpp): what an output does at
 # power-on and after how many seconds it switches off; the output an input
 # switches (a button toggles it, a contact, motion or presence sets it)
@@ -529,7 +540,7 @@ def check(spec):
             raise SpecError(f"connection {slot}: at most 2 pins for {kind}")
         if kind == "sht4x" and any(x.get("type") == "sht4x" for x in clean):
             raise SpecError("only one SHT4x")
-        is_output = kind in OUTPUT_TYPES or (driver is not None and driver["matter"] in ("on_off", "dimmable"))
+        is_output = kind in OUTPUT_TYPES or (driver is not None and driver["matter"] in OUTPUT_MATTER)
         can_control = kind in CONTROL_TYPES or (driver is not None and driver["matter"] in ("button", "contact", "occupancy"))
         options = {}
         if "power" in c or "off_after" in c:
@@ -577,7 +588,7 @@ def check(spec):
     for c in clean:
         target = next((x for x in clean if x["slot"] == c.get("controls")), None) if "controls" in c else None
         if "controls" in c and (target is None or not (target["type"] in OUTPUT_TYPES | {"ir_send"} or
-                                                    (target["type"] in drivers and drivers[target["type"]]["matter"] in ("on_off", "dimmable")))):
+                                                    (target["type"] in drivers and drivers[target["type"]]["matter"] in OUTPUT_MATTER))):
             raise SpecError(f"connection {c['slot']}: controls must name an output or IR code in this config")
     if '"' in name or "\\" in name:
         raise SpecError("device.name: no quotes")
@@ -603,13 +614,15 @@ def check(spec):
             "version_number": number, "connections": sorted(clean, key=lambda x: x["slot"]),
             "requires": requires, "network": BOARD_CAPS[board]["network"][0],
             "components": [{"source": d["source"], "type": d["type"], "path": d["path"]} for d in components],
-            "drivers": [{k: d[k] for k in ("type", "title", "description", "matter", "pins", "number")} for d in components]}
+            # The firmware's own types a config uses (LED strips), so editors know them as they know a component's
+            "drivers": [{k: d[k] for k in ("type", "title", "description", "matter", "pins", "number")}
+                        for d in components + [LED_STRIPS[t] for t in sorted({c["type"] for c in clean} & set(LED_STRIPS))]]}
 
 
 # ---------------------------------------------------------------- components
 
 COMPONENT_TYPE = re.compile(r"^[a-z][a-z0-9_]{1,23}$")
-MATTER_KINDS = {"on_off", "dimmable", "button", "contact", "occupancy", "climate"}
+MATTER_KINDS = {"on_off", "dimmable", "button", "contact", "occupancy", "climate", "color"}
 GITHUB_SOURCE = re.compile(r"^github:([A-Za-z0-9-]+)/([A-Za-z0-9._-]+)((?:/[A-Za-z0-9._-]+)*)@([A-Za-z0-9._/-]+)$")
 
 

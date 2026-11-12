@@ -911,12 +911,12 @@ const TYPE_ICON = {
   ble_sensor: 'M11 2h1l5 5-3.5 3.5L17 14l-5 5h-1v-6.5L7.5 16 6 14.5 10.5 10 6 5.5 7.5 4l3.5 3.5V2m2 3.8v3.4L14.7 7.5 13 5.8m0 7v3.4l1.7-1.7L13 12.8Z',
   ble_presence: 'M11 2h1l5 5-3.5 3.5L17 14l-5 5h-1v-6.5L7.5 16 6 14.5 10.5 10 6 5.5 7.5 4l3.5 3.5V2m2 3.8v3.4L14.7 7.5 13 5.8m0 7v3.4l1.7-1.7L13 12.8Z',
 };
-const MATTER_ICON = {on_off: 'relay', dimmable: 'led', button: 'button', contact: 'contact', occupancy: 'motion', climate: 'sht4x'};
+const MATTER_ICON = {on_off: 'relay', dimmable: 'led', color: 'led', button: 'button', contact: 'contact', occupancy: 'motion', climate: 'sht4x'};
 const typeIcon = (type, driver) => `<svg viewBox="0 0 24 24"><path d="${TYPE_ICON[type] || (driver && TYPE_ICON[MATTER_ICON[driver.matter]]) || ICON.chip}"/></svg>`;
 const isOutputType = type => type === 'relay' || type === 'led';
 // The on-device options (power-on, off after, what an input switches): built-in
 // types here, component types by what they are in Matter
-const optOutput = (type, d) => isOutputType(type) || (d && ['on_off', 'dimmable'].includes(d.matter));
+const optOutput = (type, d) => isOutputType(type) || (d && ['on_off', 'dimmable', 'color'].includes(d.matter));
 const optControl = (type, d) => ['button', 'contact', 'motion', 'ble_presence'].includes(type) || (d && ['button', 'contact', 'occupancy'].includes(d.matter));
 const ROW_OPTIONS = {power: 'off', off_after: 0, controls: null, group: ''};
 const EDITORS = {};

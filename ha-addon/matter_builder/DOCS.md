@@ -5,8 +5,8 @@ Matter Builder sets up and maintains ESP32 devices that act as standard
 Home and Google Home at the same time, and keep working when Home Assistant
 is off: every device has a settings page of its own.
 
-The standard firmware is the **generic device**: relays, LEDs, buttons,
-contacts, motion and SHT4x sensors on free pins, set up on the device's page
+The standard firmware is the **generic device**: relays, LEDs, LED strips,
+buttons, contacts, motion and SHT4x sensors on free pins, set up on the device's page
 or in the add-on. It runs on the ESP32-C6 (Thread or Wi-Fi) and the classic
 ESP32 (Wi-Fi); see *Chips and networks*.
 
@@ -189,7 +189,18 @@ connections:
   - { slot: 4, type: ir_receive, pin: 19, code: "nec:00FF:629D", name: Remote up }
   - { slot: 5, type: ble_sensor, mac: "A4:C1:38:12:34:56", name: Kitchen }
   - { slot: 6, type: ble_presence, mac: "C8:4F:0E:00:11:22", name: Keys }
+  - { slot: 7, type: led_strip, pin: 20, number: 60, name: Shelf }
 ```
+
+- **LED strips** (generic 0.1.20 and newer): `led_strip` for WS2812B,
+  WS2811 and WS2815 (RGB), `led_strip_rgbw` for SK6812 RGBW, on one data
+  pin; `number` is how many LEDs (0: 30, at most 1000). The strip is one
+  Matter colour light (Extended Color Light): on/off, brightness, colour and
+  colour temperature from any controller, with a short fade between them and
+  gamma like WLED; an RGBW strip gives the white the three colours share to
+  its white LED. Power, off after and buttons that control it work as for
+  any output. Infrared sending and LED strips share the chip's RMT channels
+  (the ESP32-C6 has two). Power the strip from its own supply.
 
 - **IR** (NEC codes, written `nec:<address>:<command>`): an IR
   LED through a transistor sends a code (a switch that turns itself off), an

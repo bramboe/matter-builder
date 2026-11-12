@@ -229,7 +229,9 @@ int pin_count(Type type) {
 }
 
 bool is_output(Type type) {
-    if (const Driver* d = driver_of(type)) return d->matter == Matter::on_off || d->matter == Matter::dimmable;
+    if (const Driver* d = driver_of(type)) {
+        return d->matter == Matter::on_off || d->matter == Matter::dimmable || d->matter == Matter::color;
+    }
     return type == Type::relay || type == Type::led;
 }
 bool is_input(Type type) { return type == Type::button || type == Type::contact || type == Type::motion; }
@@ -1103,13 +1105,25 @@ void switch_output(int index, bool on, uint8_t level) {
     if (!is_momentary(index) && listener.output) listener.output(index, on);
 }
 
+void set_color(int index, const Color& color) {
+    if (index < 0 || index >= SLOTS) return;
+    if (const Driver* d = driver_of(running[index].type); d != nullptr && d->color != nullptr) {
+        d->color(index, running[index], color);
+    }
+}
+
 bool output_on(int index) { return index >= 0 && index < SLOTS && is_output(running[index].type) && live[index].on; }
 
 void stop_outputs() {
     for (int i = 0; i < SLOTS; ++i) {
         if (is_output(running[i].type)) {
             live[i].on = false;
-            write_output(i);
+            // A component's output too (an LED strip goes dark before a restart)
+            if (const Driver* d = driver_of(running[i].type); d != nullptr && d->output != nullptr) {
+                d->output(i, running[i], false, live[i].level);
+            } else {
+                write_output(i);
+            }
         }
     }
 }
@@ -1274,7 +1288,7 @@ std::string state_json() {
     out += "],\"drivers\":[";
     for (int i = 0; i < driver_count; ++i) {
         const Driver& d = drivers[i];
-        static const char* MATTER[] = {"on_off", "dimmable", "button", "contact", "occupancy", "climate"};
+        static const char* MATTER[] = {"on_off", "dimmable", "button", "contact", "occupancy", "climate", "color"};
         out += (i ? ",{" : "{") + std::string("\"type\":") + json_text(d.type) + ",\"title\":" + json_text(d.title) +
                ",\"matter\":\"" + MATTER[static_cast<int>(d.matter)] + "\",\"pins\":" + std::to_string(d.pins) +
                ",\"number\":" + (d.number_label ? json_text(d.number_label) : std::string("null")) + "}";

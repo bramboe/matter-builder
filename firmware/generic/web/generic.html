@@ -612,7 +612,7 @@ const closeMenus = () => document.querySelectorAll('.menu.open').forEach(m => m.
 // Connections: the draft (what is being set up) next to what runs now
 let editing = null;  // index of the connection in the form, null: a new one
 const TYPES = ['relay', 'led', 'button', 'contact', 'motion', 'sht4x', 'ir_send', 'ir_receive', 'ble_sensor', 'ble_presence'];
-const isOutput = type => type === 'relay' || type === 'led' || (driverOf(type) && ['on_off', 'dimmable'].includes(driverOf(type).matter));
+const isOutput = type => type === 'relay' || type === 'led' || (driverOf(type) && ['on_off', 'dimmable', 'color'].includes(driverOf(type).matter));
 // Inputs that can switch an output on the device itself (controls=)
 const canControl = type => ['button', 'contact', 'motion', 'ble_presence'].includes(type) || (driverOf(type) && ['button', 'contact', 'occupancy'].includes(driverOf(type).matter));
 const isIr = type => type === 'ir_send' || type === 'ir_receive';
@@ -838,7 +838,8 @@ function optionsText(d) {
 
 // What each type looks like in the list and in the type choice
 const TYPE_ICON = {relay: 'plug', led: 'light', button: 'button', contact: 'door', motion: 'motion', sht4x: 'temp',
-  ir_send: 'ir', ir_receive: 'ir', ble_sensor: 'temp', ble_presence: 'bt', ble_command: 'bt'};
+  ir_send: 'ir', ir_receive: 'ir', ble_sensor: 'temp', ble_presence: 'bt', ble_command: 'bt',
+  led_strip: 'light', led_strip_rgbw: 'light'};
 const typeIcon = type => TYPE_ICON[type] || 'plug';
 const typeTitle = type => driverOf(type) ? driverOf(type).title : t(type);
 const isMomentary = type => type === 'ir_send' || type === 'ble_command';

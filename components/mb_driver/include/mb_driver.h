@@ -25,8 +25,21 @@ struct Slot {
 constexpr uint8_t INVERTED = 1;  // relay active low, or input active high/low swapped
 constexpr uint8_t IR_NEC = 1;
 
-// What a connection of this type is in Matter (and so in Home Assistant)
-enum class Matter : uint8_t { on_off, dimmable, button, contact, occupancy, climate };
+// What a connection of this type is in Matter (and so in Home Assistant).
+// color: an Extended Color Light (on/off, level, hue and saturation, xy and
+// color temperature), e.g. an addressable LED strip
+enum class Matter : uint8_t { on_off, dimmable, button, contact, occupancy, climate, color };
+
+// The colour a controller set, as Matter keeps it: the mode says which of the
+// values counts (the others are what they were before)
+struct Color {
+    enum Mode : uint8_t { hue_saturation = 0, xy = 1, temperature = 2 };
+    uint8_t mode;
+    uint8_t hue;         // 0-254 is 0-360 degrees
+    uint8_t saturation;  // 0-254
+    uint16_t x, y;       // CIE 1931, 0-65279 is 0-0.996
+    uint16_t mireds;     // colour temperature: 1 000 000 / kelvin
+};
 
 struct Driver {
     const char* type;          // as in YAML and on the page, e.g. "pulse_relay"
@@ -36,7 +49,8 @@ struct Driver {
     const char* number_label;  // one setting (0-65535) in data[0..1], or nullptr
     bool (*setup)(int slot, const Slot& s);                           // false: not usable
     void (*poll)(int slot, const Slot& s, int64_t now_us);            // every 20 ms, or nullptr
-    void (*output)(int slot, const Slot& s, bool on, uint8_t level);  // on_off and dimmable
+    void (*output)(int slot, const Slot& s, bool on, uint8_t level);  // on_off, dimmable and color
+    void (*color)(int slot, const Slot& s, const Color& c);           // color only, or nullptr
 };
 
 void register_driver(const Driver& driver);

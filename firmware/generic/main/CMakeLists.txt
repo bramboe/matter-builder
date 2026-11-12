@@ -11,7 +11,7 @@ else()
     set(bluetooth "ble_none.cpp")
 endif()
 idf_component_register(
-    SRCS "app_main.cpp" "io.cpp" "matter_device.cpp" "ir.cpp" "components_registry.cpp" "rules.cpp" ${bluetooth}
+    SRCS "app_main.cpp" "io.cpp" "matter_device.cpp" "ir.cpp" "components_registry.cpp" "rules.cpp" "led_strip.cpp" ${bluetooth}
     INCLUDE_DIRS "."
     REQUIRES ${requires}
 )

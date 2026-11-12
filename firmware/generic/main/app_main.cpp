@@ -22,6 +22,7 @@
 #include "esp_system.h"
 #include "http_api.h"
 #include "io.h"
+#include "led_strip.h"
 #include "rules.h"
 #include "matter_device.h"
 #include "matter_info.h"
@@ -151,6 +152,7 @@ extern "C" void app_main() {
     }
 
     ble_device::register_type();  // "ble_command", like a component type
+    led_strip::register_types();  // "led_strip" and "led_strip_rgbw": LED strips as colour lights
     io::register_components();  // component types, before the connections or the spec load
     ble_device::load();
 

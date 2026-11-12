@@ -1,0 +1,20 @@
+# An addressable LED strip (WS2812B, 60 LEDs) as a Matter colour light, in
+# the spirit of WLED: colour, colour temperature and brightness from Apple
+# Home, Google Home or Home Assistant, and a button next to it that switches
+# it on the device itself. After a power cut it comes back as it was.
+# Needs generic firmware 0.1.20 or newer. For SK6812 RGBW strips use the type
+# led_strip_rgbw. The number of LEDs and the pin are set on the device's page.
+#
+# Power the strip from its own 5 V supply (a WS2812B LED draws up to 60 mA at
+# full white: 60 LEDs is 3.6 A), with its ground tied to the ESP32's. The
+# ESP32's 3.3 V data signal works on short wires; for longer ones use a level
+# shifter (74AHCT125) and, when it inverts, set "inverted".
+device:
+  name: LED strip
+  app: generic
+  board: esp32-c6
+  version: 0.1.0
+
+connections:
+  - { slot: 0, type: led_strip, pin: 4, number: 60, power: last, name: LED strip }
+  - { slot: 1, type: button, pin: 5, controls: 0, name: Button }

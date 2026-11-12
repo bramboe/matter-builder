@@ -75,12 +75,14 @@ bool is_momentary(int index);  // an IR code to send: "on" only for a moment
 bool output_on(int index);     // the state an output is in (after power-on: as set for it)
 // set_output, and Matter hears of it (for the rules on the device)
 void switch_output(int index, bool on, uint8_t level);
+// The colour of a colour light (a type whose Matter kind is color)
+void set_color(int index, const Color& color);
 
 // Every output off, before a restart
 void stop_outputs();
 
 // What a connection is in Matter, for built-in and component types alike
-// (0: on/off, 1: dimmable, 2: button, 3: contact, 4: occupancy, 5: climate, -1: none)
+// (0: on/off, 1: dimmable, 2: button, 3: contact, 4: occupancy, 5: climate, 6: color, -1: none)
 int matter_of(int index);
 
 // The generated registry (main/components_registry.cpp), before start()

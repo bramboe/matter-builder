@@ -146,6 +146,7 @@ A binding links a capability type to a Matter cluster:
 | `Position` (0–100) | Window Covering | Lift, PositionAware; `TargetPositionLiftPercent100ths`, `CurrentPosition…`, `OperationalStatus` |
 | `Bool` | On/Off Light / Plug-in Unit | OnOff |
 | `Level` | Dimmable Light | OnOff + LevelControl |
+| `Color` | Extended Color Light | OnOff + LevelControl + ColorControl (hue/saturation, xy, colour temperature); the LED strips of `generic` |
 | `Temperature` | Temperature Sensor | TemperatureMeasurement |
 | `Humidity` | Humidity Sensor | RelativeHumidityMeasurement |
 | `Contact` | Contact Sensor | BooleanState |

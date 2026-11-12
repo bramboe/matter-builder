@@ -145,6 +145,41 @@ void momentary_off(chip::System::Layer*, void* arg) {
     attribute::update(endpoint_of[i], OnOff::Id, OnOff::Attributes::OnOff::Id, &off);
 }
 
+// The colour Matter keeps for a colour light, with one attribute about to
+// change (`changed`, `val`): the mode follows what the controller changed
+io::Color stored_color(uint16_t ep, uint32_t changed = 0, const esp_matter_attr_val_t* val = nullptr) {
+    auto read = [&](uint32_t id) -> esp_matter_attr_val_t {
+        if (val != nullptr && id == changed) return *val;
+        esp_matter_attr_val_t v = esp_matter_invalid(nullptr);
+        if (attribute_t* a = attribute::get(ep, ColorControl::Id, id)) attribute::get_val(a, &v);
+        return v;
+    };
+    namespace cc = ColorControl::Attributes;
+    io::Color c = {};
+    c.hue = read(cc::CurrentHue::Id).val.u8;
+    c.saturation = read(cc::CurrentSaturation::Id).val.u8;
+    c.x = read(cc::CurrentX::Id).val.u16;
+    c.y = read(cc::CurrentY::Id).val.u16;
+    c.mireds = read(cc::ColorTemperatureMireds::Id).val.u16;
+    if (changed == cc::CurrentHue::Id || changed == cc::CurrentSaturation::Id) {
+        c.mode = io::Color::hue_saturation;
+    } else if (changed == cc::CurrentX::Id || changed == cc::CurrentY::Id) {
+        c.mode = io::Color::xy;
+    } else if (changed == cc::ColorTemperatureMireds::Id) {
+        c.mode = io::Color::temperature;
+    } else {
+        const uint8_t mode = read(cc::ColorMode::Id).val.u8;
+        c.mode = mode <= io::Color::temperature ? mode : static_cast<uint8_t>(io::Color::temperature);
+    }
+    return c;
+}
+
+bool is_color_attribute(uint32_t id) {
+    namespace cc = ColorControl::Attributes;
+    return id == cc::CurrentHue::Id || id == cc::CurrentSaturation::Id || id == cc::CurrentX::Id ||
+           id == cc::CurrentY::Id || id == cc::ColorTemperatureMireds::Id;
+}
+
 // Until Matter has started, its own start-up writes are not commands: after a
 // power cut the On/Off server applies StartUpOnOff and switched every output
 // off, over the connection's own power-on setting (io). after_start() hands
@@ -178,6 +213,8 @@ esp_err_t on_attribute(attribute::callback_type_t type, uint16_t endpoint_id, ui
         attribute_t* on_off = attribute::get(endpoint_id, OnOff::Id, OnOff::Attributes::OnOff::Id);
         const bool is_on = on_off != nullptr && attribute::get_val(on_off, &on) == ESP_OK && on.val.b;
         io::set_output(index, is_on, val->val.u8);
+    } else if (cluster_id == ColorControl::Id && is_color_attribute(attribute_id) && io::matter_of(index) == 6) {
+        io::set_color(index, stored_color(endpoint_id, attribute_id, val));
     }
     return ESP_OK;
 }
@@ -312,6 +349,22 @@ void add_climate_sensor(endpoint_t* ep) {
     endpoint::humidity_sensor::add(ep, &humidity);
 }
 
+// An Extended Color Light: on/off, level, colour temperature (2000-6500 K),
+// xy and hue/saturation, so every controller finds the colour model it uses
+void add_color_light(endpoint_t* ep) {
+    endpoint::extended_color_light::config_t config;
+    config.color_control.color_mode = static_cast<uint8_t>(ColorControl::ColorMode::kColorTemperature);
+    config.color_control.enhanced_color_mode = static_cast<uint8_t>(ColorControl::ColorMode::kColorTemperature);
+    config.color_control_color_temperature.color_temperature_mireds = 370;
+    config.color_control_color_temperature.color_temp_physical_min_mireds = 153;
+    config.color_control_color_temperature.color_temp_physical_max_mireds = 500;
+    config.color_control_color_temperature.couple_color_temp_to_level_min_mireds = 153;
+    config.color_control_color_temperature.start_up_color_temperature_mireds = nullptr;  // the last one
+    endpoint::extended_color_light::add(ep, &config);
+    cluster::color_control::feature::hue_saturation::config_t hue_saturation;
+    cluster::color_control::feature::hue_saturation::add(cluster::get(ep, ColorControl::Id), &hue_saturation);
+}
+
 // The device type of a connection on its endpoint (io::matter_of: built-in
 // and component types alike)
 void add_device_type(endpoint_t* ep, int i) {
@@ -340,6 +393,9 @@ void add_device_type(endpoint_t* ep, int i) {
             break;
         case 5:
             add_climate_sensor(ep);
+            break;
+        case 6:
+            add_color_light(ep);
             break;
         default:
             break;
@@ -479,9 +535,18 @@ void after_start() {
             if (kind == 5) update_climate(i);
             // The output as it really is after power-on (Matter keeps its own
             // stored value, which may differ): off, on, or as set for it
-            if ((kind == 0 || kind == 1) && !io::is_momentary(i)) {
+            if ((kind == 0 || kind == 1 || kind == 6) && !io::is_momentary(i)) {
                 esp_matter_attr_val_t on = esp_matter_bool(io::output_on(i));
                 attribute::update(endpoint_of[i], OnOff::Id, OnOff::Attributes::OnOff::Id, &on);
+            }
+            // A colour light comes back in the colour and brightness Matter kept
+            if (kind == 6) {
+                io::set_color(i, stored_color(endpoint_of[i]));
+                esp_matter_attr_val_t level = esp_matter_invalid(nullptr);
+                attribute_t* a = attribute::get(endpoint_of[i], LevelControl::Id, LevelControl::Attributes::CurrentLevel::Id);
+                if (a != nullptr && attribute::get_val(a, &level) == ESP_OK && level.val.u8 > 0) {
+                    io::set_output(i, io::output_on(i), level.val.u8);
+                }
             }
             // Inputs may have changed before Matter listened (Bluetooth starts first)
             if (kind == 3) {

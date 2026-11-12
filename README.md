@@ -14,8 +14,9 @@ component of your own and build it in Home Assistant.
 
 - **Ready-made, signed firmware.** Installed and set up from the browser, no
   toolchain involved. The standard firmware, the *generic device*, covers
-  relays, LEDs, buttons, contacts, motion and SHT4x sensors on free pins of an
-  ESP32-C6 or a classic ESP32, plus infrared (NEC send and receive) and
+  relays, LEDs, addressable LED strips (WS2812, SK6812 RGBW: colour lights),
+  buttons, contacts, motion and SHT4x sensors on free pins of an ESP32-C6 or
+  a classic ESP32, plus infrared (NEC send and receive) and
   Bluetooth LE listening (BTHome v2, pvvx and ATC1441 thermometers, presence
   of a tag).
 - **Shows what a device needs.** Every firmware and package states whether
@@ -112,8 +113,8 @@ installing from the page works in Chrome or Edge. To update Matter Builder,
 
 | Chip | Network | Flash | What you get |
 |---|---|---|---|
-| ESP32-C6 | Thread or Wi-Fi, chosen when installing | 8 MB | Everything: relays, LEDs, buttons, contacts, motion, SHT4x, infrared, Bluetooth thermometers, presence and commands, 12 rules that can be Matter switches, pairing over Bluetooth. The Octo bed bridge runs on it (Thread). |
-| Classic ESP32 | Wi-Fi | 4 MB | Relays, LEDs, buttons, contacts, motion, SHT4x and infrared, and 12 rules that can be Matter switches. No Bluetooth (connections or pairing): next to Matter it takes more memory than the chip has. |
+| ESP32-C6 | Thread or Wi-Fi, chosen when installing | 8 MB | Everything: relays, LEDs, LED strips, buttons, contacts, motion, SHT4x, infrared, Bluetooth thermometers, presence and commands, 12 rules that can be Matter switches, pairing over Bluetooth. The Octo bed bridge runs on it (Thread). |
+| Classic ESP32 | Wi-Fi | 4 MB | Relays, LEDs, LED strips, buttons, contacts, motion, SHT4x and infrared, and 12 rules that can be Matter switches. No Bluetooth (connections or pairing): next to Matter it takes more memory than the chip has. |
 | ESP32-S3 | Wi-Fi | 8 MB | As the ESP32-C6 on Wi-Fi, Bluetooth included. **Untested**: see below. |
 | ESP32-C3 | Wi-Fi | 4 MB | As the classic ESP32: no Bluetooth (it does not fit 4 MB next to Matter), 8 usable pins. **Untested.** |
 | ESP32-C5 | Wi-Fi (2.4 and 5 GHz) | 8 MB | As the ESP32-C6 on Wi-Fi, 10 usable pins. Its Thread radio is not used yet. **Untested.** |

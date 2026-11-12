@@ -26,7 +26,8 @@ pre{font:12px/1.4 ui-monospace,Menlo,monospace;background:var(--fill);border-rad
 
 /* Top bar with tabs */
 header{position:sticky;top:0;z-index:5;background:var(--card);border-bottom:1px solid var(--line)}
-.bar{display:flex;align-items:center;gap:8px;max-width:1200px;margin:0 auto;padding:0 12px;min-height:56px;flex-wrap:wrap}
+/* As Home Assistant's: from edge to edge, never centred */
+.bar{display:flex;align-items:center;gap:8px;padding:0 12px;min-height:56px;flex-wrap:wrap}
 .bar h1{margin:0 12px 0 4px;font-size:20px;font-weight:400}
 nav{display:flex;align-self:stretch}
 nav button{background:none;border:0;border-bottom:2px solid transparent;border-radius:0;color:var(--mute);font:inherit;font-weight:500;padding:0 14px;cursor:pointer;min-height:54px}
@@ -34,7 +35,8 @@ nav button.on{color:var(--primary);border-bottom-color:var(--primary)}
 .grow{flex:1}
 .search{display:flex;align-items:center;gap:6px;background:var(--fill);border-radius:20px;padding:0 12px;height:36px;color:var(--mute)}
 .search input{border:0;background:none;font:inherit;color:var(--fg);outline:none;width:160px}
-main{flex:1;width:100%;max-width:1200px;margin:0 auto;padding:16px 12px 24px}
+/* An overview as Home Assistant's (integrations, areas): from the left, filling the width, at most 2000 px */
+main{flex:1;width:100%;max-width:2000px;padding:16px 16px 24px}
 
 /* Buttons */
 button,a.button{font:inherit;font-weight:500;display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:36px;padding:0 14px;border:0;border-radius:18px;background:var(--fill);color:var(--fg);cursor:pointer;text-decoration:none;white-space:nowrap}
@@ -48,7 +50,7 @@ button:disabled{opacity:.4;cursor:default}
 .actions.end{justify-content:flex-end}
 
 /* Cards and chips */
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;align-items:stretch}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,320px),1fr));gap:12px;align-items:stretch}
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;display:flex;flex-direction:column;min-width:0}
 .card .head{display:flex;align-items:center;gap:10px}
 .card .head .info{flex:1;min-width:0}
@@ -683,7 +685,7 @@ const TEXT = {
   shareDevice: 'Share device…', shareTitle: n => `Share ${n}`, shareMaking: 'Asking the device for a one-time code…',
   shareIntro: 'Add it to another app (Apple Home, Google Home, Alexa, another Home Assistant): scan the QR code there or enter the code. Its own pairing code stays secret.',
   shareCodeLabel: 'One-time code', shareLeftLabel: s => `Valid for ${s}`, shareGone: 'The code is no longer valid: a controller paired with it, or it ran out.',
-  shareHowApple: 'In Apple Home: + → Add Accessory → More options… → enter the code.', shareAppleBtn: 'Add to Apple Home', shareCopyBtn: 'Copy code',
+  shareHowApple: 'In Apple Home: + → Add Accessory → More options… → enter the code.', shareAppleBtn: 'Add to Apple Home', shareOtherBtn: 'Share with another app', shareCopyBtn: 'Copy code',
   shareCopiedToast: 'Code copied', shareAppleToast: 'Code copied: in Apple Home choose More options… and enter it', shareStopBtn: 'Stop sharing', shareNew: 'New code',
   shareOld: 'This firmware cannot make a one-time code yet: update it, or use its own pairing code on its page.',
   addToHa: 'Home Assistant', addToHaBtn: 'Add to Home Assistant',
@@ -2509,7 +2511,7 @@ function renderShareDlg() {
       <div><div class="sub">${t('shareCodeLabel')}</div><div class="sharecode">${esc(code)}</div><div class="sub" id="shareLeftTxt"></div></div></div>
     <p class="sub">${t('shareHowApple')}</p>
     <div class="actions"><button class="text" onclick="stopShare()">${t('shareStopBtn')}</button><span class="grow"></span>
-      ${isApple() ? `<button onclick="shareApple()">${t('shareAppleBtn')}</button>` : ''}
+      ${canShareApp() ? `<button onclick="shareApple()">${t(shareAppLabel())}</button>` : ''}
       <button class="pri" onclick="copyPlain(shareData.manual);toast(t('shareCopiedToast'))">${t('shareCopyBtn')}</button></div>`);
   let left = s.left;
   clearInterval(shareTimer);
@@ -2536,10 +2538,45 @@ function shareEnded() {
     <button class="pri" onclick="shareDevice('${shareId}')">${t('shareNew')}</button></div>`);
   loadStatuses();
 }
+// The Home Assistant app around this page (iOS or Android): the page is on
+// Home Assistant's own address, so its frontend can hand the code to the app,
+// which shows Apple Home's own window (Android: a chooser of apps), as Home
+// Assistant's "Share device" does. null in a plain browser.
+function haApp() {
+  try {
+    const ha = window.top.document.querySelector('home-assistant');
+    const ext = ha && ha.hass && ha.hass.auth && ha.hass.auth.external;
+    const c = ext && ext.config;
+    if (!c) return null;
+    if (c.canShareMatterDeviceToAppleHome) return {ext, target: 'apple_home'};
+    if (c.canShareMatterDeviceToOtherApps) return {ext, target: 'app_chooser'};
+  } catch (e) {}
+  return null;
+}
+// The passcode of the one-time code: from the firmware, or (older firmware)
+// out of the 11-digit code, where it sits in digits 2-6 and 7-10
+function sharePasscode(s) {
+  if (s.passcode) return s.passcode;
+  const d = s.manual.replace(/\D/g, '');
+  return parseInt(d.slice(6, 10), 10) * 16384 + (parseInt(d.slice(1, 6), 10) % 16384);
+}
+async function shareToApp(s, name, onCopy) {
+  const app = haApp();
+  if (app && (app.target === 'apple_home' || s.discriminator != null)) {
+    const payload = {setup_qr_code: s.qr, setup_pin_code: sharePasscode(s), device_name: name, remaining_seconds: s.left};
+    if (s.discriminator != null) payload.discriminator = s.discriminator;
+    try { await app.ext.sendMessage({type: 'matter/share_device', payload}); }
+    catch (e) { if (!e || e.code !== 'canceled') toast((e && e.message) || String(e)); }
+    return;
+  }
+  onCopy();  // a plain browser: copy the code, and on an Apple device open Home
+  if (/iPhone|iPad|Macintosh/.test(navigator.userAgent)) setTimeout(() => { location.href = 'com.apple.home://'; }, 600);
+}
+const shareAppLabel = () => { const app = haApp(); return app && app.target === 'app_chooser' ? 'shareOtherBtn' : 'shareAppleBtn'; };
+const canShareApp = () => !!haApp() || /iPhone|iPad|Macintosh/.test(navigator.userAgent);
 function shareApple() {
-  copyPlain(shareData.manual);
-  toast(t('shareAppleToast'));
-  setTimeout(() => { location.href = 'com.apple.home://'; }, 600);
+  const p = state.proxies.find(x => x.id === shareId);
+  shareToApp(shareData, p ? p.name : '', () => { copyPlain(shareData.manual); toast(t('shareAppleToast')); });
 }
 async function stopShare() {
   try { await proxyCommand(shareId, 'matter close'); } catch (e) {}

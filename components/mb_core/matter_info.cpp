@@ -87,6 +87,8 @@ namespace {
 struct Share {
     bool active = false;
     std::string qr, manual;
+    uint32_t passcode = 0;       // of this one-time code only, never the device's own
+    uint16_t discriminator = 0;  // the Home Assistant app needs both to hand it to another app
     int64_t until_us = 0;
 } share;
 constexpr uint32_t SHARE_SECONDS = 600;
@@ -98,7 +100,8 @@ std::string share_json() {
     const int64_t left = (share.until_us - esp_timer_get_time()) / 1000000;
     return "{\"manual\":" + json_text(share.manual) + ",\"qr\":" + json_text(share.qr) + ",\"qr_size\":" +
            std::to_string(size) + ",\"qr_path\":" + json_text(path) + ",\"left\":" + std::to_string(left > 0 ? left : 0) +
-           "}";
+           ",\"passcode\":" + std::to_string(share.passcode) + ",\"discriminator\":" + std::to_string(share.discriminator) +
+           ",\"seconds\":" + std::to_string(SHARE_SECONDS) + "}";
 }
 
 }  // namespace
@@ -155,6 +158,8 @@ std::string share_window() {
     share.active = true;
     share.qr = qr;
     share.manual = manual;
+    share.passcode = passcode;
+    share.discriminator = discriminator;
     share.until_us = esp_timer_get_time() + int64_t(SHARE_SECONDS) * 1000000;
     return share_json() + "\n";
 }

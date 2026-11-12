@@ -13,17 +13,18 @@
 [hidden]{display:none!important}
 body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 Roboto,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
 svg{width:24px;height:24px;fill:currentColor;flex:none}
-/* A bar over the full width, as in the add-on (and Home Assistant); its content lines up with the page */
-header{--gut:max(0px,calc((100% - 1120px) / 2));position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:12px;min-height:56px;padding:0 calc(var(--gut) + 4px) 0 calc(var(--gut) + 16px);background:var(--card);border-bottom:1px solid var(--line)}
+/* The header as Home Assistant's: a bar from edge to edge, back arrow at the left, actions at the right */
+header{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:12px;min-height:56px;padding:0 4px 0 16px;background:var(--card);border-bottom:1px solid var(--line)}
 header h1{flex:1;margin:0;font-size:20px;font-weight:400}
-header .back{display:grid;place-items:center;width:40px;height:40px;margin-left:-12px;border-radius:50%;color:var(--fg)}
+header .back{display:grid;place-items:center;width:48px;height:48px;margin-left:-12px;border-radius:50%;color:var(--fg)}
 header .back:hover{background:var(--fill)}
 header .back[hidden]{display:none}
 header .sub{font-size:12px}
-main{max-width:1120px;margin:0 auto;padding:4px 16px 96px}
+/* A detail page as Home Assistant's device page: at most 1280 px, columns that fill it */
+main{max-width:1280px;margin:0 auto;padding:8px 16px 96px}
 /* Two columns on a wide screen: what you use on the left, the device's
    settings on the right; one column on a phone or a narrow window */
-.cols{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:24px;align-items:start}
+.cols{display:grid;grid-template-columns:minmax(0,2fr) minmax(340px,1fr);gap:16px;align-items:start}
 .cols > div{min-width:0}
 @media (max-width:900px){.cols{grid-template-columns:minmax(0,1fr);gap:0}}
 .sub{color:var(--mute)}
@@ -110,7 +111,7 @@ details[open] summary::after{transform:rotate(-135deg)}
 .code{font-size:20px;letter-spacing:.04em;margin:2px 0 6px}
 pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--mute);margin:4px 0 8px}
 .measure{margin:8px 0 0;font-weight:500;color:var(--primary)}
-.menu{position:absolute;right:calc(var(--gut, 0px) + 8px);top:48px;min-width:200px;background:var(--card);border-radius:4px;box-shadow:0 4px 16px rgba(0,0,0,.25);padding:8px 0;display:none}
+.menu{position:absolute;right:8px;top:48px;min-width:200px;background:var(--card);border-radius:4px;box-shadow:0 4px 16px rgba(0,0,0,.25);padding:8px 0;display:none}
 .menu.open{display:block}
 .menu button{width:100%;justify-content:flex-start;border-radius:0;background:none;min-height:44px;font-weight:400}
 .field input.saved::placeholder{color:inherit;opacity:1;letter-spacing:2px}
@@ -512,7 +513,7 @@ const TEXT = {
   resultNotFound: c => `Last time the Wi-Fi network was not found (code ${c}). Check the name: the device only uses 2.4 GHz.`,
   resultNoConnect: c => `Last time there was no Wi-Fi connection within a minute (code ${c}).`,
   windowOpen: 'Pairing window open', windowClosed: 'Pairing window closed',
-  shareHelp: 'Add this device to another app (Apple Home, Google Home, Alexa, another Home Assistant) with a one-time code; its own pairing code stays secret.', shareStart: 'Share device', shareCode: 'One-time code', shareLeft: s => `Valid for ${s}`, shareHow: 'Scan the QR code in the other app or enter the code. In Apple Home: + → Add Accessory → More options… → enter the code.', shareApple: 'Add to Apple Home', shareCopy: 'Copy code', shareCopied: 'Code copied', shareAppleHint: 'Code copied: in Apple Home choose More options… and enter it', shareStop: 'Stop sharing',
+  shareOther: 'Share with another app', shareHelp: 'Add this device to another app (Apple Home, Google Home, Alexa, another Home Assistant) with a one-time code; its own pairing code stays secret.', shareStart: 'Share device', shareCode: 'One-time code', shareLeft: s => `Valid for ${s}`, shareHow: 'Scan the QR code in the other app or enter the code. In Apple Home: + → Add Accessory → More options… → enter the code.', shareApple: 'Add to Apple Home', shareCopy: 'Copy code', shareCopied: 'Code copied', shareAppleHint: 'Code copied: in Apple Home choose More options… and enter it', shareStop: 'Stop sharing',
   pairExtra: 'For another controller (e.g. Apple Home): open the pairing window and scan the code within 5 minutes.',
   accessTitle: 'Programs with access',
   accessHelp: 'Programs such as the Home Assistant add-on get a key of their own. They ask with this password and need a press of the BOOT button.',
@@ -1227,7 +1228,8 @@ function renderShare() {
   $('#shareQr').innerHTML = n ? `<svg viewBox="-2 -2 ${n + 4} ${n + 4}" shape-rendering="crispEdges" role="img" aria-label="${esc(s.qr)}">
     <rect x="-2" y="-2" width="${n + 4}" height="${n + 4}" fill="#fff"/><path fill="#000" d="${s.qr_path}"/></svg>` : '';
   // Apple Home cannot be started with a code from a web page: copy it, then open Home
-  $('#shareApple').hidden = !/iPhone|iPad|Macintosh/.test(navigator.userAgent);
+  $('#shareApple').hidden = !canShareApp();
+  $('#shareApple').textContent = t(shareAppLabel());
   shareLeft = s.left;
   const tick = () => {
     $('#shareLeft').textContent = t('shareLeft', `${Math.floor(shareLeft / 60)}:${String(shareLeft % 60).padStart(2, '0')}`);
@@ -1263,11 +1265,44 @@ $('#shareStop').onclick = async () => {
   loadMatter();
 };
 $('#shareCopy').onclick = () => { copyText(matter.share.manual); toast(t('shareCopied')); };
-$('#shareApple').onclick = () => {
-  copyText(matter.share.manual);
-  toast(t('shareAppleHint'));
-  setTimeout(() => { location.href = 'com.apple.home://'; }, 600);
-};
+// The Home Assistant app around this page (iOS or Android): the page is on
+// Home Assistant's own address, so its frontend can hand the code to the app,
+// which shows Apple Home's own window (Android: a chooser of apps), as Home
+// Assistant's "Share device" does. null in a plain browser.
+function haApp() {
+  try {
+    const ha = window.top.document.querySelector('home-assistant');
+    const ext = ha && ha.hass && ha.hass.auth && ha.hass.auth.external;
+    const c = ext && ext.config;
+    if (!c) return null;
+    if (c.canShareMatterDeviceToAppleHome) return {ext, target: 'apple_home'};
+    if (c.canShareMatterDeviceToOtherApps) return {ext, target: 'app_chooser'};
+  } catch (e) {}
+  return null;
+}
+// The passcode of the one-time code: from the firmware, or (older firmware)
+// out of the 11-digit code, where it sits in digits 2-6 and 7-10
+function sharePasscode(s) {
+  if (s.passcode) return s.passcode;
+  const d = s.manual.replace(/\D/g, '');
+  return parseInt(d.slice(6, 10), 10) * 16384 + (parseInt(d.slice(1, 6), 10) % 16384);
+}
+async function shareToApp(s, name, onCopy) {
+  const app = haApp();
+  if (app && (app.target === 'apple_home' || s.discriminator != null)) {
+    const payload = {setup_qr_code: s.qr, setup_pin_code: sharePasscode(s), device_name: name, remaining_seconds: s.left};
+    if (s.discriminator != null) payload.discriminator = s.discriminator;
+    try { await app.ext.sendMessage({type: 'matter/share_device', payload}); }
+    catch (e) { if (!e || e.code !== 'canceled') toast((e && e.message) || String(e)); }
+    return;
+  }
+  onCopy();  // a plain browser: copy the code, and on an Apple device open Home
+  if (/iPhone|iPad|Macintosh/.test(navigator.userAgent)) setTimeout(() => { location.href = 'com.apple.home://'; }, 600);
+}
+const shareAppLabel = () => { const app = haApp(); return app && app.target === 'app_chooser' ? 'shareOther' : 'shareApple'; };
+const canShareApp = () => !!haApp() || /iPhone|iPad|Macintosh/.test(navigator.userAgent);
+$('#shareApple').onclick = () => shareToApp(matter.share, (state && state.io ? state.io.name : 'Matter Builder'),
+  () => { copyText(matter.share.manual); toast(t('shareAppleHint')); });
 
 async function loadMatter() {
   if (loadingMatter) return;

@@ -13,8 +13,12 @@
 [hidden]{display:none!important}
 body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 Roboto,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
 svg{width:24px;height:24px;fill:currentColor;flex:none}
-header{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:12px;min-height:56px;max-width:1120px;margin:0 auto;padding:0 4px 0 16px;background:var(--bg)}
+/* A bar over the full width, as in the add-on (and Home Assistant); its content lines up with the page */
+header{--gut:max(0px,calc((100% - 1120px) / 2));position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:12px;min-height:56px;padding:0 calc(var(--gut) + 4px) 0 calc(var(--gut) + 16px);background:var(--card);border-bottom:1px solid var(--line)}
 header h1{flex:1;margin:0;font-size:20px;font-weight:400}
+header .back{display:grid;place-items:center;width:40px;height:40px;margin-left:-12px;border-radius:50%;color:var(--fg)}
+header .back:hover{background:var(--fill)}
+header .back[hidden]{display:none}
 header .sub{font-size:12px}
 main{max-width:1120px;margin:0 auto;padding:4px 16px 96px}
 /* Two columns on a wide screen: what you use on the left, the device's
@@ -103,7 +107,7 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
 .bed-menu{position:relative}
 .bed-menu .menu{left:0;right:auto;top:40px;z-index:3}
 .measure{margin:8px 0 0;font-weight:500;color:var(--primary)}
-.menu{position:absolute;right:8px;top:48px;min-width:200px;background:var(--card);border-radius:4px;box-shadow:0 4px 16px rgba(0,0,0,.25);padding:8px 0;display:none}
+.menu{position:absolute;right:calc(var(--gut, 0px) + 8px);top:48px;min-width:200px;background:var(--card);border-radius:4px;box-shadow:0 4px 16px rgba(0,0,0,.25);padding:8px 0;display:none}
 .menu.open{display:block}
 .menu button{width:100%;justify-content:flex-start;border-radius:0;background:none;min-height:44px;font-weight:400}
 .field input.saved::placeholder{color:inherit;opacity:1;letter-spacing:2px}
@@ -151,6 +155,8 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
 </svg>
 
 <header>
+  <!-- Back to Matter Builder, as Home Assistant's pages do: only when opened from the add-on -->
+  <a class="icon-btn back" id="backBtn" href="#" aria-label="Back" hidden><svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2Z"/></svg></a>
   <h1><span data-t="title"></span> <div class="sub" id="sys"></div></h1>
   <button class="icon-btn" id="menuBtn" aria-label="Menu"><svg><use href="#i-menu"/></svg></button>
   <div class="menu" id="menu">
@@ -1272,6 +1278,7 @@ $('#otaForm').onsubmit = e => {
 
 applyLanguage();
 $('#sys').textContent = t('connecting');
+if (window.mbBack) { $('#backBtn').href = window.mbBack; $('#backBtn').hidden = false; }
 function startApp() { boot(refresh, [loadMatter, loadWifi, loadThread, loadAccess, loadLanguage]); }
 function keepToken(value) {
   token = value;

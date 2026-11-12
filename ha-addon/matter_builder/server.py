@@ -398,10 +398,15 @@ def portal_page(html, proxy):
             "P.getItem=function(n){return g.call(this,k(n))};"
             "P.setItem=function(n,v){return s.call(this,k(n),v)};"
             "P.removeItem=function(n){return r.call(this,k(n))}})();</script>")
-    back = ('<a href="../../" style="display:block;padding:10px 16px;font:500 14px system-ui,sans-serif;'
-            'color:#009ac7;text-decoration:none">&larr; Matter Builder</a>')
+    # The way back: newer pages put an arrow in their own header (as Home
+    # Assistant's pages do) when told where to; older ones get a link above
+    if 'id="backBtn"' in text:
+        shim = shim.replace("<script>", '<script>window.mbBack="../../";', 1)
+    else:
+        back = ('<a href="../../" style="display:block;padding:10px 16px;font:500 14px system-ui,sans-serif;'
+                'color:#009ac7;text-decoration:none">&larr; Matter Builder</a>')
+        text = re.sub(r"<body[^>]*>", lambda m: m.group(0) + back, text, count=1)
     text = re.sub(r"<head[^>]*>", lambda m: m.group(0) + shim, text, count=1)
-    text = re.sub(r"<body[^>]*>", lambda m: m.group(0) + back, text, count=1)
     return text.encode()
 
 

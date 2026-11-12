@@ -1,3 +1,4 @@
+# Summary: Control a lamp with a relay and a wall button.
 # A recipe: a generic device with its connections, nothing else. Wi-Fi,
 # Thread and passwords are set on the device itself, never here.
 device:

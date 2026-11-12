@@ -28,6 +28,7 @@ import base64
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -107,8 +108,11 @@ def recipes(repo, branch, folder):
             continue
         if spec["app"] != "generic":
             continue
+        summary = re.search(r"^# Summary:[ \t]*([^\r\n]+)", text, re.MULTILINE)
         out.append({"id": f"{repo}/{entry['name'][:-5]}", "title": spec["name"], "text": text,
-                    "connections": spec["connections"], "requires": spec.get("requires", [])})
+                    "description": summary[1].strip()[:180] if summary else "",
+                    "connections": spec["connections"], "requires": spec.get("requires", []),
+                    "custom_build": bool(spec.get("components"))})
     return out
 
 
@@ -174,12 +178,20 @@ def source(repo, official, verified):
             if not images:
                 continue
             newest = images[-1]
-            factory = next((f["file"] for f in data.get("factory", [])
-                            if f["app"] == pkg["app"] and f["version"] == newest["version"]), None)
+            factory_by_app = {f["app"]: f["file"] for f in data.get("factory", [])
+                              if f["version"] == newest["version"] and f["file"] in assets}
+            variants = [
+                {"chip": i["chip"], "network": i["network"], "factory": factory_by_app.get(i["app"])}
+                for i in data.get("images", [])
+                if i.get("chip") and i.get("network") and i.get("file") in assets and i["version"] == newest["version"] and (
+                    i["app"] == pkg["app"] or (official and pkg["app"] == "mb_generic" and
+                                              i["app"].startswith("mb_generic_")))
+            ]
+            factory = factory_by_app.get(pkg["app"])
             items.append(dict(base, kind="firmware", id=f"{repo}/{pkg['name']}", title=pkg["title"],
                               description=pkg["description"], app=pkg["app"], version=newest["version"],
                               requires=pkg.get("requires", []), network=pkg.get("network", ["thread"]),
-                              settings=pkg.get("settings", {}),
+                              variants=variants, settings=pkg.get("settings", {}),
                               release=data.get("release"), updated=release.get("published_at"),
                               downloads=sum(a.get("download_count", 0) for a in assets.values()),
                               factory=factory))

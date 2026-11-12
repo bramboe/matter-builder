@@ -1,3 +1,4 @@
+# Summary: Use Matter buttons to send an Octo bed’s remote commands over Bluetooth.
 # An Octo bed as buttons, without the bed bridge firmware: the generic device
 # (ESP32-C6) sends the remote's commands over Bluetooth. The commands are the
 # same for every Octo bed; your bed's Bluetooth address and its PIN are set

@@ -1,3 +1,4 @@
+# Summary: Switch a relay-controlled light with a wall button, even when Home Assistant is offline.
 # A light behind a relay with a wall button next to it. The button switches
 # the light on the device itself, so it keeps working when Home Assistant is
 # off; after a power cut the light comes back as it was. Change the pins on

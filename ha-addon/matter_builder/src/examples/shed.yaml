@@ -1,3 +1,4 @@
+# Summary: Switch a pump and monitor a door, temperature and humidity.
 # A generic device: what is connected is a factory setting here, and can
 # still be changed on the device's own page. Wi-Fi, Thread and the password
 # are set there too, never in this file.

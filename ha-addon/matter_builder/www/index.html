@@ -701,6 +701,11 @@ const TEXT = {
   anySource: 'Any source', community: 'Community', verified: 'Verified', source: 'Source', version: 'Version', stars: 'GitHub stars',
   downloads: 'Downloads', updated: 'Last release', keyFingerprint: 'Key fingerprint', maker: 'Maker',
   catalogOffline: 'The online catalog is not reachable: this shows the official firmware and examples only.',
+  catalogBoards: 'Boards', catalogExperimental: 'Untested boards', catalogBoardNetwork: 'Board and network',
+  catalogBoardsUnknown: 'Board information unavailable', catalogCheckPins: 'Check the GPIO assignments for your board.',
+  catalogCustomBuild: 'Custom build required', catalogNoDescription: 'No description provided.',
+  catalogConnections: names => `Connections: ${names}.`, catalogMoreConnections: n => `+${n} more`,
+  catalogBle: 'BLE required', catalogBleOptional: 'BLE optional',
   communityNotice: 'Made by the community. The Matter Builder project did not test, audit or support it.',
   gateTitle: 'Before you install from the community',
   gateTips: ['Community firmware and recipes are made by other people. The project did not test or audit them.',
@@ -1698,20 +1703,71 @@ const rowsOf = conns => (conns || []).map(x => ({slot: x.slot, type: x.type, pin
   code: x.code || '', mac: x.mac || '', number: x.number || 0, power: x.power || 'off', off_after: x.off_after || 0,
   controls: x.controls === undefined ? null : x.controls, group: x.group || ''}));
 
+function localCatalogVariants(app, version) {
+  return (state.releases || []).filter(r => r.official && baseApp(r.app) === app && r.version === version).map(r => ({
+    chip: r.chip, network: r.network,
+    factory: (state.release_factory || []).find(f => f.official && f.app === r.app && f.version === r.version)?.file,
+  }));
+}
 function localCatalog() {
   const items = [];
   const own = (state.sources || []).find(s => s.official) || {};
-  for (const app of [...new Set(state.releases.filter(r => r.official).map(r => r.app))]) {
-    const pkg = (state.packages || []).find(p => p.app === app) || {};
-    const rel = state.releases.filter(r => r.app === app).sort((a, b) => newer(a.version, b.version) ? -1 : 1)[0];
-    const factory = (state.release_factory || []).find(f => f.app === app && f.version === rel.version);
+  const releases = state.releases.filter(r => r.official);
+  for (const app of new Set(releases.map(r => baseApp(r.app)))) {
+    const pkg = (state.packages || []).find(p => p.official && p.app === app) || {};
+    const release = releases.filter(r => baseApp(r.app) === app).sort((a, b) => newer(a.version, b.version) ? -1 : 1)[0];
     items.push({kind: 'firmware', id: `${own.repo}/${app}`, source: own.repo, official: true, verified: true, app,
-      title: appTitle(app), description: pkg.description || '', version: rel.version, factory: factory && factory.file});
+      title: appTitle(app), description: pkg.description, requires: pkg.requires,
+      version: release.version, variants: localCatalogVariants(app, release.version)});
   }
   for (const r of recipes || []) items.push({kind: 'recipe', source: own.repo, official: true, verified: true, ...r});
   return items;
 }
 const catalogItems = () => catalogData ? catalogData.items : localCatalog();
+
+const catalogBoardName = chip => BOARDS[chip]?.name || String(chip).toUpperCase();
+const catalogBleRequired = it => (it.requires || []).includes('bluetooth') ||
+  (it.kind === 'recipe' && rowsNeed(rowsOf(it.connections)).includes('bluetooth'));
+
+function catalogVariants(it) {
+  if (it.kind === 'firmware') return it.variants || (it.official ? localCatalogVariants(it.app, it.version) : []);
+  if (it.custom_build) return [];
+  const generic = catalogItems().find(x => x.official && x.kind === 'firmware' && x.app === 'mb_generic');
+  return (generic ? catalogVariants(generic) : []).filter(v => !catalogBleRequired(it) || BOARDS[v.chip]?.bluetooth);
+}
+
+function catalogDescription(it) {
+  const description = typeof it.description === 'string' ? it.description.trim() : '';
+  const summary = description || String(it.text || '').match(/^# Summary:[ \t]*([^\r\n]+)/m)?.[1].trim();
+  if (summary) return summary;
+  const rows = rowsOf(it.connections);
+  if (rows.length === 1 && TEXT.typeHelp[rows[0].type]) return TEXT.typeHelp[rows[0].type];
+  const names = [...new Set(rows.map(r => r.name || TEXT.types[r.type] || r.type))];
+  if (!names.length) return t('catalogNoDescription');
+  const short = names.slice(0, 3);
+  if (names.length > 3) short.push(t('catalogMoreConnections', names.length - 3));
+  return t('catalogConnections', short.join(', '));
+}
+
+function catalogCompatibility(it, variants) {
+  const networks = [...new Set(variants.map(v => v.network))].filter(Boolean);
+  const labels = needs([], networks.length ? networks : it.kind === 'firmware' ? it.network : []);
+  if (catalogBleRequired(it)) labels.push(t('catalogBle'));
+  else if (it.kind === 'firmware' && it.official && it.app === 'mb_generic' && variants.some(v => BOARDS[v.chip]?.bluetooth)) {
+    labels.push(t('catalogBleOptional'));
+  }
+  const chips = [...new Set(variants.map(v => v.chip))].filter(Boolean);
+  const boards = chips.filter(chip => BOARDS[chip]?.support !== 'experimental').map(catalogBoardName);
+  const experimental = chips.filter(chip => BOARDS[chip]?.support === 'experimental').map(catalogBoardName);
+  return {labels, boards, experimental};
+}
+
+function catalogCompatibilityHtml(it, {labels, boards, experimental}) {
+  return `${needChips(labels)}
+    ${boards.length ? `<div class="sub"><b>${t('catalogBoards')}</b> · ${esc(boards.join(', '))}</div>` : ''}
+    ${experimental.length ? `<div class="sub"><b>${t('catalogExperimental')}</b> · ${esc(experimental.join(', '))}</div>` : ''}
+    ${!boards.length && !experimental.length ? `<div class="sub">${t(it.custom_build ? 'catalogCustomBuild' : 'catalogBoardsUnknown')}</div>` : ''}`;
+}
 
 async function loadCatalog() {
   if (catalogLoading) return;
@@ -1729,14 +1785,18 @@ const badge = it => it.official ? `<span class="chip accent">${t('official')}</s
   : `<span class="chip">${t('community')}</span>${it.verified ? ` <span class="chip ok">${t('verified')}</span>` : ''}${it.liked ? ` <span class="chip ok">${t('liked')}</span>` : ''}`;
 
 function catalogCard(it, i) {
-  const what = it.kind === 'firmware' ? esc(it.description || '')
-    : esc(rowsOf(it.connections).map(r => `${r.name} (${TEXT.types[r.type] || r.type})`).join(', '));
+  const compatibility = catalogCompatibility(it, catalogVariants(it));
   return `<div class="card" style="cursor:pointer" onclick="openItem(${i})">
     <div class="head"><span class="ico">${it.kind === 'firmware' ? appIcon(it.app) : icon('recipe')}</span>
       <div class="info"><h3>${esc(it.title)}</h3><div class="sub">${it.kind === 'firmware' ? esc(it.version || '') : t('recipe')} · ${esc(it.maker || (it.source || '').split('/')[0])}</div></div></div>
-    <div class="meta"><div class="sub">${what}</div>
-      ${needChips(needs(it.kind === 'firmware' ? it.requires : (it.requires || rowsNeed(rowsOf(it.connections))), it.kind === 'firmware' ? (it.network || ['thread']) : null))}</div>
+    <div class="meta"><div class="sub">${esc(catalogDescription(it))}</div>${catalogCompatibilityHtml(it, compatibility)}</div>
     <div class="acts" style="margin-top:auto">${badge(it)}<span class="grow"></span>${it.stars ? `<span class="sub">★ ${it.stars}</span>` : ''}</div></div>`;
+}
+
+function catalogSearchText(it) {
+  const {labels, boards, experimental} = catalogCompatibility(it, catalogVariants(it));
+  return [it.title, catalogDescription(it), it.maker, it.source, ...labels, ...boards, ...experimental]
+    .join(' ').toLowerCase();
 }
 
 let shownItems = [];
@@ -1745,7 +1805,7 @@ function renderCatalog() {
   const q = catalogQuery.toLowerCase();
   shownItems = catalogItems().filter(it => (catalogFilter === 'all' || it.kind === catalogFilter) &&
     (sourceFilter === 'any' || (sourceFilter === 'official') === !!it.official) &&
-    (!q || `${it.title} ${it.description || ''} ${it.maker || ''} ${it.source}`.toLowerCase().includes(q)));
+    (!q || catalogSearchText(it).includes(q)));
   const fw = shownItems.map((it, i) => [it, i]).filter(([it]) => it.kind === 'firmware');
   const rc = shownItems.map((it, i) => [it, i]).filter(([it]) => it.kind === 'recipe')
     .sort(([a], [b]) => (b.official ? 1 : 0) - (a.official ? 1 : 0) || (b.stars || 0) - (a.stars || 0));
@@ -1762,7 +1822,8 @@ async function loadRecipes() {
   const out = [];
   for (const [id, text] of Object.entries(exampleTexts)) {
     const c = await api('api/specs', {text, check_only: true});
-    if (c.spec && c.spec.app === 'generic') out.push({id, title: c.spec.name, connections: c.spec.connections || []});
+    if (c.spec && c.spec.app === 'generic') out.push({id, title: c.spec.name, text, connections: c.spec.connections || [],
+      requires: c.spec.requires, custom_build: !!c.spec.components?.length});
   }
   recipes = out;
   render();
@@ -1788,16 +1849,20 @@ function renderItem() {
       `${f.title || k}${f.type === 'int' ? ` (${f.min}–${f.max})` : ''}`).join(', '))] : null,
     it.key_sha256 ? [t('keyFingerprint'), `<span class="mono">${esc(it.key_sha256.slice(0, 16))}…</span>`] : null,
   ].filter(Boolean);
-  const canInstall = it.kind === 'firmware' && it.factory;
+  const variants = catalogVariants(it);
+  const installable = it.kind === 'firmware' ? variants.filter(v => v.factory) : [];
+  const canInstall = installable.length || (it.kind === 'firmware' && it.factory);
   setHtml($('#itemBody'), `<div class="head" style="display:flex;gap:10px;align-items:center"><span class="ico">${it.kind === 'firmware' ? appIcon(it.app) : icon('recipe')}</span>
       <div style="flex:1"><h2>${esc(it.title)}</h2><div class="sub">${esc(it.maker || '')}</div></div>${badge(it)}</div>
-    ${it.description ? `<p>${esc(it.description)}</p>` : ''}
-    ${needChips(needs(it.kind === 'firmware' ? it.requires : (it.requires || rowsNeed(rows)), it.kind === 'firmware' ? (it.network || ['thread']) : null))}
-    ${(it.requires || []).includes('bluetooth') && it.kind === 'firmware' ? `<p class="sub">${t('needsBluetooth')}</p>` : ''}
+    <p>${esc(catalogDescription(it))}</p>
+    ${catalogCompatibilityHtml(it, catalogCompatibility(it, variants))}
+    ${it.kind === 'recipe' && variants.length && rows.some(r => !isBle(r.type)) ? `<p class="sub">${t('catalogCheckPins')}</p>` : ''}
+    ${installable.length ? `<label class="field" style="margin-top:12px"><span>${t('catalogBoardNetwork')}</span><select id="catalogVariant">
+      ${installable.map(v => `<option value="${esc(v.factory)}">${esc(catalogBoardName(v.chip))} · ${esc(NET_NAMES[v.network] || v.network)}</option>`).join('')}</select></label>` : ''}
     ${rows.length ? `<div style="margin:10px 0">${rows.map(r => `<div class="row"><div class="label">${esc(r.name)}</div><div class="sub">${esc(TEXT.types[r.type] || r.type)} · GPIO ${r.pin}${r.type === 'sht4x' ? ' / ' + r.pin2 : ''}</div></div>`).join('')}</div>` : ''}
     ${facts.map(([k, v]) => `<div class="row"><div class="label sub">${k}</div><div>${v}</div></div>`).join('')}
     ${it.official ? '' : `<div class="banner" style="margin-top:12px;background:var(--warnchip)"><span class="grow sub" style="color:var(--fg)">${t('communityNotice')}</span></div>`}
-    ${it.kind === 'firmware' && !it.factory ? `<p class="sub">${t('updateOnly')}</p>` : ''}
+    ${it.kind === 'firmware' && !canInstall ? `<p class="sub">${t('updateOnly')}</p>` : ''}
     ${it.official || !it.url ? '' : `<div class="actions" style="justify-content:flex-start">
       <a class="button" href="${esc(it.url)}" target="_blank" rel="noopener">★ ${t('rate')}</a>
       <a class="text" href="https://github.com/${OFFICIAL_REPO}/issues/new?template=catalog-report.yml&title=${encodeURIComponent('Catalog report: ' + it.source)}&source=${encodeURIComponent(it.source)}&item=${encodeURIComponent(it.title)}" target="_blank" rel="noopener">${t('report')}</a>
@@ -1830,11 +1895,11 @@ function useItem() {
   });
 }
 
-function installItem() {
-  communityGate(async () => {
-    if (!sourceAdded(item.source)) { addSourceFlow(item.source, item.key_sha256, () => installItem()); return; }
+function installItem(file = $('#catalogVariant')?.value || catalogVariants(item).find(v => v.factory)?.factory || item.factory) {
+  communityGate(() => {
+    if (!sourceAdded(item.source)) { addSourceFlow(item.source, item.key_sha256, () => installItem(file)); return; }
     $('#itemDlg').close();
-    openWizard('method', null, {file: item.factory});
+    openWizard('method', null, {file});
   });
 }
 

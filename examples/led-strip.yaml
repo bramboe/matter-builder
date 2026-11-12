@@ -1,3 +1,4 @@
+# Summary: Control an addressable LED strip as a Matter colour light, with a local button.
 # An addressable LED strip (WS2812B, 60 LEDs) as a Matter colour light, in
 # the spirit of WLED: colour, colour temperature and brightness from Apple
 # Home, Google Home or Home Assistant, and a button next to it that switches

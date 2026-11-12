@@ -80,6 +80,25 @@ button.catalog-tip-trigger.optional{background:var(--fill);color:var(--mute);bor
   #catalogBody[data-view="list"] .card{display:grid;grid-template-columns:minmax(150px,1fr) minmax(0,2fr) auto;align-items:center;gap:20px}
 }
 .catalog-toolbar{display:flex;gap:10px 16px;flex-wrap:wrap}
+.spec-list{display:grid;gap:8px}
+.spec-row{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);display:flex;align-items:center;gap:12px;padding:10px 12px;flex-wrap:wrap}
+button.spec-name{min-width:0;flex:1 1 160px;justify-content:flex-start;text-align:start;background:none;padding:0;white-space:normal}
+.spec-name .info{min-width:0;overflow-wrap:anywhere}
+.spec-name .sub{display:block;font-weight:400}
+.spec-actions{display:flex;align-items:center;gap:4px;margin-inline-start:auto}
+.spec-actions .pop a.button{white-space:normal}
+.spec-builds{margin-top:24px}
+.spec-builds>summary{cursor:pointer;font-weight:500;padding:10px 2px}
+.spec-builds>.card{gap:12px}
+.spec-build-list{margin-top:4px}
+body.editing-config>header{display:none}
+body.editing-config main{padding-top:0}
+#specEditor{max-width:960px;margin:0 auto}
+.spec-editor-bar{position:sticky;top:0;z-index:3;display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--bg);padding:12px 0;border-bottom:1px solid var(--line)}
+.spec-editor-bar h2{flex:1 1 140px;min-width:0;overflow-wrap:anywhere}
+#specExampleField{margin-top:14px;max-width:300px}
+#specEditorHost .yaml{min-height:50vh}
+
 #catalogView{margin-inline-start:auto}
 @media (max-width:599px){#catalogView{margin-inline-start:0}}
 .ico{display:grid;place-items:center;width:38px;height:38px;border-radius:50%;background:var(--chip);color:var(--primary);flex:none}
@@ -261,7 +280,14 @@ a.button.pri{background:var(--primary);color:#fff}
 .auth .actions{margin-top:16px}
 .auth .error{margin-top:10px}
 .taskbar .bar>div:nth-child(2){flex:1 1 180px}
-.ble-cmd{grid-template-columns:2fr 3fr 1fr 1fr}
+.ble-cmd{grid-template-columns:minmax(0,1fr) minmax(0,2fr)}
+.ble-panel>summary{list-style:none;display:flex;align-items:center;gap:10px;padding:10px 12px;min-height:50px;cursor:pointer}
+.ble-panel>summary::-webkit-details-marker{display:none}
+.ble-panel>summary .info{flex:1;min-width:0;overflow-wrap:anywhere}
+.ble-panel[open]>summary .chev{transform:rotate(-135deg);margin-bottom:0}
+.ble-timing{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:12px}
+.ble-field-help{margin:4px 2px 0}
+.ble-settings-help{margin:8px 0 0}
 dialog{max-width:calc(100vw - 16px)}
 dialog.side{max-width:100vw}
 /* Phones: panels take the whole screen, rows wrap instead of squeezing their
@@ -291,8 +317,7 @@ dialog.side{max-width:100vw}
   .ed-item-head .info+*{margin-left:auto}
   .ed-item-head details.more summary{width:40px;height:40px}
   .ed-fields{grid-template-columns:1fr 1fr}
-  .ble-cmd{grid-template-columns:1fr 1fr}
-  .ble-cmd .field:nth-child(-n+2){grid-column:1/-1}
+  .ble-cmd,.ble-timing{grid-template-columns:1fr}
   .ed-section{flex-wrap:wrap}
   .banner{padding:10px 12px}
   .banner .grow{flex:1 1 calc(100% - 52px);min-width:0}
@@ -382,26 +407,29 @@ dialog.side{max-width:100vw}
 <section id="developerTab" hidden>
   <div class="section-head"><h2 data-t="myConfigs"></h2><span class="grow"></span><button class="pri" onclick="newSpec()" data-t="newSpec"></button></div>
   <p class="sub" data-t="specHelp" style="margin:0 2px 10px"></p>
-  <div class="grid" id="specList"></div>
-  <div class="card" id="specEditor" hidden style="margin-top:12px">
-    <div class="head"><div class="info"><h3 data-t="specEditorTitle"></h3></div>
-      <label class="field"><span data-t="startFrom"></span><select id="specExample"></select></label></div>
-    <div id="specEditorHost"></div>
-    <div class="error" id="specError" hidden></div>
-    <div class="notice" id="specNotice" hidden></div>
-    <div class="actions end"><button class="plain" onclick="$('#specEditor').hidden = true" data-t="close"></button>
-      <button id="specCheck" data-t="check"></button><button class="pri" id="specSave" data-t="save"></button></div>
-  </div>
-  <div id="devBlock">
-  <div class="section-head"><h2 data-t="standardBuilds"></h2></div>
-  <div class="grid">
+  <div class="spec-list" id="specList"></div>
+  <details class="spec-builds" id="devBlock" hidden>
+    <summary data-t="firmwareBuilds"></summary>
     <div class="card">
-      <div class="head"><div class="info"><h3 data-t="genericTitle"></h3><div class="sub" data-t="genericHelp"></div></div></div>
-      <div class="actions"><button class="pri" id="buildGenericBtn" data-t="build"></button><span class="sub" id="buildHint" data-t="installToolchain"></span></div>
+      <div class="row"><div class="label"><h3 data-t="genericTitle"></h3><div class="sub" data-t="genericHelp"></div></div>
+        <button id="buildGenericBtn" data-t="build"></button></div>
+      <div class="sub" id="buildHint" data-t="installToolchain"></div>
+      <div><h3 data-t="ownBuilds"></h3><div id="builds" class="spec-build-list"></div></div>
     </div>
-    <div class="card"><h3 data-t="ownBuilds"></h3><div id="builds" class="meta"></div></div>
+  </details>
+</section>
+
+<section id="specEditor" hidden>
+  <div class="spec-editor-bar">
+    <button class="icon" id="specBack" aria-label="Back to configs"></button>
+    <h2 id="specTitle" tabindex="-1"></h2>
+    <button id="specCheck" data-t="specValidate"></button>
+    <button class="pri" id="specSave" data-t="save"></button>
   </div>
-  </div>
+  <div class="error" id="specError" role="alert" hidden></div>
+  <div class="notice" id="specNotice" role="status" hidden></div>
+  <label class="field" id="specExampleField" hidden><span data-t="startFrom"></span><select id="specExample"></select></label>
+  <div id="specEditorHost"></div>
 </section>
 </main>
 
@@ -569,11 +597,18 @@ const TEXT = {
   ignore: 'Ignore', ignoreHelp: 'Do not offer this device for linking; show it again from Settings', showAgain: 'Show again',
   ignoredTitle: 'Ignored devices', ignoredHelp: 'Found on your network, but not offered for linking.',
   bleTitle: 'Bluetooth device', ofEightCommands: n => `${n} of 8 commands`,
-  bleHelp: 'A Bluetooth device this ESP32 sends commands to: a bed, a fan, a blind. Its commands are the same for everyone with that device, so they go into configs and recipes; each can be a connection (a button in Matter).',
-  bleOther: 'Another device', bleAddress: 'Bluetooth address', bleAddressHint: 'AA:BB:CC:DD:EE:FF', bleAddressType: 'Address type', blePublic: 'Public', bleRandom: 'Random',
-  bleService: 'Service', bleCharacteristic: 'Characteristic', bleWrite: 'Write', bleWriteResp: 'With response', bleWriteNoResp: 'Without response', bleIdle: 'Stay connected (s)',
+  bleHelp: 'Send Bluetooth commands to a device such as a bed or a fan. Add a command as a connection to make it available in Matter.',
+  bleOther: 'Set up another device', bleAddress: 'Bluetooth address', bleAddressHint: 'AA:BB:CC:DD:EE:FF', bleAddressType: 'Address type', blePublic: 'Public', bleRandom: 'Random',
+  bleService: 'Service UUID', bleCharacteristic: 'Characteristic UUID', bleWrite: 'Write mode', bleWriteResp: 'With response', bleWriteNoResp: 'Without response',
+  bleIdle: 'Disconnect after inactivity (s)', bleIdleHelp: '0 disconnects after each command. 3600 keeps the connection open.',
+  bleSettings: 'Bluetooth connection settings', bleSettingsHelp: 'Use the service, characteristic and write mode specified for your device.',
   blePinNote: 'Its address is yours; a first message after connecting (a PIN) is set on the device’s own page and never part of a config.',
-  bleLabel: n => `Command ${n}`, bleBytes: 'Bytes (hex)', bleTimes: 'Times', bleGap: 'Gap (ms)', bleAddCommand: 'Add command', bleAsConnection: 'Add as connection', bleIsConnection: 'Connection',
+  bleLabel: n => `Command ${n}`, bleCommandName: 'Command name', bleBytes: 'Command data (hex)', bleTimes: 'Number of sends', bleGap: 'Pause between sends (ms)',
+  bleBytesHelp: 'Use the hex command from your device documentation or a preset.',
+  bleTimesHelp: 'Includes the first send. Use 1 to send the command once.',
+  bleGapHelp: 'Only used when the command is sent more than once. 1000 ms is 1 second.',
+  bleSendOnce: 'Send once', bleSendRepeatedly: (count, pause) => `Send ${count} times · ${pause} ms between sends`,
+  bleAddCommand: 'Add command', bleAsConnection: 'Add as connection', bleIsConnection: 'Added as connection',
   bleRemove: 'Remove the Bluetooth device', bleRemoveConfirm: 'Remove the Bluetooth device from this configuration, with the connections that use its commands? (On the device it stays until you clear it on its page.)',
   bleNeedUuid: 'Bluetooth device: the service and characteristic as a UUID, e.g. FFE0', bleNeedAddress: 'Bluetooth device: the address like AA:BB:CC:DD:EE:FF',
   bleNeedBytes: n => `Bluetooth device: command ${n} needs its bytes as hex (1 to 64 bytes)`, bleNoCommand: n => `${n}: no such command on the Bluetooth device`,
@@ -761,8 +796,11 @@ const TEXT = {
   host: 'This host', cores: 'cores', memory: 'GB memory', disk: 'GB free',
   fewCores: 'Few cores or little memory: the first build takes an hour or more. More cores for the Home Assistant machine help most (about 1.5 GB memory per core).',
   toolchainReady: 'Ready', toolchainMissing: 'Not installed: about 6 GB, 15 minutes or more. Not included in backups.',
-  ownDevices: 'Own devices', noConfigs: 'No configs yet. Save one from a device, or make a new one.', newSpec: 'New config', specEditorTitle: 'Config',
-  specHelp: 'Configurations of generic devices, as YAML: a name and its connections. Install one on a new ESP32 or apply it to a linked device; nothing personal goes in.',
+  ownDevices: 'Own devices', noConfigs: 'No configs yet. Save one from a device, or make a new one.', newSpec: 'New config',
+  specHelp: 'Reuse a setup on a linked device or install it on a new board.',
+  specValidate: 'Validate', specDiscard: 'Discard unsaved changes to this config?', specExample: 'Choose an example',
+  specSummary: (connections, rules) => [`${connections} connection${connections === 1 ? '' : 's'}`, ...(rules ? [`${rules} rule${rules === 1 ? '' : 's'}`] : [])],
+  specUse: 'Use config', firmwareBuilds: 'Firmware builds', download: 'Download', downloadUpdate: 'Download update', downloadInstaller: 'Download installer',
   startFrom: 'Start from', check: 'Check', save: 'Save', specOk: s => `Valid: ${s.name} ${s.version} (${s.app}).`, specSaved: 'Saved.', del: 'Delete',
   build: 'Build', updateFile: 'Update file', factoryFile: 'For a new ESP32', confirmDelete: n => `Delete the spec “${n}”? Built files stay.`,
   standardBuilds: 'Standard firmware', genericTitle: 'Generic device', genericHelp: 'Build the standard firmware yourself, the same as the release.',
@@ -783,6 +821,7 @@ const ICON = {
   chip: 'M6 4h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2m1 3v10h10V7H7m3 3h4v4h-4v-4M8 1h2v2H8V1m3 0h2v2h-2V1m3 0h2v2h-2V1M8 21h2v2H8v-2m3 0h2v2h-2v-2m3 0h2v2h-2v-2M1 8h2v2H1V8m0 3h2v2H1v-2m0 3h2v2H1v-2m20-6h2v2h-2V8m0 3h2v2h-2v-2m0 3h2v2h-2v-2',
   wifi: 'M2 8.8a15.5 15.5 0 0 1 20 0l-1.5 1.8a13.2 13.2 0 0 0-17 0L2 8.8zm3.5 4a10 10 0 0 1 13 0l-1.5 1.8a7.7 7.7 0 0 0-10 0l-1.5-1.8zm3.5 4a4.7 4.7 0 0 1 6 0L12 20l-3-3.2z',
   bluetooth: 'M11 2h1l5.5 5.5L13 12l4.5 4.5L12 22h-1v-7.6l-4.3 4.3-1.4-1.4 5.3-5.3-5.3-5.3 1.4-1.4 4.3 4.3V2zm2 3.8v3.8l1.9-1.9L13 5.8zm0 8.6v3.8l1.9-1.9-1.9-1.9z',
+  back: 'M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.42-1.41L7.83 13H20z',
   plus: 'M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z',
   share: 'M18,16.08C17.24,16.08 16.56,16.38 16.04,16.85L8.91,12.7C8.96,12.47 9,12.24 9,12C9,11.76 8.96,11.53 8.91,11.3L15.96,7.19C16.5,7.69 17.21,8 18,8A3,3 0 0,0 21,5A3,3 0 0,0 18,2A3,3 0 0,0 15,5C15,5.24 15.04,5.47 15.09,5.7L8.04,9.81C7.5,9.31 6.79,9 6,9A3,3 0 0,0 3,12A3,3 0 0,0 6,15C6.79,15 7.5,14.69 8.04,14.19L15.16,18.34C15.11,18.55 15.08,18.77 15.08,19C15.08,20.61 16.39,21.91 18,21.91C19.61,21.91 20.92,20.61 20.92,19A2.92,2.92 0 0,0 18,16.08Z',
   group: 'M3 3h8v8H3V3m2 2v4h4V5H5m8-2h8v8h-8V3m2 2v4h4V5h-4M3 13h8v8H3v-8m2 2v4h4v-4H5m8-2h8v8h-8v-8m2 2v4h4v-4h-4Z',
@@ -1201,6 +1240,8 @@ class ConfigEditor {
     this.rules = []; this.ruleOpen = new Set(); this.rulesSupported = true; this.clock = null;
     this.grouping = false;  // the Groups switch: connections shown and moved by group
     this.ble = null; this.bleSupported = true;  // a Bluetooth device it sends commands to (ESP32-C6)
+    this.bleOpen = new Set(); this.bleSettingsOpen = false;
+    this.specDevice = null;
     this.board = null;  // the chip it is made for (the wizard), to show what does not work on it
     EDITORS[id] = this;
   }
@@ -1215,18 +1256,25 @@ class ConfigEditor {
   usesBluetooth() { return !!this.ble || this.rows.some(r => isBle(r.type)); }
   load(name, rows, pins, rules, ble) {
     this.ble = ble ? JSON.parse(JSON.stringify(ble)) : null;
+    this.bleOpen.clear(); this.bleSettingsOpen = false;
     this.name = name; this.rows = rows.map(r => ({...r})); if (pins) this.pins = pins;
     this.rules = JSON.parse(JSON.stringify(rules || [])); this.ruleOpen.clear();
-    this.yaml = specYaml(name, this.rows, this.components, this.drivers, this.rules, this.ble); this.error = ''; this.open.clear(); this.cardYaml = {}; this.picking = false;
+    this.yaml = specYaml(name, this.rows, this.components, this.drivers, this.rules, this.ble, this.specDevice); this.error = ''; this.open.clear(); this.cardYaml = {}; this.picking = false;
     this.grouping = this.rows.some(r => r.group);
     this.render();
   }
   // A YAML text (a config or recipe): shown as it is in the YAML mode
   async loadText(text) {
-    this.yaml = text; this.cardYaml = {}; this.open.clear();
-    try { const s = await parseSpec(text); this.name = s.name; this.rows = s.rows; this.components = s.components; this.drivers = s.drivers; this.rules = s.rules; this.ble = s.ble; this.error = ''; this.grouping = this.grouping || this.rows.some(r => r.group); }
+    this.yaml = text; this.cardYaml = {}; this.open.clear(); this.ruleOpen.clear(); this.bleOpen.clear(); this.bleSettingsOpen = false;
+    try { const s = await parseSpec(text); this.name = s.name; this.rows = s.rows; this.components = s.components; this.drivers = s.drivers; this.rules = s.rules; this.ble = s.ble; this.loadSpecDevice(s.device); this.error = ''; this.grouping = this.grouping || this.rows.some(r => r.group); }
     catch (e) { this.error = t('yamlError', e.message); this.mode = 'yaml'; }
     this.changed();
+  }
+  loadSpecDevice(device) {
+    if (this.id !== 'spec') return;
+    this.specDevice = device;
+    this.board = chipKey(device.board) || null;
+    this.pins = CHIP_PINS[this.board] || SAFE_PINS;
   }
   setLive(slots, tester) {
     this.live = slots; this.tester = tester;
@@ -1236,9 +1284,9 @@ class ConfigEditor {
 
   async setMode(mode) {
     if (mode === this.mode) return;
-    if (mode === 'yaml') this.yaml = specYaml(this.name, this.rows, this.components, this.drivers, this.rules, this.cleanBle());
+    if (mode === 'yaml') this.yaml = specYaml(this.name, this.rows, this.components, this.drivers, this.rules, this.cleanBle(), this.specDevice);
     else {
-      try { const s = await parseSpec(this.yaml); this.name = s.name; this.rows = s.rows; this.components = s.components; this.drivers = s.drivers; this.rules = s.rules; this.ble = s.ble; this.error = ''; }
+      try { const s = await parseSpec(this.yaml); this.name = s.name; this.rows = s.rows; this.components = s.components; this.drivers = s.drivers; this.rules = s.rules; this.ble = s.ble; this.loadSpecDevice(s.device); this.error = ''; }
       catch (e) { this.error = t('yamlError', e.message); this.render(); return; }
     }
     this.mode = mode; this.error = '';
@@ -1295,9 +1343,25 @@ class ConfigEditor {
     return b;
   }
   bleSet(key, value) { this.ble[key] = value; this.changed(false); }
-  bleCmd(i, key, value) { this.ble.commands[i][key] = value; this.changed(false); }
+  bleTiming(command) {
+    return command.times > 1 ? t('bleSendRepeatedly', command.times, command.gap) : t('bleSendOnce');
+  }
+  bleCmd(i, key, value) {
+    const command = this.ble.commands[i];
+    command[key] = value;
+    const row = this.host.querySelector(`[data-ble-command="${i}"]`);
+    row.querySelector('.ble-command-name').textContent = command.label || t('bleLabel', i + 1);
+    row.querySelector('.ble-command-timing').textContent = this.bleTiming(command);
+    row.querySelector('[data-ble-pause]').disabled = command.times <= 1;
+    this.changed(false);
+  }
+  trackBleCommand(i, open) {
+    if (open) this.bleOpen.add(i);
+    else this.bleOpen.delete(i);
+  }
   bleStart(template) {
     const tpl = BLE_TEMPLATES[template];
+    this.bleOpen.clear(); this.bleSettingsOpen = !tpl;
     this.ble = tpl ? {...bleEmpty(), service: tpl.service, characteristic: tpl.characteristic, write: tpl.write, idle: tpl.idle,
       commands: tpl.commands.map(([label, bytes, times, gap]) => ({label, bytes, times, gap}))} : bleEmpty();
     this.changed();
@@ -1308,11 +1372,18 @@ class ConfigEditor {
     this.rows = this.rows.filter(r => r.type !== 'ble_command');
     this.changed();
   }
-  bleAddCommand() { if (this.ble.commands.length < BLE_COMMANDS_MAX) { this.ble.commands.push({label: '', bytes: '', times: 1, gap: 0}); this.changed(); } }
+  bleAddCommand() {
+    if (this.ble.commands.length >= BLE_COMMANDS_MAX) return;
+    this.bleOpen.add(this.ble.commands.length);
+    this.ble.commands.push({label: '', bytes: '', times: 1, gap: 0});
+    this.changed();
+    this.host.querySelector(`[data-ble-command="${this.ble.commands.length - 1}"] input`)?.focus();
+  }
   bleDropCommand(i) {
     // Only the last one: connections point at commands by their number
     if (i !== this.ble.commands.length - 1) return;
     this.ble.commands.pop();
+    this.bleOpen.delete(i);
     this.rows = this.rows.filter(r => !(r.type === 'ble_command' && r.number === i + 1));
     this.changed();
   }
@@ -1338,16 +1409,29 @@ class ConfigEditor {
     const field = (label, key, value, extra = '') => `<label class="field"><span>${label}</span><input value="${esc(value)}" spellcheck="false" ${extra} oninput="${ref}.bleSet('${key}', this.value)"></label>`;
     const commands = b.commands.map((c, i) => {
       const linked = this.rows.some(r => r.type === 'ble_command' && r.number === i + 1);
-      return `<div class="ed-item"><div class="ed-item-body" style="padding-top:10px"><div class="ed-fields ble-cmd">
-          <label class="field"><span>${t('bleLabel', i + 1)}</span><input maxlength="32" value="${esc(c.label)}" oninput="${ref}.bleCmd(${i}, 'label', this.value)"></label>
-          <label class="field"><span>${t('bleBytes')}</span><input class="mono" spellcheck="false" value="${esc(c.bytes)}" oninput="${ref}.bleCmd(${i}, 'bytes', this.value)"></label>
-          <label class="field"><span>${t('bleTimes')}</span><input type="number" min="1" max="50" value="${c.times}" oninput="${ref}.bleCmd(${i}, 'times', +this.value)"></label>
-          <label class="field"><span>${t('bleGap')}</span><input type="number" min="0" max="2000" value="${c.gap}" oninput="${ref}.bleCmd(${i}, 'gap', +this.value)"></label></div>
-        <div class="actions" style="margin-top:8px;justify-content:flex-start">
-          ${linked ? `<span class="chip ok">${t('bleIsConnection')}</span>` : `<button onclick="${ref}.bleAsConnection(${i})" ${full ? 'disabled' : ''}>${t('bleAsConnection')}</button>`}
-          <span class="grow"></span>${i === b.commands.length - 1 ? `<button class="warn" onclick="${ref}.bleDropCommand(${i})">${t('remove')}</button>` : ''}</div></div></div>`;
+      return `<details class="ed-item ble-panel" data-ble-command="${i}" ${this.bleOpen.has(i) ? 'open' : ''}
+        ontoggle="if (this.isConnected) ${ref}.trackBleCommand(${i}, this.open)">
+        <summary><span class="info"><b class="ble-command-name">${esc(c.label || t('bleLabel', i + 1))}</b>
+          <span class="sub ble-command-timing" style="display:block">${esc(this.bleTiming(c))}</span></span>
+          ${linked ? `<span class="chip ok">${t('bleIsConnection')}</span>` : ''}<span class="chev"></span></summary>
+        <div class="ed-item-body"><div class="ed-fields ble-cmd">
+          <label class="field"><span>${t('bleCommandName')}</span><input maxlength="32" value="${esc(c.label)}" oninput="${ref}.bleCmd(${i}, 'label', this.value)"></label>
+          <div><label class="field"><span>${t('bleBytes')}</span><input class="mono" spellcheck="false" value="${esc(c.bytes)}" oninput="${ref}.bleCmd(${i}, 'bytes', this.value)"></label>
+            <div class="sub ble-field-help">${t('bleBytesHelp')}</div></div></div>
+        <div class="ble-timing">
+          <div><label class="field"><span>${t('bleTimes')}</span><input type="number" min="1" max="50" value="${c.times}" oninput="${ref}.bleCmd(${i}, 'times', +this.value)"></label>
+            <div class="sub ble-field-help">${t('bleTimesHelp')}</div></div>
+          <div><label class="field"><span>${t('bleGap')}</span><input type="number" min="0" max="2000" value="${c.gap}" data-ble-pause ${c.times <= 1 ? 'disabled' : ''} oninput="${ref}.bleCmd(${i}, 'gap', +this.value)"></label>
+            <div class="sub ble-field-help">${t('bleGapHelp')}</div></div>
+        </div>
+        <div class="actions">
+          ${linked ? '' : `<button onclick="${ref}.bleAsConnection(${i})" ${full ? 'disabled' : ''}>${t('bleAsConnection')}</button>`}
+          <span class="grow"></span>${i === b.commands.length - 1 ? `<button class="warn" onclick="${ref}.bleDropCommand(${i})">${t('remove')}</button>` : ''}</div></div></details>`;
     }).join('');
-    return `${head}<div class="ed-item"><div class="ed-item-body" style="padding-top:10px"><div class="ed-fields">
+    return `${head}<details class="ed-item ble-panel" ${this.bleSettingsOpen ? 'open' : ''}
+      ontoggle="if (this.isConnected) ${ref}.bleSettingsOpen = this.open">
+      <summary><span class="info"><b>${t('bleSettings')}</b></span><span class="chev"></span></summary>
+      <div class="ed-item-body"><div class="ed-fields">
         ${field(t('bleAddress'), 'address', b.address, `placeholder="${t('bleAddressHint')}" maxlength="17"`)}
         <label class="field"><span>${t('bleAddressType')}</span><select onchange="${ref}.bleSet('address_type', this.value)">
           <option value="public" ${b.address_type !== 'random' ? 'selected' : ''}>${t('blePublic')}</option><option value="random" ${b.address_type === 'random' ? 'selected' : ''}>${t('bleRandom')}</option></select></label>
@@ -1355,12 +1439,13 @@ class ConfigEditor {
         <label class="field"><span>${t('bleWrite')}</span><select onchange="${ref}.bleSet('write', this.value)">
           <option value="response" ${b.write === 'response' ? 'selected' : ''}>${t('bleWriteResp')}</option><option value="no-response" ${b.write === 'no-response' ? 'selected' : ''}>${t('bleWriteNoResp')}</option></select></label>
         <label class="field"><span>${t('bleIdle')}</span><input type="number" min="0" max="3600" value="${b.idle}" oninput="${ref}.bleSet('idle', +this.value)"></label></div>
-      <div class="sub" style="margin-top:8px">${t('blePinNote')}</div>
-      <div class="actions" style="margin-top:6px"><span class="grow"></span><button class="warn" onclick="${ref}.bleRemove()">${t('bleRemove')}</button></div></div></div>
+      <p class="sub ble-settings-help">${t('bleSettingsHelp')} ${t('bleIdleHelp')}</p>
+      <p class="sub ble-settings-help">${t('blePinNote')}</p>
+      <div class="actions"><span class="grow"></span><button class="warn" onclick="${ref}.bleRemove()">${t('bleRemove')}</button></div></div></details>
       ${commands}
       <button class="ed-add" onclick="${ref}.bleAddCommand()" ${b.commands.length >= BLE_COMMANDS_MAX ? 'disabled' : ''}>${icon('plus')} ${t('bleAddCommand')}</button>`;
   }
-  text() { return this.mode === 'yaml' ? this.yaml : specYaml(this.name.trim(), this.rows, this.components, this.drivers, this.rules, this.cleanBle()); }
+  text() { return this.mode === 'yaml' ? this.yaml : specYaml(this.name.trim(), this.rows, this.components, this.drivers, this.rules, this.cleanBle(), this.specDevice); }
 
   // ---- rules
   slotsFor(role) { return this.rows.filter(x => roleOf(x, this.driver(x.type)) === role); }
@@ -2107,25 +2192,31 @@ function renderShare(keepFocus) {
 }
 
 // ---------------------------------------------------------------- developer
-function specCard(sp) {
-  const latest = list => list.length ? list[list.length - 1] : null;
-  const dev = state.settings.dev_mode, fw = latest(sp.firmware), factory = latest(sp.factory);
-  return `<div class="card">
-    <div class="head"><span class="ico">${icon('recipe')}</span><div class="info"><h3>${esc(sp.name)}</h3><div class="sub">${esc(appTitle('mb_generic'))}</div></div></div>
-    <div class="meta">${sp.error ? `<div class="error" style="margin:0">${esc(sp.error)}</div>` : needChips(needs(sp.requires, sp.network))}
-      ${dev && fw ? `<div class="sub">${t('updateFile')}: <a href="api/download/${encodeURIComponent(fw)}" class="mono">${esc(fw)}</a></div>` : ''}
-      ${dev && factory ? `<div class="sub">${t('factoryFile')}: <a href="api/download/${encodeURIComponent(factory)}" class="mono">${esc(factory)}</a></div>` : ''}</div>
-    <div class="acts">${sp.error ? '' : `<button class="text" onclick="useConfig('${sp.slug}', 'new')">${t('install')}</button>
-      <button class="plain" onclick="useConfig('${sp.slug}', 'device')">${t('applyTo')}</button>`}
-      <button class="plain" onclick="editSpec('${sp.slug}')">${t('edit')}</button>
-      ${sp.error ? '' : `<button class="text" onclick="shareSpec('${sp.slug}')">${icon('share')} ${t('share')}</button>`}<span class="grow"></span>
-      <details class="more"><summary aria-label="${t('more')}">${icon('dots')}</summary><div class="pop">
+function specDownload(file, label) {
+  return `<a class="button" href="api/download/${encodeURIComponent(file)}" title="${esc(file)}" download>${label}</a>`;
+}
+
+function specRow(sp) {
+  const dev = state.settings.dev_mode, fw = sp.firmware.at(-1), factory = sp.factory.at(-1);
+  const summary = sp.error ? esc(sp.error) : esc(t('specSummary', sp.connections, sp.rules)
+    .concat((sp.requires || []).includes('bluetooth') ? [t('bleTitle')] : []).join(' · '));
+  return `<div class="spec-row">
+    <button class="spec-name" onclick="editSpec('${sp.slug}')">
+      <span class="ico">${icon('recipe')}</span><span class="info">${esc(sp.name)}<span class="sub ${sp.error ? 'warnText' : ''}">${summary}</span></span>
+    </button>
+    <div class="spec-actions">
+      ${sp.error ? '' : `<button class="text" onclick="useConfig('${sp.slug}')">${t('specUse')}</button>`}
+      <details class="more"><summary aria-label="${t('more')}">${icon('dots')}</summary><div class="pop" style="bottom:auto;top:100%">
+        <button onclick="editSpec('${sp.slug}')">${t('edit')}</button>
+        ${sp.error ? '' : `<button onclick="shareSpec('${sp.slug}')">${t('share')}</button>`}
         ${dev ? `<button onclick="buildSpec('${sp.slug}')" ${sp.error || !state.toolchain || state.job.running ? 'disabled' : ''}>${t('build')}</button>` : ''}
-        <button class="warn" onclick="deleteSpec('${sp.slug}', '${esc(sp.name)}')">${t('del')}</button></div></details></div></div>`;
+        ${dev && fw ? specDownload(fw, t('downloadUpdate')) : ''}
+        ${dev && factory ? specDownload(factory, t('downloadInstaller')) : ''}
+        <button class="warn" onclick="deleteSpec('${sp.slug}')">${t('del')}</button></div></details></div></div>`;
 }
 
 // A config on a new ESP32 (wizard, configured) or on a linked generic device
-async function useConfig(slug, where) {
+async function useConfig(slug, where = 'choose') {
   $$('details.more').forEach(d => { d.open = false; });
   const text = (await api(`api/specs/${slug}`)).text;
   const spec = await parseSpec(text).catch(() => null);
@@ -2133,17 +2224,21 @@ async function useConfig(slug, where) {
   const sp = (specs || []).find(x => x.slug === slug);
   if (spec.components.length && where === 'new' && !(sp && sp.factory.length)) { alert(t('needsBuild')); return; }
   if (where === 'new') openWizard('board', null, {configText: text, file: sp && sp.factory.length ? sp.factory[sp.factory.length - 1] : null});
-  else openWizard('recipeTarget', null, {recipe: {title: spec.name, rows: spec.rows}, configText: text, deviceOnly: true});
+  else openWizard('recipeTarget', null, {recipe: {title: spec.name, rows: spec.rows, text}, configText: text, configSlug: slug});
 }
 
 function renderDeveloper() {
   if (!specs) { loadSpecs(); return; }
-  setHtml($('#specList'), specs.length ? specs.map(specCard).join('') : `<div class="sub" style="margin:0 2px;grid-column:1/-1">${t('noConfigs')}</div>`);
+  setHtml($('#specList'), specs.length ? specs.map(specRow).join('') : `<div class="sub" style="margin:0 2px;grid-column:1/-1">${t('noConfigs')}</div>`);
   $('#devBlock').hidden = !state.settings.dev_mode;
   $('#buildGenericBtn').disabled = !state.toolchain || state.job.running;
   $('#buildHint').hidden = state.toolchain;
-  setHtml($('#builds'), state.builds.length ? state.builds.map(b => `<div class="row"><div class="label"><a class="mono" href="api/download/${encodeURIComponent(b.file)}">${esc(b.file)}</a>
-      <div class="sub">${date(b.date)} · ${(b.size / 2 ** 20).toFixed(2)} MB</div></div></div>`).join('') : `<div class="sub">${t('noBuilds')}</div>`);
+  setHtml($('#builds'), state.builds.length ? state.builds.map(b => {
+    const app = b.file.slice(0, b.file.lastIndexOf('-'));
+    const name = specs.find(sp => sp.firmware.includes(b.file))?.name || appTitle(app);
+    return `<div class="row"><div class="label">${esc(name)} · ${esc(fileVersion(b.file))}
+      <div class="sub">${date(b.date)} · ${(b.size / 2 ** 20).toFixed(2)} MB</div></div>${specDownload(b.file, t('download'))}</div>`;
+  }).join('') : `<div class="sub">${t('noBuilds')}</div>`);
 }
 
 // The configs list; a load that started before a change is thrown away
@@ -2160,7 +2255,8 @@ async function loadSpecsNow() {
   specs = r.specs;
   if (!$('#specExample').options.length) {
     exampleTexts = r.examples;
-    $('#specExample').innerHTML = '<option value="">–</option>' + Object.keys(exampleTexts).map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+    $('#specExample').innerHTML = `<option value="">${t('specExample')}</option>` + Object.keys(exampleTexts).map(n =>
+      `<option value="${esc(n)}">${esc(n.replaceAll('-', ' ').replace(/^./, first => first.toUpperCase()))}</option>`).join('');
   }
   render();
 }
@@ -2168,35 +2264,75 @@ function specMessage(error, notice) {
   $('#specError').hidden = !error; $('#specError').textContent = error || '';
   $('#specNotice').hidden = !notice; $('#specNotice').textContent = notice || '';
 }
-function newSpec() {
-  specEditor.mount($('#specEditorHost'));
-  specEditor.load('My device', [{slot: 0, type: 'relay', pin: 4, pin2: 0, inverted: false, name: 'Lamp', ...ROW_OPTIONS}], SAFE_PINS);
+let specDirty = false;
+function openSpecEditor(isNew, title = specEditor.name) {
+  $('#specExampleField').hidden = !isNew;
+  $('#specExample').value = '';
+  $('#specTitle').textContent = isNew ? t('newSpec') : title;
   specMessage();
-  $('#specEditor').hidden = false;
-  $('#specEditor').scrollIntoView({behavior: 'smooth', block: 'center'});
+  specDirty = false;
+  showTab('config-editor');
+  window.scrollTo(0, 0);
+  $('#specTitle').focus();
+}
+function newSpec() {
+  specEditor.specDevice = null;
+  specEditor.board = null;
+  specEditor.components = []; specEditor.drivers = [];
+  specEditor.mount($('#specEditorHost'));
+  specEditor.load('My device', [], SAFE_PINS);
+  openSpecEditor(true);
 }
 async function postSpec(checkOnly) {
-  const r = await api('api/specs', {text: specEditor.text(), check_only: checkOnly});
-  if (r.error) { specMessage(r.error); return; }
-  specMessage(null, checkOnly ? t('specOk', r.spec) : t('specSaved'));
-  if (!checkOnly) { invalidateSpecs(); loadSpecs(); }
+  const text = specEditor.text();
+  $('#specCheck').disabled = $('#specSave').disabled = true;
+  try {
+    const r = await api('api/specs', {text, check_only: checkOnly});
+    if (r.error) { specMessage(r.error); return; }
+    specMessage(null, checkOnly ? t('specOk', r.spec) : t('specSaved'));
+    if (!checkOnly) {
+      if (text === specEditor.text()) specDirty = false;
+      $('#specExampleField').hidden = true;
+      invalidateSpecs();
+    }
+  } catch (e) { specMessage(e.message); }
+  finally { $('#specCheck').disabled = $('#specSave').disabled = false; }
 }
 async function editSpec(slug) {
-  specEditor.mount($('#specEditorHost'));
-  await specEditor.loadText((await api(`api/specs/${slug}`)).text);
-  specMessage();
-  $('#specEditor').hidden = false;
-  $('#specEditor').scrollIntoView({behavior: 'smooth', block: 'center'});
+  try {
+    const r = await api(`api/specs/${slug}`);
+    if (r.error) { toast(r.error); return; }
+    specEditor.grouping = false;
+    specEditor.mount($('#specEditorHost'));
+    await specEditor.loadText(r.text);
+    openSpecEditor(false, specs?.find(sp => sp.slug === slug)?.name || slug);
+  } catch (e) { toast(e.message); }
 }
 async function buildSpec(slug) { await api(`api/specs/${slug}/build`, {}); refresh(); }
-async function deleteSpec(slug, name) {
-  if (!confirm(t('confirmDelete', name))) return;
+async function deleteSpec(slug) {
+  if (!confirm(t('confirmDelete', specs?.find(sp => sp.slug === slug)?.name || slug))) return;
   await api(`api/specs/${slug}/delete`, {});
   invalidateSpecs();
   loadSpecs();
 }
 const specEditor = new ConfigEditor('spec');
-$('#specExample').onchange = () => { if ($('#specExample').value) { specEditor.mount($('#specEditorHost')); specEditor.loadText(exampleTexts[$('#specExample').value]); } specMessage(); };
+specEditor.onChange = () => {
+  specDirty = true;
+  $('#specTitle').textContent = specEditor.name.trim() || t('newSpec');
+};
+$('#specBack').innerHTML = icon('back');
+$('#specBack').onclick = () => {
+  if ($('#specSave').disabled || (specDirty && !confirm(t('specDiscard')))) return;
+  showTab('developer');
+  window.scrollTo(0, 0);
+};
+$('#specExample').onchange = async () => {
+  const example = $('#specExample').value;
+  if (!example) return;
+  $('#specExample').disabled = true;
+  try { await specEditor.loadText(exampleTexts[example]); specMessage(); }
+  finally { $('#specExample').disabled = false; $('#specExample').value = ''; }
+};
 $('#specCheck').onclick = () => postSpec(true);
 $('#specSave').onclick = () => postSpec(false);
 $('#buildGenericBtn').onclick = async () => { await api('api/build', {app: 'generic'}); refresh(); };
@@ -2228,7 +2364,9 @@ function showTab(name) {
   $('#devicesTab').hidden = name !== 'devices';
   $('#catalogTab').hidden = name !== 'catalog';
   $('#developerTab').hidden = name !== 'developer';
-  $('#searchBox').hidden = name === 'developer';
+  $('#specEditor').hidden = name !== 'config-editor';
+  document.body.classList.toggle('editing-config', name === 'config-editor');
+  $('#searchBox').hidden = name === 'developer' || name === 'config-editor';
   $('#search').placeholder = name === 'catalog' ? t('searchCatalog') : t('searchDevices');
   $('#search').value = name === 'catalog' ? catalogQuery : query;
   if (name === 'catalog' && !catalogData) loadCatalog();
@@ -2812,8 +2950,10 @@ const MIN_GROUPS = '0.1.13';
 
 // One YAML format everywhere (device, config, recipe, wizard): the spec of
 // tools/mb_generate.py, checked by the add-on with the generator itself
-function specYaml(name, rows, components = [], drivers = [], rules = [], ble = null) {
-  const lines = ['device:', `  name: ${name}`, '  app: generic', '', 'connections:'];
+function specYaml(name, rows, components = [], drivers = [], rules = [], ble = null, device = null) {
+  const lines = ['device:', `  name: ${name}`, `  app: ${device?.app || 'generic'}`];
+  if (device) lines.push(`  board: ${device.board}`, `  version: ${device.version}`);
+  lines.push('', 'connections:');
   for (const r of rows) {
     const d = drivers.find(x => x.type === r.type);
     lines.push(`  - slot: ${r.slot}`, `    type: ${r.type}`);
@@ -2846,7 +2986,7 @@ function specYaml(name, rows, components = [], drivers = [], rules = [], ble = n
 async function parseSpec(text) {
   const r = await api('api/specs', {text, check_only: true});
   if (!r.spec) throw new Error(r.error || 'not valid');
-  return {name: r.spec.name, rows: rowsOf(r.spec.connections), components: (r.spec.components || []).map(c => ({source: c.source})),
+  return {name: r.spec.name, device: {app: r.spec.app, board: r.spec.board, version: r.spec.version}, rows: rowsOf(r.spec.connections), components: (r.spec.components || []).map(c => ({source: c.source})),
     drivers: r.spec.drivers || [], rules: r.spec.rules || [], ble: r.spec.bluetooth_device || null};
 }
 
@@ -3194,9 +3334,10 @@ function renderWizard() {
     const generic = state.proxies.filter(p => { const r = running(statuses[p.id]); return r && isGenericApp(r.app); });
     if (!wiz.configText) wiz.configText = wiz.recipe.text || specYaml(wiz.recipe.title, wiz.recipe.rows);
     body = `<div class="sub">${esc(wiz.recipe.title)}</div><div class="choices">
-      ${wiz.deviceOnly ? '' : choice(false, 'usb', t('recipeNew'), t('recipeNewHelp'), "go('board')")}
+      ${wiz.deviceOnly ? '' : choice(false, 'usb', t('recipeNew'), t('recipeNewHelp'),
+        wiz.configSlug ? `useConfig('${wiz.configSlug}', 'new')` : "go('board')")}
       ${generic.map(p => choice(false, 'chip', t('recipeOn', esc(p.name)), t('recipeOnHelp'), `const r = wiz.recipe; closeWizard(); openDevice('${p.id}', 'connections', r)`)).join('')}</div>
-      ${wiz.deviceOnly && !generic.length ? `<p class="sub">${t('noGeneric')}</p>` : ''}`;
+      ${(wiz.deviceOnly || wiz.configSlug) && !generic.length ? `<p class="sub">${t('noGeneric')}</p>` : ''}`;
   } else if (wiz.step === 'board') {
     title = t('wBoard');
     const busy = wiz.board && wiz.board.busy;

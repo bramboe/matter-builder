@@ -1703,6 +1703,8 @@ def list_specs():
         factory = [f.name for f in FACTORY.glob(f"{project}-*-factory.bin")] if project else []
         out.append({"slug": path.stem, "name": spec["name"] if spec else path.stem, "app": spec["app"] if spec else "",
                     "version": spec["version"] if spec else "", "error": error,
+                    "connections": len(spec["connections"]) if spec else 0,
+                    "rules": len(spec["rules"]) if spec else 0,
                     "requires": spec.get("requires", []) if spec else [], "network": spec.get("network") if spec else None,
                     "firmware": sorted((p.name for p in FIRMWARE.glob(f"{project}-*.bin")), key=version_key)
                     if project else [], "factory": sorted(factory, key=lambda n: version_key(n.removesuffix("-factory.bin")))})

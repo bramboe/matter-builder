@@ -19,6 +19,8 @@ name: Release
 #   main builds too (on a change to the firmware or how it is built, or by
 #   hand): that keeps the cache where the releases find it, and checks that
 #   everything still builds. Only a tag publishes.
+# - each firmware keeps what it compiled (ccache), also from main: a release
+#   that changes a little compiles only that
 #
 # The Matter toolchain needs more disk than a runner has free, so the builds
 # run in Espressif's image on the runner's large /mnt disk, after removing
@@ -55,7 +57,7 @@ env:
   APT_PACKAGES: >-
     build-essential pkg-config libffi-dev libssl-dev libdbus-1-dev libglib2.0-dev
     libavahi-client-dev libgirepository1.0-dev libcairo2-dev libreadline-dev
-    python3-dev python3-venv unzip
+    python3-dev python3-venv unzip ccache
 
 jobs:
   # The toolchain, once: from the cache when it is there, else made and kept
@@ -141,23 +143,51 @@ jobs:
           key: ${{ needs.toolchain.outputs.key }}
           fail-on-cache-miss: true
 
+      # What this firmware compiled last time on main (ccache): a release that
+      # changes a little compiles only that, the rest comes from the cache.
+      # Also the Matter SDK's own build uses it (connectedhomeip passes ccache
+      # to its GN build when ESP-IDF has it on). A tag only reads it: a cache
+      # it wrote would be its own alone.
+      - name: Compile cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /mnt/mb/ccache
+          key: ccache-${{ matrix.name }}-${{ env.ESP_MATTER_COMMIT }}-${{ github.sha }}
+          restore-keys: ccache-${{ matrix.name }}-${{ env.ESP_MATTER_COMMIT }}-
+
       - name: Build (Espressif image)
         env:
           MB_CHIP: ${{ matrix.chip }}
           MB_NETWORK: ${{ matrix.network }}
           APP: ${{ matrix.app }}
+          IDF_CCACHE_ENABLE: "1"
+          CCACHE_COMPRESS: "1"
+          CCACHE_MAXSIZE: 700M
+          # The compilers come from the image: judged by content, not by date
+          CCACHE_COMPILERCHECK: content
         run: |
           docker run --rm -v "$GITHUB_WORKSPACE:/src" -v /mnt/mb:/mb \
             -e MB_DATA=/mb -e MB_SRC=/src -e ESP_MATTER_COMMIT -e APT_PACKAGES \
             -e MB_CHIP -e MB_NETWORK -e APP \
+            -e IDF_CCACHE_ENABLE -e CCACHE_COMPRESS -e CCACHE_MAXSIZE -e CCACHE_COMPILERCHECK \
             -e IDF_PYTHON_ENV_PATH=/mb/toolchain/python_env -e HOME=/mb/home \
             --entrypoint bash "$IDF_IMAGE" -c '
               set -e
               apt-get update -qq
               apt-get install -y -qq --no-install-recommends $APT_PACKAGES > /dev/null
+              export CCACHE_DIR=/mb/ccache
+              ccache -z > /dev/null
               bash /src/ha-addon/matter_builder/build.sh "$APP"
+              echo "== Compile cache"; ccache -s
               chown -R '"$(id -u):$(id -g)"' /mb'
           ls -l /mnt/mb/firmware /mnt/mb/firmware/factory
+
+      - name: Keep the compile cache
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        uses: actions/cache/save@v4
+        with:
+          path: /mnt/mb/ccache
+          key: ccache-${{ matrix.name }}-${{ env.ESP_MATTER_COMMIT }}-${{ github.sha }}
 
       - uses: actions/upload-artifact@v4
         with:

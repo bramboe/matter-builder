@@ -2278,7 +2278,7 @@ function renderDevicePanel() {
     <div class="row"><div class="label">${t('key')}<div class="sub mono">${token ? esc(token) : '••••••••••••••••'}</div></div>
       <button class="text" onclick="toggleToken('${p.id}')">${token ? t('hide') : t('show')}</button>
       ${token ? `<button class="text" onclick="copyToken('${p.id}')">${t('copy')}</button>` : ''}</div>
-    ${s && s.io && s.io.ble_pairing !== undefined ? `<div class="row"><div class="label">${t('blePairing')}<div class="sub">${t('blePairingHelp')}</div></div>
+    ${s && s.io && s.io.ble_pairing !== undefined && s.io.bluetooth !== 'none' ? `<div class="row"><div class="label">${t('blePairing')}<div class="sub">${t('blePairingHelp')}</div></div>
       <label class="switch"><input type="checkbox" ${s.io.ble_pairing ? 'checked' : ''} onchange="setBlePairing('${p.id}', this.checked)"></label></div>
       <div class="row"><div class="label">Bluetooth</div><div class="sub">${esc(s.io.ble_pairing ? t('blePairingOn') + ' · ' : '')}${esc(t('ble_' + s.io.bluetooth) || s.io.bluetooth)}</div></div>` : ''}
     ${r && !state.standalone ? `<div class="row"><div class="label">${t('addToHa')}<div class="sub">${t('addToHaHelp')}</div></div>

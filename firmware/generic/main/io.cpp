@@ -1260,8 +1260,12 @@ std::string state_json() {
     {
         std::lock_guard<std::mutex> guard(lock);
         out += ",\"ir_last\":" + json_text(last_ir);
-        out += std::string(",\"bluetooth\":\"") + (ble_scan::scanning() ? "on" : bluetooth ? "starting" : "off") +
-               "\",\"ble_pairing\":" + (ble_pairing ? "true" : "false");
+#if CONFIG_BT_ENABLED
+        const char *bt = ble_scan::scanning() ? "on" : bluetooth ? "starting" : "off";
+#else
+        const char *bt = "none";  // this board's firmware has no Bluetooth (classic ESP32, C3)
+#endif
+        out += std::string(",\"bluetooth\":\"") + bt + "\",\"ble_pairing\":" + (ble_pairing ? "true" : "false");
     }
     out += ",\"pins\":[";
     for (size_t i = 0; i < sizeof(SAFE_PINS); ++i) {

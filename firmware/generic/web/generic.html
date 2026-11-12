@@ -292,7 +292,7 @@ dialog > .card{border:0;padding:16px 20px}
       <div class="sub" id="pairHelp" style="margin-top:10px"></div>
       </div>
       <div id="fabrics" style="margin-top:8px"></div>
-      <label class="row" style="border-top:1px solid var(--line)"><span class="label"><span data-t="blePairing"></span>
+      <label class="row" id="blePairingRow" style="border-top:1px solid var(--line)"><span class="label"><span data-t="blePairing"></span>
         <span class="sub" style="display:block" data-t="blePairingHelp"></span></span><input type="checkbox" id="blePairing"></label>
       <div class="row" id="bluetoothRow"><div class="label" data-t="bluetooth"></div><div class="sub" id="bluetoothState">–</div></div>
       <details><summary data-t="deviceNetwork"></summary>
@@ -1091,6 +1091,8 @@ async function refresh() {
 function renderBluetooth() {
   if (!state || !state.io) return;
   const io = state.io;
+  // Firmware without Bluetooth (classic ESP32, C3) has nothing to offer here
+  $('#blePairingRow').hidden = $('#bluetoothRow').hidden = io.bluetooth === 'none';
   $('#blePairing').checked = !!io.ble_pairing;
   const scan = io.bluetooth === 'on' ? t('bleOn') : io.bluetooth === 'starting' ? t('bleStarting') : t('bleOff');
   $('#bluetoothState').textContent = io.ble_pairing ? `${t('blePairingOn')} · ${scan}` : scan;
@@ -1176,7 +1178,8 @@ async function loadTech() {
     [t('techNvs'), `${s.nvs_used} / ${s.nvs_total} ${t('techEntries')}`],
     [t('techIdf'), s.idf],
   ];
-  $('#techRows').innerHTML = rows.map(([k, v]) => `<div class="row"><div class="label">${esc(k)}</div><div class="sub" style="text-align:right;white-space:pre-line;word-break:break-word">${esc(v)}</div></div>`).join('');
+  // The label keeps its width: a long value (firmware, slots) wraps instead of running into it
+  $('#techRows').innerHTML = rows.map(([k, v]) => `<div class="row"><div class="label" style="flex:0 0 38%">${esc(k)}</div><div class="sub" style="flex:1;min-width:0;text-align:right;white-space:pre-line;word-break:break-word">${esc(v)}</div></div>`).join('');
 }
 $('#techDetails').addEventListener('toggle', () => { if ($('#techDetails').open) loadTech(); });
 $('#systemCard').addEventListener('toggle', () => { if ($('#systemCard').open) loadLed(); });

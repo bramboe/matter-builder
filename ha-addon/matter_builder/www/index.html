@@ -61,6 +61,37 @@ button:disabled{opacity:.4;cursor:default}
 .chip.bad{background:var(--badchip);color:var(--bad)}
 .chip.warn{background:var(--warnchip);color:var(--warn)}
 .chip.accent{background:var(--chip);color:var(--primary)}
+
+/* Soft loading: the page fades in whole instead of piece by piece, a press
+   shows at once that it is being handled, and a wait says what it waits for */
+main{transition:opacity .3s}
+body:not(.ready) main{opacity:0}
+.busy{position:relative;pointer-events:none;color:transparent!important}
+.busy>*{visibility:hidden}
+.busy::after{content:"";position:absolute;left:50%;top:50%;width:16px;height:16px;margin:-8px 0 0 -8px;border-radius:50%;
+  border:2px solid var(--primary);border-right-color:transparent;animation:spin .7s linear infinite}
+button.pri.busy::after{border-color:#fff;border-right-color:transparent}
+.spin{display:inline-block;width:10px;height:10px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+#loadbar{position:fixed;top:0;left:0;right:0;height:3px;z-index:20;overflow:hidden;pointer-events:none;opacity:0;transition:opacity .2s}
+#loadbar.on{opacity:1}
+#loadbar::before{content:"";position:absolute;top:0;bottom:0;width:35%;background:var(--primary);animation:slide 1.2s ease-in-out infinite}
+@keyframes slide{from{transform:translateX(-100%)}to{transform:translateX(290%)}}
+.skel{display:block;height:12px;border-radius:6px;background:linear-gradient(90deg,var(--fill) 25%,var(--line) 50%,var(--fill) 75%);background-size:300% 100%;animation:shimmer 1.4s ease-in-out infinite}
+.skel.round{width:38px;height:38px;border-radius:50%;flex:none}
+@keyframes shimmer{from{background-position:100% 0}to{background-position:0 0}}
+.card.ghost{gap:10px}
+.card.ghost .head{gap:10px}
+.cardwork{display:grid;gap:4px;margin-top:6px}
+.cardwork .track{height:4px;border-radius:2px;background:var(--fill);overflow:hidden}
+.cardwork .track i{display:block;height:100%;background:var(--primary);transition:width .4s}
+.cardwork .track.indef i{width:35%!important;animation:slide 1.2s ease-in-out infinite}
+#opening{position:fixed;inset:0;z-index:15;display:grid;place-items:center;background:color-mix(in srgb,var(--bg) 92%,transparent);
+  opacity:0;transition:opacity .25s;backdrop-filter:blur(2px)}
+#opening.on{opacity:1}
+#opening .box{display:grid;justify-items:center;gap:10px;text-align:center;padding:24px;max-width:320px}
+#opening .spin{width:28px;height:28px;border-width:3px;color:var(--primary)}
+@media (prefers-reduced-motion:reduce){.skel,#loadbar::before,.cardwork .track.indef i{animation:none}main{transition:none}}
 .new{border:1.5px dashed var(--line);background:none;align-items:center;justify-content:center;text-align:center;min-height:150px;cursor:pointer;color:var(--mute)}
 .new:hover{border-color:var(--primary);color:var(--primary)}
 .banner{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--chip);color:var(--fg);border-radius:var(--radius);padding:8px 8px 8px 14px;margin-bottom:12px}
@@ -238,6 +269,8 @@ dialog.side{max-width:100vw}
 </style>
 </head>
 <body>
+<div id="loadbar"></div>
+<div id="opening" hidden><div class="box"><span class="spin"></span><b style="font-weight:500" id="openingTitle"></b><span class="sub" id="openingHelp"></span></div></div>
 <header>
   <div class="bar">
     <h1>Matter Builder</h1>
@@ -278,7 +311,10 @@ dialog.side{max-width:100vw}
     <div class="actions" style="justify-content:center"><button class="pri" onclick="openWizard()" data-t="newDevice"></button>
       <button onclick="showTab('catalog')" data-t="browseCatalog"></button></div>
   </div>
-  <div class="grid" id="deviceGrid"></div>
+  <div class="grid" id="deviceGrid"><!-- until the first answer: the shape of what comes -->
+    <div class="card ghost"><div class="head"><span class="skel round"></span><div class="info" style="display:grid;gap:8px"><span class="skel" style="width:55%"></span><span class="skel" style="width:80%"></span></div></div><span class="skel" style="width:40%"></span><span class="skel" style="width:70%;height:24px;border-radius:12px"></span></div>
+    <div class="card ghost"><div class="head"><span class="skel round"></span><div class="info" style="display:grid;gap:8px"><span class="skel" style="width:45%"></span><span class="skel" style="width:70%"></span></div></div><span class="skel" style="width:30%"></span><span class="skel" style="width:70%;height:24px;border-radius:12px"></span></div>
+  </div>
 </section>
 
 <!-- Catalog -->
@@ -510,6 +546,8 @@ const TEXT = {
   newDevice: 'New device', newDeviceHelp: 'Install firmware or link one', browseCatalog: 'Browse the catalog',
   discovered: (n, v) => `Discovered: ${n}${v ? ' · ' + v : ''}`, adopt: 'Adopt',
   online: 'Online', offlineFor: d => `Offline ${d}`, notReachable: 'Not reachable on the network', offline: 'Offline', checking: 'Checking', keyRejected: 'Key refused', configMode: 'Configuration mode',
+  updating: 'Updating', updatingPct: n => `Updating · ${n} %`, updateStarting: 'Starting the update…', updateQueued: 'Waiting for its turn',
+  opening: n => `Opening the page of ${n}…`, openingAny: 'Opening the page…', openingSlow: 'The device answers slowly (on Thread this can take a few seconds). It opens by itself.',
   updateTo: v => `Update to ${v}`, edit: 'Edit', openPage: 'Open page', logs: 'Logs', logsOf: n => `Logs of ${n}`, logLive: 'Live, over the network', logPaused: 'Paused', logPause: 'Pause', logResume: 'Resume', logSave: 'Download', logWaiting: 'Waiting for the device…', logUnsupported: 'This firmware does not keep its log yet: update it to see the log here.', logRestarted: '--- the device restarted ---', logLost: '--- older lines are gone ---', logError: e => `Not reachable: ${e}`, openDirect: 'Open on the device', more: 'More', rename: 'Rename', forget: 'Forget', showKey: 'Show key',
   updateAll: n => `Update all (${n})`, nothingConnected: 'Nothing connected yet', connections: 'Connections', firmware: 'Firmware', info: 'Info',
   noIo: 'This firmware has no configurable connections. Its own settings are on its page.',
@@ -695,8 +733,69 @@ const icon = n => `<svg viewBox="0 0 24 24"><path d="${ICON[n]}"/></svg>`;
 let state = null, statuses = {}, shownTokens = {}, tab = 'devices', catalogFilter = 'all', query = '', catalogQuery = '';
 let specs = null, exampleTexts = {}, recipes = null;
 
+// ---------------------------------------------------------------- soft loading
+// A press answers at once: the button that started a request spins until the
+// answer is in (also when the cards are drawn anew meanwhile: a button is
+// known by its id, onclick or href), and a thin bar shows a longer wait.
+// Background refreshes have no button and stay quiet.
+let pressed = null, userWaits = 0, loadbarTimer = 0;
+const busy = new Map();  // button key (or the element itself) -> requests running
+const busyKey = el => el.id ? '#' + el.id : el.getAttribute('onclick') ? `[onclick=${JSON.stringify(el.getAttribute('onclick'))}]`
+  : el.getAttribute('href') ? `[href=${JSON.stringify(el.getAttribute('href'))}]` : el;
+function pressedNow(el) {
+  pressed = el || null;
+  setTimeout(() => { if (pressed === el) pressed = null; }, 0);  // only what the handler starts right away
+}
+document.addEventListener('click', e => pressedNow(e.target.closest && e.target.closest('button,a.button')), true);
+document.addEventListener('submit', e => pressedNow(e.submitter || e.target.querySelector('[type=submit]')), true);
+function paintBusy() {
+  document.querySelectorAll('.busy').forEach(el => { if (!busy.has(el) && !busy.has(busyKey(el))) el.classList.remove('busy'); });
+  busy.forEach((n, k) => (typeof k === 'string' ? document.querySelectorAll(k) : [k]).forEach(el => {
+    el.classList.add('busy'); el.setAttribute('aria-busy', 'true');
+  }));
+}
+function setBusy(k, step) {
+  const n = (busy.get(k) || 0) + step;
+  if (n > 0) busy.set(k, n); else busy.delete(k);
+  paintBusy();
+  if (n <= 0) document.querySelectorAll('[aria-busy]').forEach(el => { if (!el.classList.contains('busy')) el.removeAttribute('aria-busy'); });
+}
+function loadbar() {
+  clearTimeout(loadbarTimer);
+  if (userWaits > 0) loadbarTimer = setTimeout(() => $('#loadbar').classList.add('on'), 250);
+  else $('#loadbar').classList.remove('on');
+}
+function track(promise) {
+  const el = pressed, k = el && busyKey(el);
+  if (!k) return promise;
+  setBusy(k, 1); userWaits++; loadbar();
+  return promise.finally(() => {
+    userWaits--; loadbar();
+    pressedNow(el);  // a next request of the same press keeps the spinner going
+    setTimeout(() => setBusy(k, -1), 150);
+  });
+}
+new MutationObserver(() => { if (busy.size) paintBusy(); }).observe(document.body, {childList: true, subtree: true});
+
+// Opening a device's page: the add-on asks the device for it first, which
+// over Thread takes a moment; meanwhile say so instead of doing nothing
+document.addEventListener('click', e => {
+  const a = e.target.closest && e.target.closest('a[href*="portal/"]');
+  if (!a || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || a.target === '_blank') return;
+  const card = a.closest('.card, dialog'), name = card && card.querySelector('h3, h2');
+  $('#openingTitle').textContent = name && name.textContent.trim() ? t('opening', name.textContent.trim()) : t('openingAny');
+  $('#openingHelp').textContent = '';
+  $('#opening').hidden = false;
+  requestAnimationFrame(() => $('#opening').classList.add('on'));
+  clearTimeout(openingTimer);
+  openingTimer = setTimeout(() => { $('#openingHelp').textContent = t('openingSlow'); }, 4000);
+});
+let openingTimer = 0;
+// Back from the page (the browser keeps this one): no overlay left over
+window.addEventListener('pageshow', () => { $('#opening').hidden = true; $('#opening').classList.remove('on'); clearTimeout(openingTimer); });
+
 async function api(path, body) {
-  const r = await fetch(path, body === undefined ? {} : {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+  const r = await track(fetch(path, body === undefined ? {} : {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)}));
   if (r.status === 401 && !path.startsWith('api/auth')) { showAuth(); throw new Error('signed out'); }
   return r.json();
 }
@@ -836,12 +935,33 @@ const appIcon = app => icon(app === 'octo_bridge' ? 'bed' : 'chip');
 const appIconName = file => /^octo_bridge/.test(file) ? 'bed' : 'chip';
 const netName = r => r && r.net ? r.net.replace(/:.*$/, '').replace(/^\w/, c => c.toUpperCase()) : '';
 
+// A device being updated: from the press (before the job is there) until the
+// job is done; "Update all" goes device by device ("== Update <name> with …")
+let jobInfo = null, updatingName = null;
+const updateStarted = {};  // proxy id -> when its Update was pressed
+function updateWork(p) {
+  const j = jobInfo && jobInfo.running && jobInfo.kind === 'update' ? jobInfo : null;
+  if (j && (j.title === p.name || updatingName === p.name)) {
+    const pr = j.progress || {};
+    return {phase: pr.phase || '', pct: pr.total ? Math.round(100 * pr.done / pr.total) : null};
+  }
+  if (j && j.title === 'all' && updateFor(p)) return {queued: true};
+  if (updateStarted[p.id] && Date.now() - updateStarted[p.id] < 20000) return {phase: t('updateStarting'), pct: null};
+  return null;
+}
+
 function deviceCard(p) {
-  const s = statuses[p.id], r = running(s), up = updateFor(p);
+  const s = statuses[p.id], r = running(s), work = updateWork(p), up = !work && updateFor(p);
   const what = connectedText(s);
-  return `<div class="card">
+  const chip = work && !work.queued ? `<span class="chip accent"><span class="spin"></span>${work.pct != null ? t('updatingPct', work.pct) : t('updating')}</span>`
+    : work ? `<span class="chip">${t('updateQueued')}</span>` : statusChip(s);
+  return `<div class="card"${work && !work.queued ? ' aria-busy="true"' : ''}>
     <div class="head"><span class="ico">${appIcon(r ? r.app : p.app)}</span><div class="info"><h3>${esc(p.name)}</h3>
-      ${r ? `<div class="sub">${esc(appTitle(r.app))} ${esc(r.version)}${netName(r) ? ' · ' + esc(netName(r)) : ''}</div>` : `<div class="sub mono" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(p.host)}">${esc(p.host)}</div>`}</div>${statusChip(s)}</div>
+      ${r ? `<div class="sub">${esc(appTitle(r.app))} ${esc(r.version)}${netName(r) ? ' · ' + esc(netName(r)) : ''}</div>`
+        : s ? `<div class="sub mono" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(p.host)}">${esc(p.host)}</div>`
+        : '<span class="skel" style="width:70%;margin-top:6px"></span>'}</div>${chip}</div>
+    ${work && !work.queued ? `<div class="cardwork"><div class="sub">${esc(work.phase.replace(/^Update .+ with /, ''))}</div>
+      <div class="track${work.pct == null ? ' indef' : ''}"><i style="width:${work.pct || 0}%"></i></div></div>` : ''}
     <div class="meta">
       ${s && !s.ok && !s.auth ? `<div class="sub">${t('notReachable')}</div>` : ''}
       ${what ? `<div class="sub">${esc(what)}</div>` : ''}
@@ -853,7 +973,7 @@ function deviceCard(p) {
       ${s && s.auth ? `<button class="text" onclick="openWizard('link', '${esc(p.host)}')">${t('linkAgain')}</button>` : ''}
       <button class="plain" onclick="openDevice('${p.id}')">${t('edit')}</button>
       <button class="plain" onclick="openLogs('${p.id}')">${t('logs')}</button>
-      <a class="button plain" href="${esc(portalUrl(p))}">${t('openPage')}</a>
+      ${work && !work.queued ? '' : `<a class="button plain" href="${esc(portalUrl(p))}">${t('openPage')}</a>`}
       <span class="grow"></span>
       <details class="more"><summary aria-label="${t('more')}">${icon('dots')}</summary><div class="pop">
         <button onclick="renameProxy('${p.id}')">${t('rename')}</button>
@@ -1935,6 +2055,8 @@ function render() {
 
 async function refresh() {
   try { state = await api('api/state'); } catch (e) { return; }
+  // A job that just ended: the cards drop their progress and show the new version at once
+  if (jobInfo && jobInfo.running && !state.job.running) { jobInfo = {...state.job}; updatingName = null; loadStatuses(); }
   render();
   if (state.job.kind) loadJob();
   if (specs && state.settings.dev_mode && !state.job.running && refresh.wasRunning) loadSpecs();
@@ -1953,6 +2075,13 @@ async function loadStatuses() {
 let dismissedJob = 0, logOpen = false;
 async function loadJob() {
   const j = await api('api/job');
+  // For the cards: which device an update is at, and how far
+  const phase = (j.progress || {}).phase || '', at = phase.match(/^Update (.+) with /);
+  if (at) updatingName = at[1];
+  if (j.kind === 'update') Object.keys(updateStarted).forEach(id => { if (j.started * 1000 >= updateStarted[id] - 2000) delete updateStarted[id]; });
+  const before = JSON.stringify(jobInfo && [jobInfo.running, jobInfo.progress]);
+  jobInfo = j;
+  if (before !== JSON.stringify([j.running, j.progress]) && state) renderDevices();
   if (!j.kind || (!j.running && j.started === dismissedJob)) { $('#taskbar').hidden = true; return; }
   $('#taskbar').hidden = false;
   const jobs = TEXT.jobs;
@@ -1980,8 +2109,12 @@ $('#jobLogBtn').onclick = () => { logOpen = !logOpen; loadJob(); };
 // ---------------------------------------------------------------- device actions
 async function updateProxy(id, file) {
   if (!confirm(t('confirmUpdate', file))) return;
-  await api(`api/proxy/${id}/update`, {file});
-  refresh();
+  updateStarted[id] = Date.now();
+  renderDevices();  // the card says so right away
+  const r = await api(`api/proxy/${id}/update`, {file});
+  if (!r.started) delete updateStarted[id];
+  await refresh();
+  loadJob();
 }
 async function renameProxy(id) {
   const p = state.proxies.find(x => x.id === id);
@@ -1998,7 +2131,8 @@ async function forgetProxy(id) {
 $('#updateAllBtn').onclick = async () => {
   if (!confirm(t('confirmUpdateAll'))) return;
   await api('api/bulk/update', {});
-  refresh();
+  await refresh();
+  loadJob();
 };
 
 // ---------------------------------------------------------------- device panel
@@ -3196,6 +3330,7 @@ $('#passwordForm').onsubmit = async e => {
 
 applyTexts();
 showTab('devices');
+requestAnimationFrame(() => document.body.classList.add('ready'));  // texts in place: fade in
 api('api/auth').then(a => {
   auth = a;
   if (a.standalone) standaloneSetup();

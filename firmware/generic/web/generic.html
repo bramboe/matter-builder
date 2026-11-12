@@ -47,6 +47,27 @@ button.text{background:none;color:var(--primary);padding:0 10px}
 button.warn{background:none;color:var(--bad)}
 button.icon-btn{background:none;width:40px;padding:0;border-radius:50%}
 button:disabled{opacity:.38;cursor:default;filter:none}
+/* Soft loading: the page appears whole once its first answers are in, a press
+   spins until it is handled, a longer wait shows a thin bar at the top */
+header,main{transition:opacity .3s}
+body:not(.ready) header,body:not(.ready) main{opacity:0}
+#boot{position:fixed;inset:0;display:grid;place-items:center;pointer-events:none;opacity:0;animation:fade .3s .3s forwards}
+body.ready #boot{display:none}
+#boot div{display:flex;gap:8px}
+#boot i{width:9px;height:9px;border-radius:50%;background:var(--primary);opacity:.25;animation:dot 1.2s ease-in-out infinite}
+#boot i:nth-child(2){animation-delay:.15s}#boot i:nth-child(3){animation-delay:.3s}
+@keyframes dot{40%{opacity:1;transform:scale(1.2)}}
+@keyframes fade{to{opacity:1}}
+.busy{position:relative;pointer-events:none;color:transparent!important}
+.busy>*{visibility:hidden}
+.busy::after{content:"";position:absolute;left:50%;top:50%;width:16px;height:16px;margin:-8px 0 0 -8px;border-radius:50%;border:2px solid var(--primary);border-right-color:transparent;animation:spin .7s linear infinite}
+button.pri.busy::after{border-color:#fff;border-right-color:transparent}
+@keyframes spin{to{transform:rotate(360deg)}}
+#loadbar{position:fixed;top:0;left:0;right:0;height:3px;z-index:9;overflow:hidden;pointer-events:none;opacity:0;transition:opacity .2s}
+#loadbar.on{opacity:1}
+#loadbar::before{content:"";position:absolute;top:0;bottom:0;width:35%;background:var(--primary);animation:slide 1.2s ease-in-out infinite}
+@keyframes slide{from{transform:translateX(-100%)}to{transform:translateX(290%)}}
+@media (prefers-reduced-motion:reduce){#boot i,#loadbar::before{animation:none;opacity:.6}header,main{transition:none}}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
 .netlist{margin-top:-4px}.netlist:empty{display:none}
 .chips button{min-height:32px;border-radius:8px;border:1px solid var(--line);background:none;padding:0 12px}
@@ -131,6 +152,8 @@ dialog > .card{border:0;padding:16px 20px}
 </style>
 </head>
 <body>
+<div id="loadbar"></div>
+<div id="boot" aria-label="Loading"><div><i></i><i></i><i></i></div></div>
 <svg style="display:none" xmlns="http://www.w3.org/2000/svg">
 <symbol id="i-up" viewBox="0 0 24 24"><path d="M13,20H11V8L5.5,13.5L4.08,12.08L12,4.16L19.92,12.08L18.5,13.5L13,8V20Z"/></symbol>
 <symbol id="i-down" viewBox="0 0 24 24"><path d="M11,4H13V16L18.5,10.5L19.92,11.92L12,19.84L4.08,11.92L5.5,10.5L11,16V4Z"/></symbol>
@@ -577,6 +600,7 @@ function renderLogin() {
 }
 function showLogin(error, mode = 'login') {
   if (mode !== 'change') signedIn = false;
+  ready();
   loginMode = mode;
   renderLogin();
   $('#login').hidden = false;
@@ -589,12 +613,59 @@ function showLogin(error, mode = 'login') {
 function signedInOk() {
   if (signedIn) return;
   signedIn = true;
+  if (!booting) showApp();  // while starting: once all first answers are in (boot)
+}
+function showApp() {
   $('#login').hidden = true;
   $('#app').hidden = false;
 }
 
+// Soft loading. A press answers at once: the button that started a request
+// spins until the answer is in (also when its list is drawn anew: a button is
+// known by its id or onclick), and a thin bar shows a longer wait. Background
+// refreshes have no button and stay quiet.
+let pressed = null, userWaits = 0, loadbarTimer = 0;
+const busy = new Map();  // button key (or the element) -> requests running
+const busyKey = el => el.id ? '#' + el.id : el.getAttribute('onclick') ? `[onclick=${JSON.stringify(el.getAttribute('onclick'))}]` : el;
+function pressedNow(el) { pressed = el || null; setTimeout(() => { if (pressed === el) pressed = null; }, 0); }
+document.addEventListener('click', e => pressedNow(e.target.closest && e.target.closest('button')), true);
+document.addEventListener('submit', e => pressedNow(e.submitter || e.target.querySelector('[type=submit]')), true);
+function paintBusy() {
+  document.querySelectorAll('.busy').forEach(el => { if (!busy.has(el) && !busy.has(busyKey(el))) el.classList.remove('busy'); });
+  busy.forEach((n, k) => (typeof k === 'string' ? document.querySelectorAll(k) : [k]).forEach(el => el.classList.add('busy')));
+}
+function setBusy(k, step) {
+  const n = (busy.get(k) || 0) + step;
+  if (n > 0) busy.set(k, n); else busy.delete(k);
+  paintBusy();
+}
+function track(promise) {
+  const el = pressed, k = el && busyKey(el);
+  if (!k) return promise;
+  setBusy(k, 1); userWaits++;
+  clearTimeout(loadbarTimer); loadbarTimer = setTimeout(() => $('#loadbar').classList.add('on'), 250);
+  return promise.finally(() => {
+    if (!--userWaits) { clearTimeout(loadbarTimer); $('#loadbar').classList.remove('on'); }
+    pressedNow(el);  // a next request of the same press keeps the spinner going
+    setTimeout(() => setBusy(k, -1), 150);
+  });
+}
+new MutationObserver(() => { if (busy.size) paintBusy(); }).observe(document.body, {childList: true, subtree: true});
+// The page shows itself whole: when its first answers are in, or after 5 s with what there is
+let booting = false;
+const ready = () => document.body.classList.add('ready');
+function boot(loads) {
+  booting = true;
+  // Pressed Sign in: it spins until the page is there, not only for its first request
+  track(Promise.race([Promise.allSettled(loads), new Promise(r => setTimeout(r, 5000))])).then(() => {
+    booting = false;
+    if (signedIn) showApp();
+    ready();
+  });
+}
+
 async function cmd(line) {
-  const r = await fetch('cmd', {method: 'POST', headers: {'X-Octo-Token': token}, body: line});
+  const r = await track(fetch('cmd', {method: 'POST', headers: {'X-Octo-Token': token}, body: line}));
   const text = await r.text();
   if (r.status === 401) { showLogin(!text.startsWith('no password') && !!token, text.startsWith('no password') ? 'setup' : 'login'); throw new Error(t('passwordRefused')); }
   signedInOk();
@@ -1620,7 +1691,7 @@ document.addEventListener('submit', () => document.querySelectorAll('input[data-
 
 applyTexts();
 $('#sys').textContent = t('connecting');
-function startApp() { refresh().then(loadRules); loadMatter(); loadWifi(); loadThread(); loadAccess(); loadBle(); }
+function startApp() { boot([refresh().then(loadRules), loadMatter(), loadWifi(), loadThread(), loadAccess(), loadBle()]); }
 function keepToken(value) {
   token = value;
   try { localStorage.setItem('mbToken', token); } catch (err) {}
@@ -1630,7 +1701,7 @@ async function choosePassword(value) {
   if (value.length < 8) { $('#loginError').textContent = t('passwordShort'); return; }
   if (value !== $('#password2').value.trim()) { $('#loginError').textContent = t('passwordMismatch'); return; }
   try {
-    const r = await fetch('auth', {method: 'POST', headers: {'X-Octo-Token': token}, body: value});
+    const r = await track(fetch('auth', {method: 'POST', headers: {'X-Octo-Token': token}, body: value}));
     if (r.status === 401) { showLogin(true); return; }
     if (!r.ok) { $('#loginError').textContent = (await r.text()).trim(); return; }
   } catch (err) { $('#loginError').textContent = t('noConnection'); return; }

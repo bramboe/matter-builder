@@ -203,8 +203,12 @@ def proxy_status(proxy):
     name = re.search(r"settings page: http://([A-Za-z0-9-]+\.local)/", system)
     if name and proxy.get("local") != name.group(1):
         remember(proxy, local=name.group(1))
-    if not (PAGES / f"{proxy['id']}.html").exists():
-        prefetch_page(proxy)  # so the first opening is quick as well
+    # The page is served from what is kept here (quick, also over Thread):
+    # fetched anew for each firmware, so it always matches what runs
+    running_version = (system.split("\n")[0].split(": ")[-1].split(" ") + [""])[1]
+    if not (PAGES / f"{proxy['id']}.html").exists() or proxy.get("page_version") != running_version:
+        remember(proxy, page_version=running_version)
+        prefetch_page(proxy)
     return {"ok": True, "system": system, "beds": beds, "io": state.get("io")}
 
 
@@ -356,7 +360,9 @@ def device_page(proxy):
     if {k.lower(): v for k, v in reply_headers.items()}.get("content-encoding") == "gzip":
         body = gzip.decompress(body)
     PAGES.mkdir(parents=True, exist_ok=True)
-    html.write_bytes(body)
+    fresh = html.with_suffix(".new")
+    fresh.write_bytes(body)
+    fresh.replace(html)  # whole: it may be served while it is written
     etag = {k.lower(): v for k, v in reply_headers.items()}.get("etag")
     if etag:
         tag.write_text(etag)
@@ -483,11 +489,12 @@ def clean_log(text):
 
 
 def progress(text):
-    """The last "[n/m]" step of the build (ninja), and the phase it is in."""
+    """The last "[n/m]" step of the build (ninja), and the phase it is in. A
+    new phase starts without progress: "waiting" after an upload is not 100 %."""
     phase, done, total = "", 0, 0
     for line in text.split("\n"):
         if line.startswith("== "):
-            phase = line[3:].strip()
+            phase, done, total = line[3:].strip(), 0, 0
         match = STEP.match(line)
         if match:
             done, total = int(match.group(1)), int(match.group(2))
@@ -2549,7 +2556,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
         name = "/".join(parts[3:])
         if name == "" and method == "GET":
-            html = device_page(proxy)
+            # The kept copy at once, and asked anew meanwhile for the next
+            # opening: no wait on a device that answers slowly (Thread)
+            kept = PAGES / f"{proxy['id']}.html"
+            if kept.exists():
+                html = kept.read_bytes()
+                prefetch_page(proxy)
+            else:
+                html = device_page(proxy)
             if html is None:
                 return self.reply(b"The device is not reachable on the network right now.\n", 502, "text/plain")
             return self.reply(portal_page(html, proxy), ctype="text/html; charset=utf-8")

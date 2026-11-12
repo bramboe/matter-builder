@@ -668,7 +668,7 @@ const TEXT = {
   trialLeft: s => `On trial: keep within ${s} s.`, kept: 'Kept.', yamlError: e => `YAML: ${e}`,
   fromRecipe: n => `Filled in from “${n}”. Nothing changes on the device until you save and apply.`, saveApply: 'Save and apply',
   running: 'Running', install: 'Install', installFile: 'Install this firmware',
-  confirmUpdate: f => `Install ${f}? The device moves to Wi-Fi for a few minutes; what is connected to it is unavailable meanwhile.`,
+  confirmUpdate: 'Update this device? The device and its connected accessories may be unavailable during the update.',
   noFirmware: 'No firmware of this kind is available yet.', address: 'Address', network: 'Network', key: 'Key of the add-on',
   show: 'Show', hide: 'Hide', copy: 'Copy', linkAgain: 'Link again',
   keyRefusedText: 'The device no longer accepts the add-on’s key: it was revoked, or the device was reset. Link it again.',
@@ -2314,7 +2314,7 @@ $('#jobLogBtn').onclick = () => { logOpen = !logOpen; loadJob(); };
 
 // ---------------------------------------------------------------- device actions
 async function updateProxy(id, file) {
-  if (!confirm(t('confirmUpdate', file))) return;
+  if (!confirm(t('confirmUpdate'))) return;
   updateStarted[id] = Date.now();
   renderDevices();  // the card says so right away
   const r = await api(`api/proxy/${id}/update`, {file});

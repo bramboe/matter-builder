@@ -338,7 +338,12 @@ esp_err_t send_viewer_json(httpd_req_t* req, const std::string& reply) {
 
 // "pin json" | "pin set <4-6 digits>" | "pin clear": only with the password
 std::string pin_command(const char* line) {
-    if (std::strcmp(line, "pin json") == 0) return pin[0] != '\0' ? "{\"set\":true}\n" : "{\"set\":false}\n";
+    if (std::strcmp(line, "pin json") == 0) {
+        char out[40];
+        std::snprintf(out, sizeof(out), "{\"set\":%s,\"length\":%u}\n", pin[0] != '\0' ? "true" : "false",
+                      static_cast<unsigned>(std::strlen(pin)));
+        return out;
+    }
     if (std::strcmp(line, "pin clear") == 0) {
         if (!store_pin("")) return "storing failed\n";
         pin[0] = '\0';

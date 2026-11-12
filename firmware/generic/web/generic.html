@@ -430,10 +430,19 @@ dialog > .card{border:0;padding:16px 20px}
       <div class="sub" data-t="accessHelp"></div>
       <div class="sub" id="accessPending" style="margin-top:8px;color:var(--primary)" hidden></div>
       <div id="accessList" style="margin-top:4px"></div>
-      <form class="row owner-only" id="pinRow" hidden style="flex-wrap:wrap;gap:8px"><div class="label" style="flex:1 1 100%"><span data-t="pinSetting"></span>
-        <div class="sub" data-t="pinSettingHelp"></div><div class="sub" id="pinState"></div></div>
-        <label class="field short" style="width:140px"><span data-t="pinLabel"></span><input id="pinNew" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off"></label>
-        <button type="submit" data-t="pinSave"></button><button type="button" class="warn" id="pinRemove" data-t="pinRemove" hidden></button></form>
+      <div class="row owner-only" id="pinRow" hidden style="flex-wrap:wrap;gap:8px">
+        <div class="label" style="flex:1 1 100%"><span data-t="pinSetting"></span><div class="sub" data-t="pinSettingHelp"></div></div>
+        <div class="features" id="pinSummary" hidden style="margin:0;flex-wrap:wrap;align-items:center">
+          <span class="code" id="pinDots" role="img" style="margin:0;letter-spacing:.2em"></span>
+          <button type="button" id="pinEdit" data-t="pinEdit"></button>
+          <button type="button" class="warn" id="pinRemove" data-t="pinRemove"></button>
+        </div>
+        <form class="features" id="pinForm" hidden style="margin:0;flex-wrap:wrap;align-items:center">
+          <label class="field short" style="width:140px"><span data-t="pinLabel"></span><input id="pinNew" type="password" inputmode="numeric" pattern="[0-9]{4,6}" maxlength="6" autocomplete="off" required></label>
+          <button type="submit" data-t="pinSave"></button>
+          <button type="button" class="text" id="pinCancel" data-t="cancel" hidden></button>
+        </form>
+      </div>
     </div></details>
     <details class="set" id="nameCard">
       <summary><span data-t="deviceNameTitle"></span><span class="val"></span></summary><div class="body">
@@ -536,7 +545,7 @@ const TEXT = {
   resultNotFound: c => `Last time the Wi-Fi network was not found (code ${c}). Check the name: the device only uses 2.4 GHz.`,
   resultNoConnect: c => `Last time there was no Wi-Fi connection within a minute (code ${c}).`,
   windowOpen: 'Pairing window open', windowClosed: 'Pairing window closed',
-  shareOther: 'Share with another app', factoryReset: 'Factory reset…', factoryHelp: 'Erase every setting and start again', factoryConfirm: 'Erase every setting: network, Matter pairings, connections, password and programs. The device then opens its setup network. Continue?', pinLabel: 'PIN', pinTitle: 'Quick access', pinHelp: 'Enter the PIN to look and operate. Changing settings needs the password.', usePassword: 'Sign in with the admin password', usePin: 'Use the PIN instead', wrongPin: 'Wrong PIN', pinLocked: 'Too many wrong tries: the PIN is locked for a while. Use the password.', unlockTitle: 'Password needed', unlockHelp: 'This changes the device: enter its password.', viewerBadge: 'Quick access · unlock', lockedVal: '•••• locked', pinSetting: 'Quick access PIN', pinSettingHelp: '4 to 6 digits to look at this page and operate what is connected; changes still need the password.', pinSave: 'Save PIN', pinRemove: 'Remove PIN', pinSaved: 'PIN saved', pinRemoved: 'PIN removed', pinIsSet: 'A PIN is set', pinNotSet: 'No PIN', bootOpen: (n, name) => `BOOT menu open: ${n} — ${name}`, bootHelp: 'Short press: next · hold 3 s: do it · closes by itself after 2 minutes', bootHoldMenu: 'Let go now: the BOOT menu opens', bootHoldAction: name => `Let go now: “${name}” is done`, bootHoldReset: 'Let go now: factory reset erases all settings', bootHoldNothing: 'Let go now: nothing happens', menu1: 'Leave the menu', menu2: 'Restart', menu3: 'Open the setup network and clear the page password', menu4: 'Unpair every controller', menu5: 'Forget the network and clear the page password', shareHelp: 'Add this device to another app (Apple Home, Google Home, Alexa, another Home Assistant) with a one-time code; its own pairing code stays secret.', shareStart: 'Share device', shareCode: 'One-time code', shareLeft: s => `Valid for ${s}`, shareHow: 'Scan the QR code in the other app or enter the code. In Apple Home: + → Add Accessory → More options… → enter the code.', shareApple: 'Add to Apple Home', shareCopy: 'Copy code', shareCopied: 'Code copied', shareAppleHint: 'Code copied: in Apple Home choose More options… and enter it', shareStop: 'Stop sharing',
+  shareOther: 'Share with another app', factoryReset: 'Factory reset…', factoryHelp: 'Erase every setting and start again', factoryConfirm: 'Erase every setting: network, Matter pairings, connections, password and programs. The device then opens its setup network. Continue?', pinLabel: 'PIN', pinTitle: 'Quick access', pinHelp: 'Enter the PIN to look and operate. Changing settings needs the password.', usePassword: 'Sign in with the admin password', usePin: 'Use the PIN instead', wrongPin: 'Wrong PIN', pinLocked: 'Too many wrong tries: the PIN is locked for a while. Use the password.', unlockTitle: 'Password needed', unlockHelp: 'This changes the device: enter its password.', viewerBadge: 'Quick access · unlock', lockedVal: '•••• locked', pinSetting: 'Quick access PIN', pinSettingHelp: '4 to 6 digits to look at this page and operate what is connected; changes still need the password.', pinSave: 'Save PIN', pinRemove: 'Remove PIN', pinSaved: 'PIN saved', pinRemoved: 'PIN removed', pinIsSet: 'A PIN is set', pinEdit: 'Edit', bootOpen: (n, name) => `BOOT menu open: ${n} — ${name}`, bootHelp: 'Short press: next · hold 3 s: do it · closes by itself after 2 minutes', bootHoldMenu: 'Let go now: the BOOT menu opens', bootHoldAction: name => `Let go now: “${name}” is done`, bootHoldReset: 'Let go now: factory reset erases all settings', bootHoldNothing: 'Let go now: nothing happens', menu1: 'Leave the menu', menu2: 'Restart', menu3: 'Open the setup network and clear the page password', menu4: 'Unpair every controller', menu5: 'Forget the network and clear the page password', shareHelp: 'Add this device to another app (Apple Home, Google Home, Alexa, another Home Assistant) with a one-time code; its own pairing code stays secret.', shareStart: 'Share device', shareCode: 'One-time code', shareLeft: s => `Valid for ${s}`, shareHow: 'Scan the QR code in the other app or enter the code. In Apple Home: + → Add Accessory → More options… → enter the code.', shareApple: 'Add to Apple Home', shareCopy: 'Copy code', shareCopied: 'Code copied', shareAppleHint: 'Code copied: in Apple Home choose More options… and enter it', shareStop: 'Stop sharing',
   pairExtra: 'For another controller (e.g. Apple Home): open the pairing window and scan the code within 5 minutes.',
   accessTitle: 'Programs with access',
   accessHelp: 'Programs such as the Home Assistant add-on get a key of their own. They ask with this password and need a press of the BOOT button.',
@@ -1946,26 +1955,59 @@ applyTexts();
 $('#sys').textContent = t('connecting');
 if (window.mbBack) { $('#backBtn').href = window.mbBack; $('#backBtn').hidden = false; }
 
-// The PIN for quick access, set with the password
+// Only the length of the saved PIN is shown.
+let savedPinLength = 0;
+function renderPinSetting(editing = false) {
+  const configured = savedPinLength > 0;
+  $('#pinSummary').hidden = !configured || editing;
+  $('#pinDots').textContent = '•'.repeat(savedPinLength);
+  $('#pinDots').setAttribute('aria-label', t('pinIsSet'));
+  $('#pinForm').hidden = configured && !editing;
+  $('#pinCancel').hidden = !configured;
+}
+function setSavedPinLength(length) {
+  savedPinLength = length;
+  pinAvailable = length > 0;
+  pinLength = length || 4;
+  $('#pinNew').value = '';
+  renderPinSetting();
+}
 async function loadPin() {
   if (viewer) return;
-  let p;
-  try { p = JSON.parse(await cmd('pin json')); } catch (e) { return; }
-  $('#pinRow').hidden = false;
-  $('#pinState').textContent = p.set ? t('pinIsSet') : t('pinNotSet');
-  $('#pinRemove').hidden = !p.set;
+  try {
+    const p = JSON.parse(await cmd('pin json'));
+    setSavedPinLength(p.set ? (p.length || pinLength) : 0);
+    $('#pinRow').hidden = false;
+  } catch (e) {}
 }
-$('#pinRow').onsubmit = async e => {
+$('#pinEdit').onclick = () => {
+  renderPinSetting(true);
+  $('#pinNew').focus();
+};
+$('#pinCancel').onclick = () => {
+  $('#pinNew').value = '';
+  renderPinSetting();
+  $('#pinEdit').focus();
+};
+$('#pinForm').onsubmit = async e => {
   e.preventDefault();
-  const reply = (await cmd('pin set ' + $('#pinNew').value.trim())).trim();
-  toast(reply === 'ok' ? t('pinSaved') : reply.replace(/^error: /, ''));
-  if (reply === 'ok') $('#pinNew').value = '';
-  loadPin();
+  const value = $('#pinNew').value.trim();
+  try {
+    const reply = (await cmd('pin set ' + value)).trim();
+    if (reply !== 'ok') { toast(reply.replace(/^error: /, '')); return; }
+    setSavedPinLength(value.length);
+    $('#pinEdit').focus();
+    toast(t('pinSaved'));
+  } catch (e) { toast(t('error') + ': ' + e.message); }
 };
 $('#pinRemove').onclick = async () => {
-  const reply = (await cmd('pin clear')).trim();
-  toast(reply === 'ok' ? t('pinRemoved') : reply);
-  loadPin();
+  try {
+    const reply = (await cmd('pin clear')).trim();
+    if (reply !== 'ok') { toast(reply); return; }
+    setSavedPinLength(0);
+    $('#pinNew').focus();
+    toast(t('pinRemoved'));
+  } catch (e) { toast(t('error') + ': ' + e.message); }
 };
 $('#viewerBadge').onclick = askPassword;
 function startApp() { setViewer(!token && !!pinCode); boot(() => refresh().then(() => signedIn && loadRules()), [loadMatter, loadWifi, loadThread, loadAccess, loadBle, loadPin]); }

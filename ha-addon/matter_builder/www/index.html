@@ -57,12 +57,24 @@ button:disabled{opacity:.4;cursor:default}
 .card .meta{margin-top:8px;display:grid;gap:2px}
 .card .acts{display:flex;flex-wrap:wrap;align-items:center;gap:2px;margin:auto -8px -6px;padding-top:10px}
 .card .acts details.more{margin-left:auto}
-#catalogBody .grid{grid-template-columns:repeat(auto-fill,minmax(min(100%,380px),1fr));gap:16px}
+#catalogBody .grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+#catalogBody[data-view="list"] .grid{grid-template-columns:minmax(0,1fr);gap:8px}
 #catalogBody .card{padding:20px;cursor:pointer}
 #catalogBody .card .meta{margin-top:14px;gap:8px}
 #catalogBody .card .meta .sub{line-height:1.5}
 #catalogBody .card .needs{gap:6px;margin-top:2px}
 #catalogBody .card .acts{margin:auto 0 0;padding-top:16px}
+#catalogBody[data-view="list"] .card{padding:12px 16px;gap:8px}
+#catalogBody[data-view="list"] .meta{margin-top:0;gap:4px}
+#catalogBody[data-view="list"] .acts{margin:0;padding:0;gap:6px}
+@media (min-width:760px){
+  #catalogBody[data-view="list"] .card{display:grid;grid-template-columns:minmax(150px,1fr) minmax(0,2fr) auto;align-items:center;gap:20px}
+}
+@media (max-width:959px){#catalogBody .grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:599px){#catalogBody .grid{grid-template-columns:minmax(0,1fr)}}
+.catalog-toolbar{display:flex;gap:10px 16px;flex-wrap:wrap}
+#catalogView{margin-inline-start:auto}
+@media (max-width:599px){#catalogView{margin-inline-start:0}}
 .ico{display:grid;place-items:center;width:38px;height:38px;border-radius:50%;background:var(--chip);color:var(--primary);flex:none}
 .chip{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:500;padding:2px 10px;border-radius:10px;background:var(--fill);color:var(--mute);white-space:nowrap}
 .chip.ok{background:var(--okchip);color:var(--ok)}
@@ -335,7 +347,7 @@ dialog.side{max-width:100vw}
 
 <!-- Catalog -->
 <section id="catalogTab" hidden>
-  <div style="display:flex;gap:16px;flex-wrap:wrap">
+  <div class="catalog-toolbar">
     <div class="filters" id="catalogFilters">
       <button data-filter="all" class="on" data-t="filterAll"></button>
       <button data-filter="firmware" data-t="filterFirmware"></button>
@@ -346,8 +358,12 @@ dialog.side{max-width:100vw}
       <button data-source="official" data-t="official"></button>
       <button data-source="community" data-t="community"></button>
     </div>
+    <div class="filters" id="catalogView" role="group" aria-label="Catalog view">
+      <button type="button" data-view="cards" data-t="viewCards" aria-pressed="true" class="on"></button>
+      <button type="button" data-view="list" data-t="viewList" aria-pressed="false"></button>
+    </div>
   </div>
-  <div id="catalogBody"></div>
+  <div id="catalogBody" data-view="cards"></div>
 </section>
 
 <!-- Developer -->
@@ -703,6 +719,7 @@ const TEXT = {
   confirmAddToHa: 'Open a pairing window on the device and add it to Home Assistant now? This takes a minute or two on Thread.',
   setUpConnections: 'Set up connections', openDevice: 'Open device', wRecipeTarget: 'Where should it go?', recipeNew: 'A new ESP32', recipeNewHelp: 'Install the generic firmware first',
   recipeOn: n => `On ${n}`, recipeOnHelp: 'Replaces its connections after you save and apply',
+  viewCards: 'Cards', viewList: 'List',
   filterAll: 'All', filterFirmware: 'Firmware', filterRecipes: 'Recipes', official: 'Official', recipe: 'Recipe', use: 'Use',
   anySource: 'Any source', community: 'Community', verified: 'Verified', source: 'Source', version: 'Version', stars: 'GitHub stars',
   downloads: 'Downloads', updated: 'Last release', keyFingerprint: 'Key fingerprint', maker: 'Maker',
@@ -2125,6 +2142,26 @@ $('#specSave').onclick = () => postSpec(false);
 $('#buildGenericBtn').onclick = async () => { await api('api/build', {app: 'generic'}); refresh(); };
 
 // ---------------------------------------------------------------- page
+function setCatalogView(view) {
+  $('#catalogBody').dataset.view = view;
+  $$('#catalogView button').forEach(button => {
+    const selected = button.dataset.view === view;
+    button.classList.toggle('on', selected);
+    button.setAttribute('aria-pressed', String(selected));
+  });
+}
+
+try {
+  if (localStorage.getItem('mbCatalogView') === 'list') setCatalogView('list');
+} catch (e) {}
+$$('#catalogView button').forEach(button => {
+  button.onclick = () => {
+    const view = button.dataset.view;
+    setCatalogView(view);
+    try { localStorage.setItem('mbCatalogView', view); } catch (e) {}
+  };
+});
+
 function showTab(name) {
   tab = name;
   $$('nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === name));

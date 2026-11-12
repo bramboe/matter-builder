@@ -199,7 +199,15 @@ void do_action(int action) {
 void released(int64_t held_us) {
     device_status::show_hold(false);
     if (held_us >= RESET_HOLD_US && held_us < 30 * SECOND_US) {
-        factory_reset();
+        // Only with a status LED: it goes dark at 10 s, so you see that
+        // letting go now erases everything. Without one nothing warns (it
+        // happened testing the menu): then the reset is on the page only
+        if (device_status::led_pin() >= 0) {
+            factory_reset();
+        } else {
+            ESP_LOGW(TAG, "BOOT held %" PRId64 " s: no status LED to warn first, so no factory reset (it is on the page)",
+                     held_us / SECOND_US);
+        }
     } else if (held_us >= MENU_HOLD_US && held_us < RESET_HOLD_US) {
         if (!menu_open) {
             ESP_LOGW(TAG, "BOOT held %" PRId64 " s: menu", held_us / SECOND_US);
@@ -246,7 +254,9 @@ void button_task(void*) {
         } else if (down) {
             // What letting go now would do: flicker for the menu, dark for a reset
             const int64_t held = now - pressed_since;
-            if (held >= MENU_HOLD_US && held < 30 * SECOND_US) device_status::show_hold(true, held >= RESET_HOLD_US);
+            if (held >= MENU_HOLD_US && held < 30 * SECOND_US) {
+                device_status::show_hold(true, held >= RESET_HOLD_US && device_status::led_pin() >= 0);
+            }
         } else if (!down && pressed_since >= 0) {
             released(now - pressed_since);
             pressed_since = -1;
@@ -429,6 +439,22 @@ std::string command(const std::vector<std::string>& args) {
         out += std::string("waiting for the BOOT button: '") + request.name + "'\n";
     }
     return out.empty() ? "no programs linked\n" : out;
+}
+
+namespace {
+void factory_reset_task(void*) {
+    vTaskDelay(pdMS_TO_TICKS(500));  // the answer goes out first
+    factory_reset();
+}
+}  // namespace
+
+std::string factory_reset_command(const std::vector<std::string>& args) {
+    if (args.size() != 3 || args[2] != "confirm") {
+        return "factory reset confirm: erase every setting (network, Matter pairings, connections, password, programs) and restart\n";
+    }
+    ESP_LOGE(TAG, "Factory reset from the page");
+    xTaskCreate(factory_reset_task, "factory_reset", 3072, nullptr, 5, nullptr);
+    return "erasing everything and restarting: the device opens its setup network\n";
 }
 
 }  // namespace program_access

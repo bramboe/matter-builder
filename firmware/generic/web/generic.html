@@ -20,8 +20,8 @@ header .back{display:grid;place-items:center;width:48px;height:48px;margin-left:
 header .back:hover{background:var(--fill)}
 header .back[hidden]{display:none}
 header .sub{font-size:12px}
-/* A detail page as Home Assistant's device page: at most 1280 px, columns that fill it */
-main{max-width:1280px;margin:0 auto;padding:8px 16px 96px}
+/* From the left, as the add-on and Home Assistant's overviews: the columns fill the width (at most 2000 px), never centred */
+main{max-width:2000px;padding:8px 16px 96px}
 /* Two columns on a wide screen: what you use on the left, the device's
    settings on the right; one column on a phone or a narrow window */
 .cols{display:grid;grid-template-columns:minmax(0,2fr) minmax(340px,1fr);gap:16px;align-items:start}
@@ -433,6 +433,7 @@ dialog > .card{border:0;padding:16px 20px}
           <label class="sub" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="ledInverted"><span data-t="ledInverted"></span></label>
           <label class="sub" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="ledQuiet"><span data-t="ledQuiet"></span></label>
           <button type="submit" data-t="save"></button></form></div>
+      <div class="row"><div class="label" data-t="factoryHelp"></div><button type="button" class="warn" id="factoryReset" data-t="factoryReset"></button></div>
       <details id="techDetails"><summary data-t="techTitle"></summary><div id="techRows"></div></details>
     </div></details>
   </div>
@@ -513,7 +514,7 @@ const TEXT = {
   resultNotFound: c => `Last time the Wi-Fi network was not found (code ${c}). Check the name: the device only uses 2.4 GHz.`,
   resultNoConnect: c => `Last time there was no Wi-Fi connection within a minute (code ${c}).`,
   windowOpen: 'Pairing window open', windowClosed: 'Pairing window closed',
-  shareOther: 'Share with another app', shareHelp: 'Add this device to another app (Apple Home, Google Home, Alexa, another Home Assistant) with a one-time code; its own pairing code stays secret.', shareStart: 'Share device', shareCode: 'One-time code', shareLeft: s => `Valid for ${s}`, shareHow: 'Scan the QR code in the other app or enter the code. In Apple Home: + → Add Accessory → More options… → enter the code.', shareApple: 'Add to Apple Home', shareCopy: 'Copy code', shareCopied: 'Code copied', shareAppleHint: 'Code copied: in Apple Home choose More options… and enter it', shareStop: 'Stop sharing',
+  shareOther: 'Share with another app', factoryReset: 'Factory reset…', factoryHelp: 'Erase every setting and start again', factoryConfirm: 'Erase every setting: network, Matter pairings, connections, password and programs. The device then opens its setup network. Continue?', shareHelp: 'Add this device to another app (Apple Home, Google Home, Alexa, another Home Assistant) with a one-time code; its own pairing code stays secret.', shareStart: 'Share device', shareCode: 'One-time code', shareLeft: s => `Valid for ${s}`, shareHow: 'Scan the QR code in the other app or enter the code. In Apple Home: + → Add Accessory → More options… → enter the code.', shareApple: 'Add to Apple Home', shareCopy: 'Copy code', shareCopied: 'Code copied', shareAppleHint: 'Code copied: in Apple Home choose More options… and enter it', shareStop: 'Stop sharing',
   pairExtra: 'For another controller (e.g. Apple Home): open the pairing window and scan the code within 5 minutes.',
   accessTitle: 'Programs with access',
   accessHelp: 'Programs such as the Home Assistant add-on get a key of their own. They ask with this password and need a press of the BOOT button.',
@@ -1303,6 +1304,12 @@ const shareAppLabel = () => { const app = haApp(); return app && app.target === 
 const canShareApp = () => !!haApp() || /iPhone|iPad|Macintosh/.test(navigator.userAgent);
 $('#shareApple').onclick = () => shareToApp(matter.share, (state && state.io ? state.io.name : 'Matter Builder'),
   () => { copyText(matter.share.manual); toast(t('shareAppleHint')); });
+
+// A factory reset from the page (the BOOT button only does it on a board with a status LED)
+$('#factoryReset').onclick = async () => {
+  if (!confirm(t('factoryConfirm'))) return;
+  try { toast((await cmd('factory reset confirm')).trim()); } catch (e) { toast(t('error') + ': ' + e.message); }
+};
 
 async function loadMatter() {
   if (loadingMatter) return;

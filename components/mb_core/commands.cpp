@@ -8,6 +8,7 @@
 
 #include "boot_guard.h"
 #include "device_status.h"
+#include "program_access.h"
 #include "esp_app_desc.h"
 #include "esp_chip_info.h"
 #include "esp_console.h"
@@ -35,6 +36,7 @@ const char* HELP =
     "system [json]                           firmware slots, reset reason, network (json: for the page)\n"
     "revert                                  boot the other firmware slot\n"
     "reboot                                  restart\n"
+    "factory reset confirm                   erase every setting and restart (setup network)\n"
     "log [from]                              the log kept in RAM, from byte <from> on (4 KB at a time)\n";
 
 struct ExtraCommand {
@@ -199,6 +201,7 @@ std::string run_command(const std::string& line) {
     if (cmd == "system") return boot_guard::describe() + nvs_text() + net::describe();
     if (cmd == "revert") return cmd_revert();
     if (cmd == "log") return log_buffer::read(args.size() > 1 ? std::strtoul(args[1].c_str(), nullptr, 10) : 0, 4096);
+    if (cmd == "factory" && args.size() >= 2 && args[1] == "reset") return program_access::factory_reset_command(args);
     if (cmd == "reboot") {
         mb_core::stop();
         xTaskCreate(restart_soon, "restart", 2048, nullptr, 5, nullptr);

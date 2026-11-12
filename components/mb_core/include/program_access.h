@@ -11,7 +11,8 @@
 //
 // The BOOT button also has two long presses, acted on when released:
 //   5-10 s   recovery: forget the page password (programs keep their tokens)
-//   10-30 s  factory reset: erase all settings, Matter pairings included
+//   10-30 s  factory reset: erase all settings, Matter pairings included;
+//            only with a status LED (it goes dark to warn), else on the page
 // Longer than 30 s is ignored, so a stuck button does nothing.
 
 #pragma once
@@ -24,6 +25,9 @@ namespace program_access {
 // Call right after NVS init. `recovery` runs after a 5-10 s press; the
 // factory reset is built in.
 void start(void (*recovery)());
+
+// "factory reset confirm" from the page: erase every setting and restart
+std::string factory_reset_command(const std::vector<std::string>& args);
 
 // True when `token` belongs to a linked program
 bool token_valid(const char* token);

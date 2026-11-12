@@ -136,8 +136,22 @@ jobs:
 
       - uses: actions/checkout@v4
 
+      # Now and then a cache download stalls (once at 10 % for 10 minutes): a
+      # piece that takes over 2 minutes is given up, and it is tried once more
       - name: Toolchain
+        id: toolchain
         uses: actions/cache/restore@v4
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 2
+        with:
+          path: /mnt/mb/toolchain
+          key: ${{ needs.toolchain.outputs.key }}
+
+      - name: Toolchain (once more)
+        if: steps.toolchain.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@v4
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 3
         with:
           path: /mnt/mb/toolchain
           key: ${{ needs.toolchain.outputs.key }}
@@ -150,6 +164,8 @@ jobs:
       # it wrote would be its own alone.
       - name: Compile cache
         uses: actions/cache/restore@v4
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 2
         with:
           path: /mnt/mb/ccache
           key: ccache-${{ matrix.name }}-${{ env.ESP_MATTER_COMMIT }}-${{ github.sha }}

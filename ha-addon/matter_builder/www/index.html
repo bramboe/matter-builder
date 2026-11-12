@@ -952,6 +952,8 @@ function updateWork(p) {
 
 function deviceCard(p) {
   const s = statuses[p.id], r = running(s), work = updateWork(p), up = !work && updateFor(p);
+  // While it updates (it restarts): only its log; editing, its page and the ⋮ menu wait
+  const updating = !!work && !work.queued;
   const what = connectedText(s);
   const chip = work && !work.queued ? `<span class="chip accent"><span class="spin"></span>${work.pct != null ? t('updatingPct', work.pct) : t('updating')}</span>`
     : work ? `<span class="chip">${t('updateQueued')}</span>` : statusChip(s);
@@ -971,16 +973,16 @@ function deviceCard(p) {
     <div class="acts">
       ${up ? `<button class="text" onclick="updateProxy('${p.id}', '${esc(up)}')" ${state.job.running ? 'disabled' : ''}>${t('updateTo', fileVersion(up))}</button>` : ''}
       ${s && s.auth ? `<button class="text" onclick="openWizard('link', '${esc(p.host)}')">${t('linkAgain')}</button>` : ''}
-      <button class="plain" onclick="openDevice('${p.id}')">${t('edit')}</button>
+      <button class="plain" onclick="openDevice('${p.id}')" ${updating ? 'disabled' : ''}>${t('edit')}</button>
       <button class="plain" onclick="openLogs('${p.id}')">${t('logs')}</button>
-      ${work && !work.queued ? '' : `<a class="button plain" href="${esc(portalUrl(p))}">${t('openPage')}</a>`}
+      ${updating ? '' : `<a class="button plain" href="${esc(portalUrl(p))}">${t('openPage')}</a>`}
       <span class="grow"></span>
-      <details class="more"><summary aria-label="${t('more')}">${icon('dots')}</summary><div class="pop">
+      ${updating ? `<button class="icon" disabled aria-label="${t('more')}">${icon('dots')}</button>` : `<details class="more"><summary aria-label="${t('more')}">${icon('dots')}</summary><div class="pop">
         <button onclick="renameProxy('${p.id}')">${t('rename')}</button>
         <a class="button" href="${esc(pageUrl(p.local || p.host))}" target="_blank" rel="noopener">${t('openDirect')}</a>
         <button onclick="openDevice('${p.id}', 'info')">${t('showKey')}</button>
         <button onclick="openDevice('${p.id}', 'firmware')">${t('firmware')}</button>
-        <button class="warn" onclick="forgetProxy('${p.id}')">${t('forget')}</button></div></details>
+        <button class="warn" onclick="forgetProxy('${p.id}')">${t('forget')}</button></div></details>`}
     </div></div>`;
 }
 

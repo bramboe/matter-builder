@@ -1159,8 +1159,10 @@ static std::string json_string(const char* text) {
 std::string state_json() {
     const int64_t now = now_us();
     std::string out;
-    appendf(out, "{\"uptime\":%" PRId64 ",\"heap\":%u,\"bed_count\":%d,\"beds\":[", now / 1000000,
-            static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_8BIT)), active_beds);
+    // heap_total: of all there is, so the page can show how full it is
+    appendf(out, "{\"uptime\":%" PRId64 ",\"heap\":%u,\"heap_total\":%u,\"bed_count\":%d,\"beds\":[", now / 1000000,
+            static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_8BIT)),
+            static_cast<unsigned>(heap_caps_get_total_size(MALLOC_CAP_8BIT)), active_beds);
     for (int i = 0; i < active_beds; ++i) {
         const Bed& bed = beds[i];
         appendf(out,

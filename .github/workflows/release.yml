@@ -3,31 +3,128 @@ name: Release
 # Ready-made firmware for users who do not build: the same toolchain and
 # scripts as the Home Assistant add-on's developer mode (ha-addon/matter_builder),
 # so a release can be rebuilt there and compared. A tag "v<version>" builds
-# the generic device (ESP32-C6 on Thread and on Wi-Fi, classic ESP32) and the Octo bed bridge (ESP32-C6), each an update image and a factory image for
-# a new ESP32 over USB; it writes a manifest with SHA-256 hashes, signs it (secret
-# MB_SIGNING_KEY, ECDSA P-256) and publishes everything as a GitHub release. The add-on checks the signature
-# against ha-addon/matter_builder/release-key.pem before it installs anything.
+# the generic device (ESP32-C6 on Thread and on Wi-Fi, classic ESP32, and the
+# untested S3, C3 and C5) and the Octo bed bridge (ESP32-C6), each an update
+# image and a factory image for a new ESP32 over USB; it writes a manifest with
+# SHA-256 hashes, signs it (secret MB_SIGNING_KEY, ECDSA P-256) and publishes
+# everything as a GitHub release. The add-on checks the signature against
+# ha-addon/matter_builder/release-key.pem before it installs anything.
 #
-# The Matter toolchain needs more disk than a runner has free, so the build
-# runs in Espressif's image on the runner's large /mnt disk, after removing
-# preinstalled software the build does not use.
+# Fast because:
+# - every firmware is built in a job of its own, side by side (a matrix), and
+#   one last job signs and publishes what they made
+# - the toolchain (esp-matter, connectedhomeip, the Python environment) is
+#   made once and kept in the Actions cache. A cache written by a tag's run
+#   can only be read by that same tag; one written on main by every tag. So
+#   main builds too (on a change to the firmware or how it is built, or by
+#   hand): that keeps the cache where the releases find it, and checks that
+#   everything still builds. Only a tag publishes.
+#
+# The Matter toolchain needs more disk than a runner has free, so the builds
+# run in Espressif's image on the runner's large /mnt disk, after removing
+# preinstalled software they do not use.
 
 on:
   push:
     tags: ["v*"]
+    branches: [main]
+    # (not looked at for a tag: a tag always builds)
+    paths:
+      - "firmware/**"
+      - "components/**"
+      - "ha-addon/matter_builder/build.sh"
+      - "ha-addon/matter_builder/toolchain.sh"
+      - "ha-addon/matter_builder/idf_env.sh"
+      - "tools/release_manifest.py"
+      - ".github/workflows/release.yml"
   workflow_dispatch:
 
 permissions:
   contents: write
   actions: write
 
+# A newer push to main makes an older build of main pointless; a tag always finishes
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref == 'refs/heads/main' }}
+
 env:
   IDF_IMAGE: espressif/idf:v5.5.5
   ESP_MATTER_COMMIT: fe1efc6cdf62f19b5ca44213900333a6aad7a8b2
+  # The same packages in every job: the build's tools beside Espressif's image
+  APT_PACKAGES: >-
+    build-essential pkg-config libffi-dev libssl-dev libdbus-1-dev libglib2.0-dev
+    libavahi-client-dev libgirepository1.0-dev libcairo2-dev libreadline-dev
+    python3-dev python3-venv unzip
 
 jobs:
-  firmware:
+  # The toolchain, once: from the cache when it is there, else made and kept
+  toolchain:
     runs-on: ubuntu-latest
+    outputs:
+      key: ${{ steps.key.outputs.key }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache key
+        id: key
+        # A new esp-matter, ESP-IDF image or toolchain script makes a new toolchain
+        run: echo "key=toolchain-${{ env.ESP_MATTER_COMMIT }}-${{ hashFiles('ha-addon/matter_builder/toolchain.sh', 'ha-addon/matter_builder/idf_env.sh') }}-${IDF_IMAGE//[:\/]/-}" >> "$GITHUB_OUTPUT"
+
+      - name: Is it there?
+        id: probe
+        uses: actions/cache/restore@v4
+        with:
+          path: /mnt/mb/toolchain
+          key: ${{ steps.key.outputs.key }}
+          lookup-only: true
+
+      - name: Disk space
+        if: steps.probe.outputs.cache-hit != 'true'
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo mkdir -p /mnt/mb && sudo chown "$(id -u):$(id -g)" /mnt/mb
+          df -h / /mnt
+
+      - name: Make the toolchain (Espressif image)
+        if: steps.probe.outputs.cache-hit != 'true'
+        run: |
+          # Not the image's entrypoint: it activates ESP-IDF before toolchain.sh has
+          # created the Python environment; the scripts activate it themselves
+          docker run --rm -v "$GITHUB_WORKSPACE:/src" -v /mnt/mb:/mb \
+            -e MB_DATA=/mb -e MB_SRC=/src -e ESP_MATTER_COMMIT -e APT_PACKAGES \
+            -e IDF_PYTHON_ENV_PATH=/mb/toolchain/python_env -e HOME=/mb/home \
+            --entrypoint bash "$IDF_IMAGE" -c '
+              set -e
+              apt-get update -qq
+              apt-get install -y -qq --no-install-recommends $APT_PACKAGES > /dev/null
+              bash /src/ha-addon/matter_builder/toolchain.sh
+              chown -R '"$(id -u):$(id -g)"' /mb'
+
+      - name: Keep it
+        if: steps.probe.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: /mnt/mb/toolchain
+          key: ${{ steps.key.outputs.key }}
+
+  # Every firmware in a job of its own, at the same time
+  firmware:
+    needs: toolchain
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {name: generic-c6-thread, app: generic, chip: esp32c6, network: ""}
+          - {name: generic-c6-wifi, app: generic, chip: esp32c6, network: wifi}
+          - {name: generic-esp32, app: generic, chip: esp32, network: ""}
+          # Untested chips (no board to try them on): built so they can be
+          - {name: generic-esp32s3, app: generic, chip: esp32s3, network: ""}
+          - {name: generic-esp32c3, app: generic, chip: esp32c3, network: ""}
+          - {name: generic-esp32c5, app: generic, chip: esp32c5, network: ""}
+          - {name: bridge, app: bridge, chip: esp32c6, network: ""}
+    name: ${{ matrix.name }}
     steps:
       - name: Disk space
         run: |
@@ -37,48 +134,67 @@ jobs:
 
       - uses: actions/checkout@v4
 
-      - name: Toolchain cache
-        uses: actions/cache@v4
+      - name: Toolchain
+        uses: actions/cache/restore@v4
         with:
           path: /mnt/mb/toolchain
-          key: toolchain-${{ env.ESP_MATTER_COMMIT }}-2
+          key: ${{ needs.toolchain.outputs.key }}
+          fail-on-cache-miss: true
 
-      - name: Toolchain and build (Espressif image)
+      - name: Build (Espressif image)
+        env:
+          MB_CHIP: ${{ matrix.chip }}
+          MB_NETWORK: ${{ matrix.network }}
+          APP: ${{ matrix.app }}
         run: |
-          # Not the image's entrypoint: it activates ESP-IDF before toolchain.sh has
-          # created the Python environment; the scripts activate it themselves
           docker run --rm -v "$GITHUB_WORKSPACE:/src" -v /mnt/mb:/mb \
-            -e MB_DATA=/mb -e MB_SRC=/src -e ESP_MATTER_COMMIT \
+            -e MB_DATA=/mb -e MB_SRC=/src -e ESP_MATTER_COMMIT -e APT_PACKAGES \
+            -e MB_CHIP -e MB_NETWORK -e APP \
             -e IDF_PYTHON_ENV_PATH=/mb/toolchain/python_env -e HOME=/mb/home \
             --entrypoint bash "$IDF_IMAGE" -c '
               set -e
               apt-get update -qq
-              apt-get install -y -qq --no-install-recommends build-essential pkg-config libffi-dev libssl-dev \
-                libdbus-1-dev libglib2.0-dev libavahi-client-dev libgirepository1.0-dev libcairo2-dev \
-                libreadline-dev python3-dev python3-venv unzip > /dev/null
-              if [ ! -f "/mb/toolchain/ready-$ESP_MATTER_COMMIT" ]; then
-                bash /src/ha-addon/matter_builder/toolchain.sh
-              fi
-              bash /src/ha-addon/matter_builder/build.sh generic
-              MB_NETWORK=wifi bash /src/ha-addon/matter_builder/build.sh generic
-              MB_CHIP=esp32 bash /src/ha-addon/matter_builder/build.sh generic
-              # Untested chips (no board to try them on): built so they can be
-              MB_CHIP=esp32s3 bash /src/ha-addon/matter_builder/build.sh generic
-              MB_CHIP=esp32c3 bash /src/ha-addon/matter_builder/build.sh generic
-              MB_CHIP=esp32c5 bash /src/ha-addon/matter_builder/build.sh generic
-              bash /src/ha-addon/matter_builder/build.sh bridge
+              apt-get install -y -qq --no-install-recommends $APT_PACKAGES > /dev/null
+              bash /src/ha-addon/matter_builder/build.sh "$APP"
               chown -R '"$(id -u):$(id -g)"' /mb'
+          ls -l /mnt/mb/firmware /mnt/mb/firmware/factory
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware-${{ matrix.name }}
+          path: |
+            /mnt/mb/firmware/*.bin
+            /mnt/mb/firmware/factory/*.bin
+          if-no-files-found: error
+          retention-days: 7
+
+  # Everything together: the manifest, its signature and (for a tag) the release
+  publish:
+    needs: firmware
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: firmware-*
+          path: firmware
+          merge-multiple: true
 
       - name: Manifest and signature
         env:
           MB_SIGNING_KEY: ${{ secrets.MB_SIGNING_KEY }}
-        run: python3 tools/release_manifest.py /mnt/mb/firmware "${GITHUB_REF_NAME}"
+        run: |
+          ls -l firmware firmware/factory
+          python3 tools/release_manifest.py firmware "${GITHUB_REF_NAME}"
+          python3 -c "import json; m = json.load(open('firmware/manifest.json')); print(len(m['images']), 'images,', len(m['factory']), 'factory images')"
 
       - name: Publish
+        if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes "Signed firmware for the ESP32-C6 (Thread or Wi-Fi) and the classic ESP32 (Wi-Fi), and untested builds for the ESP32-S3, C3 and C5 (Wi-Fi)" \
-            /mnt/mb/firmware/*.bin /mnt/mb/firmware/factory/*.bin /mnt/mb/firmware/manifest.json /mnt/mb/firmware/manifest.json.sig
+            firmware/*.bin firmware/factory/*.bin firmware/manifest.json firmware/manifest.json.sig
           # A release made with this token starts no other workflow by itself
           gh workflow run catalog.yml --ref main

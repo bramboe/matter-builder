@@ -67,7 +67,16 @@ button.pri.busy::after{border-color:#fff;border-right-color:transparent}
 #loadbar.on{opacity:1}
 #loadbar::before{content:"";position:absolute;top:0;bottom:0;width:35%;background:var(--primary);animation:slide 1.2s ease-in-out infinite}
 @keyframes slide{from{transform:translateX(-100%)}to{transform:translateX(290%)}}
-@media (prefers-reduced-motion:reduce){#boot i,#loadbar::before{animation:none;opacity:.6}header,main{transition:none}}
+.membar{height:6px;max-width:220px;margin-top:6px;border-radius:3px;background:var(--fill);overflow:hidden}
+.membar i{display:block;height:100%;background:var(--primary);transition:width .4s}
+.membar.low i{background:var(--bad)}
+/* Until an answer is in: the shape of what comes (cards, values) instead of empty space */
+.skel{display:block;height:12px;border-radius:6px;background:linear-gradient(90deg,var(--fill) 25%,var(--line) 50%,var(--fill) 75%);background-size:300% 100%;animation:shimmer 1.4s ease-in-out infinite}
+.skelcard{display:grid;gap:12px;padding:16px;margin-bottom:8px}
+body:not(.loaded) .settings details.set > summary .val:empty::before{content:"";display:inline-block;width:72px;height:12px;border-radius:6px;vertical-align:middle;
+  background:linear-gradient(90deg,var(--fill) 25%,var(--line) 50%,var(--fill) 75%);background-size:300% 100%;animation:shimmer 1.4s ease-in-out infinite}
+@keyframes shimmer{from{background-position:100% 0}to{background-position:0 0}}
+@media (prefers-reduced-motion:reduce){#boot i,#loadbar::before,.skel,.val:empty::before{animation:none;opacity:.6}header,main{transition:none}}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
 .netlist{margin-top:-4px}.netlist:empty{display:none}
 .chips button{min-height:32px;border-radius:8px;border:1px solid var(--line);background:none;padding:0 12px}
@@ -207,7 +216,10 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
 </div>
 <div id="discovered"></div>
 <div class="cols"><div class="col-main">
-<div id="beds"></div>
+<div id="beds"><!-- until the first answer: the shape of a bed -->
+  <div class="section"><div class="section-head"><span class="skel" style="width:140px;height:20px"></span></div>
+  <div class="card skelcard"><span class="skel" style="width:40%"></span><span class="skel" style="width:85%;height:36px;border-radius:12px"></span><span class="skel" style="width:85%;height:36px;border-radius:12px"></span></div></div>
+</div>
 </div><div class="col-side">
 
 <div class="section">
@@ -262,7 +274,7 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
     <details class="set" id="systemCard">
       <summary><span data-t="system"></span><span class="val"></span></summary><div class="body">
       <div class="row"><div class="label"><span data-t="network"></span><div class="sub" id="pageUrl"></div></div><div id="netKind">–</div></div>
-      <div class="row"><div class="label" data-t="freeMemory"></div><div id="heap">–</div></div>
+      <div class="row"><div class="label"><span data-t="freeMemory"></span><div class="membar" id="heapBar" hidden><i></i></div></div><div id="heap">–</div></div>
       <div class="row"><div class="label" data-t="uptime"></div><div id="uptime">–</div></div>
       <div class="row" id="ledRow" hidden style="display:block">
         <div class="label"><span data-t="statusLed"></span><span class="sub" style="display:block" data-t="statusLedHelp"></span></div>
@@ -603,16 +615,20 @@ function track(promise) {
   });
 }
 new MutationObserver(() => { if (busy.size) paintBusy(); }).observe(document.body, {childList: true, subtree: true});
-// The page shows itself whole: when its first answers are in, or after 5 s with what there is
+// The page shows its shape at once (placeholders where answers are still
+// coming), then what matters most, then the rest one by one: a device on
+// Thread answers one question at a time, so asking all at once only delays
+// the first answer. Sign in spins until the main part is there.
 let booting = false;
 const ready = () => document.body.classList.add('ready');
-function boot(loads) {
+function boot(first, rest) {
   booting = true;
-  // Pressed Sign in: it spins until the page is there, not only for its first request
-  track(Promise.race([Promise.allSettled(loads), new Promise(r => setTimeout(r, 5000))])).then(() => {
+  ready();
+  track(Promise.resolve(first()).catch(() => {})).then(async () => {
     booting = false;
     if (signedIn) showApp();
-    ready();
+    for (const load of rest) { try { await load(); } catch (e) {} }
+    document.body.classList.add('loaded');  // a value still empty now is empty, not coming
   });
 }
 
@@ -796,7 +812,13 @@ async function refresh() {
     const ready = state.beds.filter(b => b.state === 'ready').length;
     const configured = state.beds.filter(b => b.configured).length;
     $('#sys').textContent = configured ? t('bedsConnected', ready, configured) : t('noBeds');
-    $('#heap').textContent = Math.round(state.heap / 1024) + ' KB';
+    // Free of all there is, and a bar for how full it is (newer firmware reports the total)
+    $('#heap').textContent = Math.round(state.heap / 1024) + (state.heap_total ? ' / ' + Math.round(state.heap_total / 1024) : '') + ' KB';
+    $('#heapBar').hidden = !state.heap_total;
+    if (state.heap_total) {
+      $('#heapBar i').style.width = Math.round(100 * (1 - state.heap / state.heap_total)) + '%';
+      $('#heapBar').classList.toggle('low', state.heap < state.heap_total / 10);
+    }
     $('#uptime').textContent = state.uptime < 3600 ? Math.floor(state.uptime / 60) + ' min'
       : Math.floor(state.uptime / 3600) + ' ' + t('hours') + ' ' + Math.floor(state.uptime % 3600 / 60) + ' min';
     // Don't redraw while a travel time is being typed
@@ -1173,7 +1195,7 @@ $('#otaForm').onsubmit = e => {
 
 applyLanguage();
 $('#sys').textContent = t('connecting');
-function startApp() { boot([loadLanguage(), refresh(), loadMatter(), loadWifi(), loadThread(), loadAccess()]); }
+function startApp() { boot(refresh, [loadMatter, loadWifi, loadThread, loadAccess, loadLanguage]); }
 function keepToken(value) {
   token = value;
   try { localStorage.setItem('octoToken', token); } catch (err) {}

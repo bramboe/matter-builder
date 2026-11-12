@@ -10,6 +10,7 @@
 #include "driver/gpio.h"
 #include "driver/i2c_master.h"
 #include "driver/ledc.h"
+#include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_system.h"
 #include "esp_timer.h"
@@ -1267,6 +1268,8 @@ std::string command(const std::vector<std::string>& args) {
 std::string state_json() {
     std::string out = "{\"uptime\":" + std::to_string(esp_timer_get_time() / 1000000) +
                       ",\"heap\":" + std::to_string(esp_get_free_heap_size()) +
+                      // of all there is: the page shows how full it is
+                      ",\"heap_total\":" + std::to_string(heap_caps_get_total_size(MALLOC_CAP_DEFAULT)) +
                       ",\"io\":{\"name\":" + json_text(name().c_str()) + ",\"trial\":";
     const int64_t left = in_trial ? (trial_end_us - esp_timer_get_time()) / 1000000 : 0;
     out += std::to_string(left > 0 ? left : 0) + ",\"problem\":" + json_text(problem.c_str()) + ",\"changed\":";

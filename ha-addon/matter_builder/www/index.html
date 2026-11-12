@@ -57,13 +57,11 @@ button:disabled{opacity:.4;cursor:default}
 .card .meta{margin-top:8px;display:grid;gap:2px}
 .card .acts{display:flex;flex-wrap:wrap;align-items:center;gap:2px;margin:auto -8px -6px;padding-top:10px}
 .card .acts details.more{margin-left:auto}
-#catalogBody .grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+#catalogBody .grid{grid-template-columns:repeat(3,minmax(0,1fr))}
 #catalogBody[data-view="list"] .grid{grid-template-columns:minmax(0,1fr);gap:8px}
-#catalogBody .card{padding:20px;cursor:pointer}
-#catalogBody .card .meta{margin-top:14px;gap:8px}
-#catalogBody .card .meta .sub{line-height:1.5}
-#catalogBody .card .needs{gap:6px;margin-top:2px}
-#catalogBody .card .acts{margin:auto 0 0;padding-top:16px}
+#catalogBody .card{cursor:pointer}
+#catalogBody .card .acts{margin:auto 0 0}
+#catalogBody[data-view="list"] .needs{gap:6px;margin-top:2px}
 #catalogBody[data-view="list"] .card{padding:12px 16px;gap:8px}
 #catalogBody[data-view="list"] .meta{margin-top:0;gap:4px}
 #catalogBody[data-view="list"] .acts{margin:0;padding:0;gap:6px}
@@ -152,6 +150,11 @@ dialog.side{margin:0 0 0 auto;height:100vh;max-height:100vh;border-radius:16px 0
 .dlg-head{display:flex;align-items:center;gap:10px;padding:16px 16px 8px 20px}
 .dlg-head .info{flex:1;min-width:0}
 .dlg-body{padding:4px 20px 20px;overflow:auto;flex:1}
+.catalog-detail{display:grid;gap:20px;padding:6px 0 4px}
+.catalog-detail p,.catalog-detail .needs,.catalog-detail .actions,.catalog-detail .banner{margin:0}
+.catalog-detail .compatibility{display:grid;gap:8px}
+.catalog-detail .row{min-height:52px;padding:10px 0}
+.catalog-detail .field{padding:10px 12px 8px}
 .tabs{display:flex;border-bottom:1px solid var(--line);margin:0 20px}
 .tabs button{background:none;border-radius:0;border-bottom:2px solid transparent;color:var(--mute);min-height:42px}
 .tabs button.on{color:var(--primary);border-bottom-color:var(--primary)}
@@ -1785,10 +1788,11 @@ function catalogCompatibility(it, variants) {
   return {labels, boards, experimental};
 }
 
-function catalogCompatibilityHtml(it, {labels, boards, experimental}) {
+function catalogCompatibilityHtml(it, {labels, boards, experimental}, showUntested = false) {
+  const visibleBoards = showUntested ? boards : boards.concat(experimental);
   return `${needChips(labels)}
-    ${boards.length ? `<div class="sub"><b>${t('catalogBoards')}</b> · ${esc(boards.join(', '))}</div>` : ''}
-    ${experimental.length ? `<div class="sub"><b>${t('catalogExperimental')}</b> · ${esc(experimental.join(', '))}</div>` : ''}
+    ${visibleBoards.length ? `<div class="sub"><b>${t('catalogBoards')}</b> · ${esc(visibleBoards.join(', '))}</div>` : ''}
+    ${showUntested && experimental.length ? `<div class="sub"><b>${t('catalogExperimental')}</b> · ${esc(experimental.join(', '))}</div>` : ''}
     ${!boards.length && !experimental.length ? `<div class="sub">${t(it.custom_build ? 'catalogCustomBuild' : 'catalogBoardsUnknown')}</div>` : ''}`;
 }
 
@@ -1875,16 +1879,16 @@ function renderItem() {
   const variants = catalogVariants(it);
   const installable = it.kind === 'firmware' ? variants.filter(v => v.factory) : [];
   const canInstall = installable.length || (it.kind === 'firmware' && it.factory);
-  setHtml($('#itemBody'), `<div class="head" style="display:flex;gap:10px;align-items:center"><span class="ico">${it.kind === 'firmware' ? appIcon(it.app) : icon('recipe')}</span>
+  setHtml($('#itemBody'), `<div class="catalog-detail"><div class="head" style="display:flex;gap:10px;align-items:center"><span class="ico">${it.kind === 'firmware' ? appIcon(it.app) : icon('recipe')}</span>
       <div style="flex:1"><h2>${esc(it.title)}</h2><div class="sub">${esc(it.maker || '')}</div></div>${badge(it)}</div>
     <p>${esc(catalogDescription(it))}</p>
-    ${catalogCompatibilityHtml(it, catalogCompatibility(it, variants))}
+    <div class="compatibility">${catalogCompatibilityHtml(it, catalogCompatibility(it, variants), true)}</div>
     ${it.kind === 'recipe' && variants.length && rows.some(r => !isBle(r.type)) ? `<p class="sub">${t('catalogCheckPins')}</p>` : ''}
-    ${installable.length ? `<label class="field" style="margin-top:12px"><span>${t('catalogBoardNetwork')}</span><select id="catalogVariant">
+    ${installable.length ? `<label class="field"><span>${t('catalogBoardNetwork')}</span><select id="catalogVariant">
       ${installable.map(v => `<option value="${esc(v.factory)}">${esc(catalogBoardName(v.chip))} · ${esc(NET_NAMES[v.network] || v.network)}</option>`).join('')}</select></label>` : ''}
-    ${rows.length ? `<div style="margin:10px 0">${rows.map(r => `<div class="row"><div class="label">${esc(r.name)}</div><div class="sub">${esc(TEXT.types[r.type] || r.type)} · GPIO ${r.pin}${r.type === 'sht4x' ? ' / ' + r.pin2 : ''}</div></div>`).join('')}</div>` : ''}
-    ${facts.map(([k, v]) => `<div class="row"><div class="label sub">${k}</div><div>${v}</div></div>`).join('')}
-    ${it.official ? '' : `<div class="banner" style="margin-top:12px;background:var(--warnchip)"><span class="grow sub" style="color:var(--fg)">${t('communityNotice')}</span></div>`}
+    ${rows.length ? `<div>${rows.map(r => `<div class="row"><div class="label">${esc(r.name)}</div><div class="sub">${esc(TEXT.types[r.type] || r.type)} · GPIO ${r.pin}${r.type === 'sht4x' ? ' / ' + r.pin2 : ''}</div></div>`).join('')}</div>` : ''}
+    ${facts.length ? `<div>${facts.map(([k, v]) => `<div class="row"><div class="label sub">${k}</div><div>${v}</div></div>`).join('')}</div>` : ''}
+    ${it.official ? '' : `<div class="banner" style="background:var(--warnchip)"><span class="grow sub" style="color:var(--fg)">${t('communityNotice')}</span></div>`}
     ${it.kind === 'firmware' && !canInstall ? `<p class="sub">${t('updateOnly')}</p>` : ''}
     ${it.official || !it.url ? '' : `<div class="actions" style="justify-content:flex-start">
       <a class="button" href="${esc(it.url)}" target="_blank" rel="noopener">★ ${t('rate')}</a>
@@ -1892,7 +1896,7 @@ function renderItem() {
       <span class="sub">${t('rateHelp')}</span></div>`}
     <div class="actions end"><button class="plain" onclick="$('#itemDlg').close()">${t('close')}</button>
       ${canInstall ? `<button class="pri" onclick="installItem()">${t('install')}</button>` : ''}
-      ${it.kind === 'recipe' ? `<button class="pri" onclick="useItem()">${t('use')}</button>` : ''}</div>`);
+      ${it.kind === 'recipe' ? `<button class="pri" onclick="useItem()">${t('use')}</button>` : ''}</div></div>`);
 }
 
 // Community items need the user's consent once, like the Marketplace

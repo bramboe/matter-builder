@@ -57,10 +57,8 @@ button:disabled{opacity:.4;cursor:default}
 .card .meta{margin-top:8px;display:grid;gap:2px}
 .card .acts{display:flex;flex-wrap:wrap;align-items:center;gap:2px;margin:auto -8px -6px;padding-top:10px}
 .card .acts details.more{margin-left:auto}
-#catalogBody .grid{grid-template-columns:repeat(3,minmax(0,1fr))}
 #catalogBody[data-view="list"] .grid{grid-template-columns:minmax(0,1fr);gap:8px}
 #catalogBody .card{cursor:pointer}
-#catalogBody .card .acts{margin:auto 0 0}
 #catalogBody[data-view="list"] .needs{gap:6px;margin-top:2px}
 #catalogBody[data-view="list"] .card{padding:12px 16px;gap:8px}
 #catalogBody[data-view="list"] .meta{margin-top:0;gap:4px}
@@ -68,8 +66,6 @@ button:disabled{opacity:.4;cursor:default}
 @media (min-width:760px){
   #catalogBody[data-view="list"] .card{display:grid;grid-template-columns:minmax(150px,1fr) minmax(0,2fr) auto;align-items:center;gap:20px}
 }
-@media (max-width:959px){#catalogBody .grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media (max-width:599px){#catalogBody .grid{grid-template-columns:minmax(0,1fr)}}
 .catalog-toolbar{display:flex;gap:10px 16px;flex-wrap:wrap}
 #catalogView{margin-inline-start:auto}
 @media (max-width:599px){#catalogView{margin-inline-start:0}}

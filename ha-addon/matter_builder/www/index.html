@@ -59,15 +59,18 @@ button:disabled{opacity:.4;cursor:default}
 .card .acts details.more{margin-left:auto}
 #catalogBody[data-view="list"] .grid{grid-template-columns:minmax(0,1fr);gap:8px}
 #catalogBody .card{cursor:pointer}
-#catalogBody .needs{align-items:center}
-.catalog-board-tip{position:relative;margin-inline-start:auto;display:inline-flex}
-button.catalog-board-trigger{width:28px;min-height:28px;padding:0;color:var(--mute)}
-.catalog-board-trigger svg{width:16px;height:16px}
-.catalog-board-trigger[aria-expanded="true"]{background:var(--chip);color:var(--primary)}
-.catalog-board-tip [role="tooltip"]{display:none;position:absolute;inset-inline-end:0;top:100%;z-index:4;
+#catalogBody .needs,.catalog-detail .needs{align-items:center}
+.catalog-tip{position:relative;display:inline-flex}
+.catalog-tip.boards{margin-inline-start:auto}
+button.catalog-tip-trigger{width:28px;min-height:28px;padding:0;color:var(--mute)}
+.catalog-tip-trigger svg{width:16px;height:16px}
+.catalog-tip-trigger.required,.catalog-tip-trigger[aria-expanded="true"]{background:var(--chip);color:var(--primary)}
+button.catalog-tip-trigger.optional{background:var(--fill);color:var(--mute);border:1px dashed var(--mute)}
+.catalog-tip [role="tooltip"]{display:none;position:absolute;inset-inline-start:0;top:100%;z-index:4;
   width:max-content;max-width:min(240px,75vw);padding:6px 10px;border:1px solid var(--line);border-radius:8px;
   background:var(--card);color:var(--fg);box-shadow:var(--shadow);font-size:12px;line-height:1.4;cursor:default}
-.catalog-board-trigger[aria-expanded="true"] + [role="tooltip"]{display:block}
+.catalog-tip.boards [role="tooltip"]{inset-inline-start:auto;inset-inline-end:0}
+.catalog-tip-trigger[aria-expanded="true"] + [role="tooltip"]{display:block}
 #catalogBody[data-view="list"] .needs{gap:6px;margin-top:2px}
 #catalogBody[data-view="list"] .card{padding:12px 16px;gap:8px}
 #catalogBody[data-view="list"] .meta{margin-top:0;gap:4px}
@@ -777,6 +780,9 @@ function applyTexts() {
 const ICON = {
   bed: 'M19 7h-8v7H3V5H1v15h2v-3h18v3h2v-9a4 4 0 0 0-4-4M7 13a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3',
   chip: 'M6 4h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2m1 3v10h10V7H7m3 3h4v4h-4v-4M8 1h2v2H8V1m3 0h2v2h-2V1m3 0h2v2h-2V1M8 21h2v2H8v-2m3 0h2v2h-2v-2m3 0h2v2h-2v-2M1 8h2v2H1V8m0 3h2v2H1v-2m0 3h2v2H1v-2m20-6h2v2h-2V8m0 3h2v2h-2v-2m0 3h2v2h-2v-2',
+  wifi: 'M2 8.8a15.5 15.5 0 0 1 20 0l-1.5 1.8a13.2 13.2 0 0 0-17 0L2 8.8zm3.5 4a10 10 0 0 1 13 0l-1.5 1.8a7.7 7.7 0 0 0-10 0l-1.5-1.8zm3.5 4a4.7 4.7 0 0 1 6 0L12 20l-3-3.2z',
+  thread: 'M5 2a3 3 0 1 1 0 6 3 3 0 0 1 0-6zm14 0a3 3 0 1 1 0 6 3 3 0 0 1 0-6zM5 16a3 3 0 1 1 0 6 3 3 0 0 1 0-6zm14 0a3 3 0 1 1 0 6 3 3 0 0 1 0-6zM9 4h6v2H9zM4 9h2v6H4zm14 0h2v6h-2zM9 18h6v2H9zM7.5 8.9l1.4-1.4 3.1 3.1 3.1-3.1 1.4 1.4-3.1 3.1 3.1 3.1-1.4 1.4-3.1-3.1-3.1 3.1-1.4-1.4 3.1-3.1z',
+  bluetooth: 'M11 2h1l5.5 5.5L13 12l4.5 4.5L12 22h-1v-7.6l-4.3 4.3-1.4-1.4 5.3-5.3-5.3-5.3 1.4-1.4 4.3 4.3V2zm2 3.8v3.8l1.9-1.9L13 5.8zm0 8.6v3.8l1.9-1.9-1.9-1.9z',
   plus: 'M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z',
   share: 'M18,16.08C17.24,16.08 16.56,16.38 16.04,16.85L8.91,12.7C8.96,12.47 9,12.24 9,12C9,11.76 8.96,11.53 8.91,11.3L15.96,7.19C16.5,7.69 17.21,8 18,8A3,3 0 0,0 21,5A3,3 0 0,0 18,2A3,3 0 0,0 15,5C15,5.24 15.04,5.47 15.09,5.7L8.04,9.81C7.5,9.31 6.79,9 6,9A3,3 0 0,0 3,12A3,3 0 0,0 6,15C6.79,15 7.5,14.69 8.04,14.19L15.16,18.34C15.11,18.55 15.08,18.77 15.08,19C15.08,20.61 16.39,21.91 18,21.91C19.61,21.91 20.92,20.61 20.92,19A2.92,2.92 0 0,0 18,16.08Z',
   group: 'M3 3h8v8H3V3m2 2v4h4V5H5m8-2h8v8h-8V3m2 2v4h4V5h-4M3 13h8v8H3v-8m2 2v4h4v-4H5m8-2h8v8h-8v-8m2 2v4h4v-4h-4Z',
@@ -1797,27 +1803,48 @@ function catalogCompatibility(it, variants) {
 const catalogBoardNotice = it => `<div class="sub">${t(it.custom_build ? 'catalogCustomBuild' : 'catalogBoardsUnknown')}</div>`;
 
 function catalogCompatibilityHtml(it, {labels, boards, experimental}) {
-  return `${needChips(labels)}
+  return `${catalogProtocolIcons(labels, 'item')}
     ${boards.length ? `<div class="sub"><b>${t('catalogBoards')}</b> · ${esc(boards.join(', '))}</div>` : ''}
     ${experimental.length ? `<div class="sub"><b>${t('catalogExperimental')}</b> · ${esc(experimental.join(', '))}</div>` : ''}
     ${!boards.length && !experimental.length ? catalogBoardNotice(it) : ''}`;
 }
 
-function showCatalogBoards(button, visible) {
+function showCatalogTip(button, visible) {
+  if (visible) $$('.catalog-tip-trigger[aria-expanded="true"]').forEach(open => {
+    if (open !== button) open.setAttribute('aria-expanded', 'false');
+  });
   button.setAttribute('aria-expanded', String(visible));
 }
 
+function catalogTip(id, glyph, label, description = label, style = '') {
+  return `<span class="catalog-tip ${style}" onclick="event.stopPropagation()"
+      onpointerenter="if (event.pointerType === 'mouse') showCatalogTip(this.firstElementChild, true)"
+      onpointerleave="if (event.pointerType === 'mouse' && !this.firstElementChild.matches(':focus-visible')) showCatalogTip(this.firstElementChild, false)">
+    <button class="catalog-tip-trigger ${style}" type="button" aria-label="${esc(label)}" ${description === label ? '' : `aria-describedby="${id}"`} aria-expanded="false"
+      onfocus="if (this.matches(':focus-visible')) showCatalogTip(this, true)"
+      onblur="showCatalogTip(this, false)" onclick="showCatalogTip(this, true)"
+      onkeydown="if (event.key === 'Escape' && this.getAttribute('aria-expanded') === 'true') { event.preventDefault(); showCatalogTip(this, false); }">${icon(glyph)}</button>
+    <span id="${id}" role="tooltip">${esc(description)}</span></span>`;
+}
+
+const CATALOG_PROTOCOL_ICONS = new Map([
+  [NET_NAMES.wifi, {glyph: 'wifi'}],
+  [NET_NAMES.thread, {glyph: 'thread'}],
+  [t('catalogBle'), {glyph: 'bluetooth', style: 'required'}],
+  [t('catalogBleOptional'), {glyph: 'bluetooth', style: 'optional'}],
+]);
+
+function catalogProtocolIcons(labels, id, extra = '') {
+  const badges = labels.filter(label => CATALOG_PROTOCOL_ICONS.has(label)).map((label, index) => {
+    const {glyph, style} = CATALOG_PROTOCOL_ICONS.get(label);
+    return catalogTip(`catalog-protocol-${id}-${index}`, glyph, label, label, style);
+  });
+  return needChips(labels.filter(label => !CATALOG_PROTOCOL_ICONS.has(label)), badges.join('') + extra);
+}
+
 function catalogBoardTooltip(names, i) {
-  const id = `catalog-boards-${i}`;
   const shortNames = names.map(name => name.replace(/^ESP32-/, '').replace(/ ESP32$/, ''));
-  return `<span class="catalog-board-tip" onclick="event.stopPropagation()"
-      onpointerenter="if (event.pointerType === 'mouse') showCatalogBoards(this.firstElementChild, true)"
-      onpointerleave="if (event.pointerType === 'mouse' && !this.firstElementChild.matches(':focus-visible')) showCatalogBoards(this.firstElementChild, false)">
-    <button class="catalog-board-trigger" type="button" aria-label="${t('catalogSupportedBoards')}" aria-describedby="${id}" aria-expanded="false"
-      onfocus="if (this.matches(':focus-visible')) showCatalogBoards(this, true)"
-      onblur="showCatalogBoards(this, false)" onclick="showCatalogBoards(this, true)"
-      onkeydown="if (event.key === 'Escape') showCatalogBoards(this, false)">${icon('chip')}</button>
-    <span id="${id}" role="tooltip">${esc(shortNames.join(', '))}</span></span>`;
+  return catalogTip(`catalog-boards-${i}`, 'chip', t('catalogSupportedBoards'), shortNames.join(', '), 'boards');
 }
 
 async function loadCatalog() {
@@ -1842,7 +1869,7 @@ function catalogCard(it, i) {
     <div class="head"><span class="ico">${it.kind === 'firmware' ? appIcon(it.app) : icon('recipe')}</span>
       <div class="info"><h3>${esc(it.title)}</h3><div class="sub">${it.kind === 'firmware' ? esc(it.version || '') : t('recipe')} · ${esc(it.maker || (it.source || '').split('/')[0])}</div></div></div>
     <div class="meta"><div class="sub">${esc(catalogDescription(it))}</div>
-      ${needChips(labels, supported.length ? catalogBoardTooltip(supported, i) : '')}
+      ${catalogProtocolIcons(labels, i, supported.length ? catalogBoardTooltip(supported, i) : '')}
       ${supported.length ? '' : catalogBoardNotice(it)}</div>
     <div class="acts">${badge(it)}<span class="grow"></span>${it.stars ? `<span class="sub">★ ${it.stars}</span>` : ''}</div></div>`;
 }
@@ -3596,10 +3623,10 @@ $('#logSave').onclick = () => {
 };
 $('#logDlg').addEventListener('close', () => clearTimeout(logView.timer));
 
-// Close menus and board tooltips when clicking elsewhere.
+// Close menus and catalog tooltips when clicking elsewhere.
 document.addEventListener('click', e => {
   $$('details.more[open]').forEach(d => { if (!d.contains(e.target)) d.open = false; });
-  $$('.catalog-board-trigger[aria-expanded="true"]').forEach(button => showCatalogBoards(button, false));
+  $$('.catalog-tip-trigger[aria-expanded="true"]').forEach(button => showCatalogTip(button, false));
 });
 
 for (const [sel, ic] of [['#lClose', 'close'], ['#dClose', 'close'], ['#wClose', 'close'], ['#sClose', 'close'], ['#iClose', 'close'], ['#shClose', 'close'], ['#emptyIcon', 'chip']]) $(sel).innerHTML = icon(ic);

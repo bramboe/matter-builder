@@ -10,6 +10,15 @@ namespace matter_info {
 // "matter open": let another controller pair for 5 minutes (multi-admin)
 std::string open_commissioning_window();
 
+// "matter share": add an already paired device to another app (Apple Home,
+// Google Home, Alexa, a second Home Assistant) with a one-time code: a new
+// random passcode, valid for 10 minutes in a window of its own (Matter's
+// enhanced commissioning), as Home Assistant's "Share device" does. The
+// device's own pairing code stays secret. Answers JSON with the code, the QR
+// code (SVG path) and the seconds left; "matter close" ends it early.
+std::string share_window();
+std::string close_window();
+
 // "matter fabrics" / "matter remove <index>": the paired controllers, e.g.
 // to drop one that was removed without unpairing
 std::string fabrics_text();

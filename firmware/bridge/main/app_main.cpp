@@ -53,6 +53,13 @@ std::string cmd_matter(const std::vector<std::string>& args) {
     if (args.size() == 2 && args[1] == "open") {
         return matter_info::open_commissioning_window();
     }
+    // A one-time code for another app, and ending it early
+    if (args.size() == 2 && args[1] == "share") {
+        return matter_info::share_window();
+    }
+    if (args.size() == 2 && args[1] == "close") {
+        return matter_info::close_window();
+    }
     if (args.size() == 2 && args[1] == "json") {
         return matter_info::matter_json();
     }

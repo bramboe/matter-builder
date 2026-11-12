@@ -62,6 +62,14 @@ button:disabled{opacity:.4;cursor:default}
 .chip.warn{background:var(--warnchip);color:var(--warn)}
 .chip.accent{background:var(--chip);color:var(--primary)}
 
+/* A short message at the bottom ("Code copied"), above dialogs too */
+#toast{position:fixed;left:50%;bottom:24px;z-index:30;transform:translate(-50%,20px);max-width:calc(100vw - 32px);padding:10px 16px;border-radius:8px;
+  background:#323232;color:#fff;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s}
+#toast.show{opacity:1;transform:translate(-50%,0)}
+/* Sharing a device: QR code, one-time code, countdown */
+.sharebox{display:flex;gap:20px;align-items:center;flex-wrap:wrap;margin:6px 0 4px}
+.sharebox svg{width:168px;height:168px;border-radius:8px}
+.sharecode{font:500 26px/1.2 ui-monospace,Menlo,monospace;letter-spacing:.5px;margin:2px 0}
 /* Soft loading: the page fades in whole instead of piece by piece, a press
    shows at once that it is being handled, and a wait says what it waits for */
 main{transition:opacity .3s}
@@ -410,6 +418,12 @@ dialog.side{max-width:100vw}
 </dialog>
 
 <!-- Catalog item -->
+<dialog id="shareDlg">
+  <div class="dlg">
+    <div class="dlg-head"><div class="info"><h2 id="shareTitle"></h2></div><button class="icon" onclick="closeShare()" aria-label="Close" id="shClose"></button></div>
+    <div class="dlg-body" id="shareBody"></div>
+  </div>
+</dialog>
 <dialog id="itemDlg">
   <div class="dlg">
     <div class="dlg-head"><div class="info"></div><button class="icon" onclick="$('#itemDlg').close()" aria-label="Close" id="iClose"></button></div>
@@ -666,6 +680,12 @@ const TEXT = {
   blePairingHelp: 'Lets a phone pair the device directly, also its first time, and give it the Thread network. Costs memory and radio time; off is fine when you pair with the code. The device restarts.',
   ble_on: 'listening', ble_starting: 'starting', ble_off: 'off (no Bluetooth connection)',
   confirmBlePairing: on => `${on ? 'Turn on' : 'Turn off'} pairing over Bluetooth? The device restarts.`,
+  shareDevice: 'Share device…', shareTitle: n => `Share ${n}`, shareMaking: 'Asking the device for a one-time code…',
+  shareIntro: 'Add it to another app (Apple Home, Google Home, Alexa, another Home Assistant): scan the QR code there or enter the code. Its own pairing code stays secret.',
+  shareCodeLabel: 'One-time code', shareLeftLabel: s => `Valid for ${s}`, shareGone: 'The code is no longer valid: a controller paired with it, or it ran out.',
+  shareHowApple: 'In Apple Home: + → Add Accessory → More options… → enter the code.', shareAppleBtn: 'Add to Apple Home', shareCopyBtn: 'Copy code',
+  shareCopiedToast: 'Code copied', shareAppleToast: 'Code copied: in Apple Home choose More options… and enter it', shareStopBtn: 'Stop sharing', shareNew: 'New code',
+  shareOld: 'This firmware cannot make a one-time code yet: update it, or use its own pairing code on its page.',
   addToHa: 'Home Assistant', addToHaBtn: 'Add to Home Assistant',
   addToHaHelp: 'Adds it to Home Assistant’s Matter integration over the network, next to Apple Home or another controller.',
   confirmAddToHa: 'Open a pairing window on the device and add it to Home Assistant now? This takes a minute or two on Thread.',
@@ -978,6 +998,8 @@ function deviceCard(p) {
       ${updating ? '' : `<a class="button plain" href="${esc(portalUrl(p))}">${t('openPage')}</a>`}
       <span class="grow"></span>
       ${updating ? `<button class="icon" disabled aria-label="${t('more')}">${icon('dots')}</button>` : `<details class="more"><summary aria-label="${t('more')}">${icon('dots')}</summary><div class="pop">
+        <button onclick="shareDevice('${p.id}')">${t('shareDevice')}</button>
+        ${state.standalone ? '' : `<button onclick="addToHa('${p.id}')" ${state.job.running ? 'disabled' : ''}>${t('addToHaBtn')}</button>`}
         <button onclick="renameProxy('${p.id}')">${t('rename')}</button>
         <a class="button" href="${esc(pageUrl(p.local || p.host))}" target="_blank" rel="noopener">${t('openDirect')}</a>
         <button onclick="openDevice('${p.id}', 'info')">${t('showKey')}</button>
@@ -2417,6 +2439,8 @@ function renderDevicePanel() {
     ${s && s.io && s.io.ble_pairing !== undefined && s.io.bluetooth !== 'none' ? `<div class="row"><div class="label">${t('blePairing')}<div class="sub">${t('blePairingHelp')}</div></div>
       <label class="switch"><input type="checkbox" ${s.io.ble_pairing ? 'checked' : ''} onchange="setBlePairing('${p.id}', this.checked)"></label></div>
       <div class="row"><div class="label">Bluetooth</div><div class="sub">${esc(s.io.ble_pairing ? t('blePairingOn') + ' · ' : '')}${esc(t('ble_' + s.io.bluetooth) || s.io.bluetooth)}</div></div>` : ''}
+    ${r ? `<div class="row"><div class="label">${t('shareDevice').replace('…', '')}<div class="sub">${t('shareIntro')}</div></div>
+      <button onclick="shareDevice('${p.id}')">${t('shareDevice')}</button></div>` : ''}
     ${r && !state.standalone ? `<div class="row"><div class="label">${t('addToHa')}<div class="sub">${t('addToHaHelp')}</div></div>
       <button onclick="addToHa('${p.id}')" ${state.job.running ? 'disabled' : ''}>${t('addToHaBtn')}</button></div>` : ''}
     <div class="actions"><button class="plain" onclick="renameProxy('${p.id}')">${t('rename')}</button><span class="grow"></span>
@@ -2428,6 +2452,103 @@ async function setBlePairing(id, on) {
   if (!confirm(t('confirmBlePairing', on))) { render(); return; }
   try { await proxyCommand(id, `pairing ble ${on ? 'on' : 'off'}`); await proxyCommand(id, 'reboot'); } catch (e) {}
   setTimeout(loadStatuses, 15000);
+}
+
+// Sharing a device with another app: the device makes a one-time code
+// ("matter share", valid 10 minutes) and opens a window for it. Apple Home
+// cannot be started with a code from a web page: copy it, then open Home.
+let shareId = null, shareTimer = 0, shareData = null, toastTimer = 0;
+function toast(text) {
+  let el = $('#toast');
+  if (!el) { el = document.createElement('div'); el.id = 'toast'; el.setAttribute('role', 'status'); }
+  // Inside an open dialog, or it sits behind its backdrop
+  const host = $('dialog[open]') || document.body;
+  if (el.parentNode !== host) host.appendChild(el);
+  el.textContent = text;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+const isApple = () => /iPhone|iPad|Macintosh/.test(navigator.userAgent);
+function copyPlain(text) {
+  const area = document.createElement('textarea');
+  area.value = text;
+  area.setAttribute('readonly', '');
+  area.style.cssText = 'position:fixed;opacity:0';
+  const host = $('#shareDlg').open ? $('#shareDlg') : document.body;
+  host.appendChild(area);
+  area.select();
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch (e) {}
+  host.removeChild(area);
+  if (!ok && navigator.clipboard) navigator.clipboard.writeText(text).catch(() => {});
+}
+async function shareDevice(id) {
+  $$('details.more').forEach(d => { d.open = false; });
+  const p = state.proxies.find(x => x.id === id);
+  shareId = id; shareData = null;
+  $('#shareTitle').textContent = t('shareTitle', p ? p.name : '');
+  setHtml($('#shareBody'), `<p class="sub">${t('shareIntro')}</p><div class="cardwork"><div class="sub">${t('shareMaking')}</div><div class="track indef"><i></i></div></div>`);
+  if (!$('#shareDlg').open) $('#shareDlg').showModal();
+  let reply = '';
+  try { reply = (await proxyCommand(id, 'matter share')).trim(); } catch (e) { reply = 'error: ' + e.message; }
+  if (shareId !== id) return;
+  if (!reply.startsWith('{')) {
+    const old = /unknown command|usage/i.test(reply);
+    setHtml($('#shareBody'), `<p class="sub">${t('shareIntro')}</p><p class="warnText">${esc(old ? t('shareOld') : reply.replace(/^error: /, ''))}</p>`);
+    return;
+  }
+  shareData = JSON.parse(reply);
+  renderShareDlg();
+}
+function renderShareDlg() {
+  const s = shareData, n = s.qr_size;
+  const code = s.manual.replace(/^(\d{4})(\d{3})(\d{4})$/, '$1-$2-$3');
+  setHtml($('#shareBody'), `<p class="sub">${t('shareIntro')}</p>
+    <div class="sharebox">${n ? `<svg viewBox="-2 -2 ${n + 4} ${n + 4}" shape-rendering="crispEdges" role="img" aria-label="${esc(s.qr)}"><rect x="-2" y="-2" width="${n + 4}" height="${n + 4}" fill="#fff"/><path fill="#000" d="${s.qr_path}"/></svg>` : ''}
+      <div><div class="sub">${t('shareCodeLabel')}</div><div class="sharecode">${esc(code)}</div><div class="sub" id="shareLeftTxt"></div></div></div>
+    <p class="sub">${t('shareHowApple')}</p>
+    <div class="actions"><button class="text" onclick="stopShare()">${t('shareStopBtn')}</button><span class="grow"></span>
+      ${isApple() ? `<button onclick="shareApple()">${t('shareAppleBtn')}</button>` : ''}
+      <button class="pri" onclick="copyPlain(shareData.manual);toast(t('shareCopiedToast'))">${t('shareCopyBtn')}</button></div>`);
+  let left = s.left;
+  clearInterval(shareTimer);
+  const tick = () => {
+    const el = $('#shareLeftTxt');
+    if (el) el.textContent = t('shareLeftLabel', `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`);
+    if (left <= 0) { clearInterval(shareTimer); shareEnded(); return; }
+    if (left % 10 === 0 && left < s.left) checkShare();
+    left--;
+  };
+  tick();
+  shareTimer = setInterval(tick, 1000);
+}
+// Paired meanwhile, or ran out: the device no longer reports the code
+async function checkShare() {
+  const id = shareId;
+  try {
+    const m = JSON.parse(await proxyCommand(id, 'matter json'));
+    if (shareId === id && !m.share) { clearInterval(shareTimer); shareEnded(); }
+  } catch (e) {}
+}
+function shareEnded() {
+  setHtml($('#shareBody'), `<p class="sub">${t('shareGone')}</p><div class="actions"><span class="grow"></span>
+    <button class="pri" onclick="shareDevice('${shareId}')">${t('shareNew')}</button></div>`);
+  loadStatuses();
+}
+function shareApple() {
+  copyPlain(shareData.manual);
+  toast(t('shareAppleToast'));
+  setTimeout(() => { location.href = 'com.apple.home://'; }, 600);
+}
+async function stopShare() {
+  try { await proxyCommand(shareId, 'matter close'); } catch (e) {}
+  closeShare();
+}
+function closeShare() {
+  clearInterval(shareTimer);
+  shareId = null;
+  $('#shareDlg').close();
 }
 
 // Into Home Assistant's Matter fabric, next to Apple Home or another controller
@@ -3290,7 +3411,7 @@ document.addEventListener('click', e => {
   $$('details.more[open]').forEach(d => { if (!d.contains(e.target)) d.open = false; });
 });
 
-for (const [sel, ic] of [['#lClose', 'close'], ['#dClose', 'close'], ['#wClose', 'close'], ['#sClose', 'close'], ['#iClose', 'close'], ['#emptyIcon', 'chip']]) $(sel).innerHTML = icon(ic);
+for (const [sel, ic] of [['#lClose', 'close'], ['#dClose', 'close'], ['#wClose', 'close'], ['#sClose', 'close'], ['#iClose', 'close'], ['#shClose', 'close'], ['#emptyIcon', 'chip']]) $(sel).innerHTML = icon(ic);
 // An eye on every password field, also those drawn later: show or hide what
 // is typed. Submitting a form hides them again.
 const EYE = 'M12,9A3,3 0 0,0 9,12A3,3 0 0,0 12,15A3,3 0 0,0 15,12A3,3 0 0,0 12,9M12,17A5,5 0 0,1 7,12A5,5 0 0,1 12,7A5,5 0 0,1 17,12A5,5 0 0,1 12,17M12,4.5C7,4.5 2.73,7.61 1,12C2.73,16.39 7,19.5 12,19.5C17,19.5 21.27,16.39 23,12C21.27,7.61 17,4.5 12,4.5Z';

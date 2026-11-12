@@ -1256,17 +1256,28 @@ def add_to_ha(proxy):
     """A device into Home Assistant's Matter fabric: a pairing window on the
     device, then the Matter server commissions it over the network."""
     log(f"== Adding {proxy['name']} to Home Assistant")
-    status, text = command(proxy, "matter open")
-    log(text.strip())
-    if status != 200:
-        return False
-    status, text = command(proxy, "matter")
-    # JSON from the generic device, text ("QR code: MT:...") from the bed bridge
+    # A paired device on newer firmware gives a one-time code ("matter share"):
+    # its own pairing code stays on the device. Otherwise its own code, in a
+    # pairing window ("matter open")
+    status, text = command(proxy, "matter share")
     try:
-        code = json.loads(text)["qr"]
+        code = json.loads(text)["qr"] if status == 200 else None
     except (ValueError, KeyError, TypeError):
-        match = re.search(r"MT:[0-9A-Z.\-]+", text or "")
-        code = match.group(0) if match else None
+        code = None
+    if code:
+        log("   a one-time code, valid for 10 minutes")
+    else:
+        status, text = command(proxy, "matter open")
+        log(text.strip())
+        if status != 200:
+            return False
+        status, text = command(proxy, "matter")
+        # JSON from the generic device, text ("QR code: MT:...") from the bed bridge
+        try:
+            code = json.loads(text)["qr"]
+        except (ValueError, KeyError, TypeError):
+            match = re.search(r"MT:[0-9A-Z.\-]+", text or "")
+            code = match.group(0) if match else None
     if not code:
         log("!! The device gave no pairing code")
         return False
@@ -1891,7 +1902,7 @@ SETTING_SET = re.compile(r"settings set [a-z_][a-z0-9_]{0,31} [A-Za-z0-9_.:-]{1,
 
 
 def allowed(line):
-    return line in ("io json", "json", "wifi json", "matter", "matter open", "pairing", "pairing ble on",
+    return line in ("io json", "json", "wifi json", "matter", "matter open", "matter share", "matter close", "pairing", "pairing ble on",
                     "pairing ble off", "reboot", "settings json", "system json", "bledev json", "events") or line.startswith(ALLOWED_COMMANDS) \
         or SETTING_SET.fullmatch(line) is not None
 

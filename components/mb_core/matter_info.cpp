@@ -7,10 +7,14 @@
 #include <app/server/Server.h>
 #include <app/reporting/reporting.h>
 #include <nvs.h>
+#include <crypto/CHIPCryptoPAL.h>
 #include <platform/CHIPDeviceLayer.h>
 #include <setup_payload/OnboardingCodesUtil.h>
+#include <setup_payload/SetupPayload.h>
 
 #include "esp_app_desc.h"
+#include "esp_random.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "device_status.h"
@@ -75,6 +79,92 @@ std::string open_commissioning_window() {
     if (!ran) return BUSY;
     return err == CHIP_NO_ERROR ? "commissioning window open for 5 minutes\n"
                                 : std::string("could not open the commissioning window: ") + err.AsString() + "\n";
+}
+
+namespace {
+
+// The one-time code of "matter share" while its window is open
+struct Share {
+    bool active = false;
+    std::string qr, manual;
+    int64_t until_us = 0;
+} share;
+constexpr uint32_t SHARE_SECONDS = 600;
+constexpr uint32_t SHARE_ITERATIONS = 1000;  // PBKDF2 rounds of the verifier (Matter's minimum)
+
+std::string share_json() {
+    int size = 0;
+    const std::string path = setup_code::qr_svg_path(share.qr.c_str(), size);
+    const int64_t left = (share.until_us - esp_timer_get_time()) / 1000000;
+    return "{\"manual\":" + json_text(share.manual) + ",\"qr\":" + json_text(share.qr) + ",\"qr_size\":" +
+           std::to_string(size) + ",\"qr_path\":" + json_text(path) + ",\"left\":" + std::to_string(left > 0 ? left : 0) +
+           "}";
+}
+
+}  // namespace
+
+std::string share_window() {
+    // Only for a paired device: a new one pairs with its own code. The window
+    // is opened in the name of the first controller (Administrator
+    // Commissioning reports who opened it)
+    size_t fabrics = 0;
+    chip::FabricIndex opener = chip::kUndefinedFabricIndex;
+    chip::VendorId opener_vendor = chip::VendorId::NotSpecified;
+    bool open = false;
+    if (!matter_thread::run([&] {
+            chip::Server& server = chip::Server::GetInstance();
+            for (const auto& fabric : server.GetFabricTable()) {
+                if (fabrics++ == 0) {
+                    opener = fabric.GetFabricIndex();
+                    opener_vendor = fabric.GetVendorId();
+                }
+            }
+            open = server.GetCommissioningWindowManager().IsCommissioningWindowOpen();
+        })) {
+        return BUSY;
+    }
+    if (fabrics == 0) return "error: not paired yet: pair it with its own pairing code first\n";
+    if (share.active && open && share.until_us > esp_timer_get_time()) return share_json() + "\n";
+
+    // A new random passcode and discriminator, and a salt for the verifier
+    uint32_t passcode = 0;
+    do {
+        passcode = 1 + esp_random() % chip::kSetupPINCodeMaximumValue;
+    } while (!chip::SetupPayload::IsValidSetupPIN(passcode));
+    const uint16_t discriminator = esp_random() & 0x0FFF;
+    uint8_t salt[32];
+    esp_fill_random(salt, sizeof(salt));
+    chip::Crypto::Spake2pVerifier verifier;
+    if (verifier.Generate(SHARE_ITERATIONS, chip::ByteSpan(salt), passcode) != CHIP_NO_ERROR) {
+        return "error: could not make a code\n";
+    }
+    std::string qr, manual;
+    if (!setup_code::codes_for(passcode, discriminator, qr, manual)) return "error: could not make a code\n";
+
+    CHIP_ERROR err = CHIP_ERROR_INTERNAL;
+    if (!matter_thread::run([&] {
+            auto& manager = chip::Server::GetInstance().GetCommissioningWindowManager();
+            if (manager.IsCommissioningWindowOpen()) manager.CloseCommissioningWindow();  // the code of its own ("matter open")
+            err = manager.OpenEnhancedCommissioningWindow(chip::System::Clock::Seconds32(SHARE_SECONDS), discriminator,
+                                                          verifier, SHARE_ITERATIONS, chip::ByteSpan(salt), opener,
+                                                          opener_vendor);
+        })) {
+        return BUSY;
+    }
+    if (err != CHIP_NO_ERROR) return std::string("error: could not open the commissioning window: ") + err.AsString() + "\n";
+    share.active = true;
+    share.qr = qr;
+    share.manual = manual;
+    share.until_us = esp_timer_get_time() + int64_t(SHARE_SECONDS) * 1000000;
+    return share_json() + "\n";
+}
+
+std::string close_window() {
+    share.active = false;
+    if (!matter_thread::run([] { chip::Server::GetInstance().GetCommissioningWindowManager().CloseCommissioningWindow(); })) {
+        return BUSY;
+    }
+    return "commissioning window closed\n";
 }
 
 std::string fabrics_text() {
@@ -163,6 +253,9 @@ std::string matter_json() {
     out += ",\"qr\":" + json_text(have_qr ? qr : "") + ",\"manual\":" + json_text(have_manual ? manual : "");
     out += ",\"qr_size\":" + std::to_string(qr_size) + ",\"qr_path\":" + json_text(path);
     out += std::string(",\"window_open\":") + (window_open ? "true" : "false");
+    // The one-time code while its window is open (gone once a controller paired or it ran out)
+    if (share.active && (!window_open || share.until_us <= esp_timer_get_time())) share.active = false;
+    out += ",\"share\":" + (share.active ? share_json() : std::string("null"));
     out += ",\"fabrics\":[" + fabrics + "],\"network\":" + json_text(net::describe()) + "}\n";
     return out;
 }

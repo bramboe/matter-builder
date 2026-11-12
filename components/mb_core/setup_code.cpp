@@ -142,17 +142,21 @@ bool codes(std::string& qr, std::string& manual) {
     if (!provider.loaded()) {
         provider.load_or_create();
     }
-    chip::SetupPayload payload;
-    payload.vendorID = CONFIG_DEVICE_VENDOR_ID;
-    payload.productID = CONFIG_DEVICE_PRODUCT_ID;
-    payload.rendezvousInformation.SetValue(
-        chip::RendezvousInformationFlags(chip::RendezvousInformationFlag::kOnNetwork));
     uint16_t discriminator = 0;
     uint32_t passcode = 0;
     if (provider.GetSetupDiscriminator(discriminator) != CHIP_NO_ERROR ||
         provider.GetSetupPasscode(passcode) != CHIP_NO_ERROR) {
         return false;
     }
+    return codes_for(passcode, discriminator, qr, manual);
+}
+
+bool codes_for(uint32_t passcode, uint16_t discriminator, std::string& qr, std::string& manual) {
+    chip::SetupPayload payload;
+    payload.vendorID = CONFIG_DEVICE_VENDOR_ID;
+    payload.productID = CONFIG_DEVICE_PRODUCT_ID;
+    payload.rendezvousInformation.SetValue(
+        chip::RendezvousInformationFlags(chip::RendezvousInformationFlag::kOnNetwork));
     payload.discriminator.SetLongValue(discriminator);
     payload.setUpPINCode = passcode;
     return chip::QRCodeSetupPayloadGenerator(payload).payloadBase38Representation(qr) == CHIP_NO_ERROR &&

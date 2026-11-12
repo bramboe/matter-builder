@@ -324,6 +324,20 @@ dialog > .card{border:0;padding:16px 20px}
           <button class="text" id="openWindow" style="padding:0;margin-top:4px" data-t="openWindow"></button></div></div>
       <div class="sub" id="pairHelp" style="margin-top:10px"></div>
       </div>
+      <!-- A paired device: a one-time code for another app instead of its own code -->
+      <div id="shareBox" hidden>
+        <div id="shareIdle"><div class="sub" data-t="shareHelp"></div>
+          <div class="features"><button class="pri" type="button" id="shareStart" data-t="shareStart"></button></div></div>
+        <div id="shareOn" hidden>
+          <div class="qrwrap"><div id="shareQr"></div>
+            <div><div class="sub" data-t="shareCode"></div><div class="code" id="shareManual"></div>
+              <div class="sub" id="shareLeft"></div></div></div>
+          <div class="sub" data-t="shareHow" style="margin-top:10px"></div>
+          <div class="features"><button type="button" id="shareApple" data-t="shareApple" hidden></button>
+            <button class="pri" type="button" id="shareCopy" data-t="shareCopy"></button></div>
+          <button class="text" type="button" id="shareStop" data-t="shareStop" style="padding:0;margin-top:4px"></button>
+        </div>
+      </div>
       <div id="fabrics" style="margin-top:8px"></div>
       <label class="row" id="blePairingRow" style="border-top:1px solid var(--line)"><span class="label"><span data-t="blePairing"></span>
         <span class="sub" style="display:block" data-t="blePairingHelp"></span></span><input type="checkbox" id="blePairing"></label>
@@ -492,6 +506,7 @@ const TEXT = {
   resultNotFound: c => `Last time the Wi-Fi network was not found (code ${c}). Check the name: the device only uses 2.4 GHz.`,
   resultNoConnect: c => `Last time there was no Wi-Fi connection within a minute (code ${c}).`,
   windowOpen: 'Pairing window open', windowClosed: 'Pairing window closed',
+  shareHelp: 'Add this device to another app (Apple Home, Google Home, Alexa, another Home Assistant) with a one-time code; its own pairing code stays secret.', shareStart: 'Share device', shareCode: 'One-time code', shareLeft: s => `Valid for ${s}`, shareHow: 'Scan the QR code in the other app or enter the code. In Apple Home: + → Add Accessory → More options… → enter the code.', shareApple: 'Add to Apple Home', shareCopy: 'Copy code', shareCopied: 'Code copied', shareAppleHint: 'Code copied: in Apple Home choose More options… and enter it', shareStop: 'Stop sharing',
   pairExtra: 'For another controller (e.g. Apple Home): open the pairing window and scan the code within 5 minutes.',
   accessTitle: 'Programs with access',
   accessHelp: 'Programs such as the Home Assistant add-on get a key of their own. They ask with this password and need a press of the BOOT button.',
@@ -583,7 +598,8 @@ let state = null, matter = null, toastTimer = 0;
 // so controllers get the connections with their names
 function updatePairing() {
   const show = !!matter && (!!matter.config_mode || matter.fabrics.length > 0 || (!!state && state.io.slots.some(c => c.type !== 'none')));
-  $('#pairing').hidden = !show;
+  $('#pairing').hidden = !show || hasShare();
+  $('#shareBox').hidden = !hasShare();
   $('#pairLater').hidden = show || !matter;
 }
 
@@ -1190,6 +1206,63 @@ function renderBluetooth() {
   $('#bluetoothState').textContent = io.ble_pairing ? `${t('blePairingOn')} · ${scan}` : scan;
 }
 
+// Sharing a paired device ("matter share"): a one-time code with a countdown.
+// Copying works without HTTPS too (the device's page is plain HTTP)
+let shareLeft = 0, shareTimer = 0;
+const hasShare = () => !!matter && !matter.config_mode && matter.fabrics.length > 0 && matter.share !== undefined;
+function renderShare() {
+  const s = matter && matter.share;
+  $('#shareIdle').hidden = !!s;
+  $('#shareOn').hidden = !s;
+  clearInterval(shareTimer);
+  if (!s) return;
+  $('#shareManual').textContent = s.manual.replace(/^(\d{4})(\d{3})(\d{4})$/, '$1-$2-$3');
+  const n = s.qr_size;
+  $('#shareQr').innerHTML = n ? `<svg viewBox="-2 -2 ${n + 4} ${n + 4}" shape-rendering="crispEdges" role="img" aria-label="${esc(s.qr)}">
+    <rect x="-2" y="-2" width="${n + 4}" height="${n + 4}" fill="#fff"/><path fill="#000" d="${s.qr_path}"/></svg>` : '';
+  // Apple Home cannot be started with a code from a web page: copy it, then open Home
+  $('#shareApple').hidden = !/iPhone|iPad|Macintosh/.test(navigator.userAgent);
+  shareLeft = s.left;
+  const tick = () => {
+    $('#shareLeft').textContent = t('shareLeft', `${Math.floor(shareLeft / 60)}:${String(shareLeft % 60).padStart(2, '0')}`);
+    if (shareLeft <= 0) { clearInterval(shareTimer); loadMatter(); return; }
+    if (shareLeft % 10 === 0) loadMatter();  // paired meanwhile: the code is gone
+    shareLeft--;
+  };
+  tick();
+  shareTimer = setInterval(tick, 1000);
+}
+function copyText(text) {
+  const area = document.createElement('textarea');
+  area.value = text;
+  area.setAttribute('readonly', '');
+  area.style.cssText = 'position:fixed;opacity:0';
+  document.body.appendChild(area);
+  area.select();
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch (e) {}
+  area.remove();
+  if (!ok && navigator.clipboard) navigator.clipboard.writeText(text).catch(() => {});
+}
+$('#shareStart').onclick = async () => {
+  const reply = (await cmd('matter share')).trim();
+  if (!reply.startsWith('{')) { toast(reply.replace(/^error: /, '')); return; }
+  matter.share = JSON.parse(reply);
+  renderShare();
+};
+$('#shareStop').onclick = async () => {
+  await cmd('matter close');
+  matter.share = null;
+  renderShare();
+  loadMatter();
+};
+$('#shareCopy').onclick = () => { copyText(matter.share.manual); toast(t('shareCopied')); };
+$('#shareApple').onclick = () => {
+  copyText(matter.share.manual);
+  toast(t('shareAppleHint'));
+  setTimeout(() => { location.href = 'com.apple.home://'; }, 600);
+};
+
 async function loadMatter() {
   if (loadingMatter) return;
   loadingMatter = true;
@@ -1200,6 +1273,7 @@ async function loadMatter() {
   $('#matterCard .val').textContent = m.config_mode ? '' : m.fabrics.length ? (m.fabrics[0].connected === undefined ? t('valControllers', m.fabrics.length)
     : t('valConnected', m.fabrics.filter(f => f.connected).length, m.fabrics.length)) : t('valNotPaired');
   updatePairing();
+  if (hasShare()) renderShare();
   $('#manual').textContent = m.manual.replace(/^(\d{4})(\d{3})(\d{4})$/, '$1-$2-$3') || '–';
   const n = m.qr_size;
   $('#qr').innerHTML = n ? `<svg viewBox="-2 -2 ${n + 4} ${n + 4}" shape-rendering="crispEdges" role="img" aria-label="${esc(m.qr)}">

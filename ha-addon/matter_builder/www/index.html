@@ -59,6 +59,7 @@ button:disabled{opacity:.4;cursor:default}
 .card .acts details.more{margin-left:auto}
 #catalogBody[data-view="list"] .grid{grid-template-columns:minmax(0,1fr);gap:8px}
 #catalogBody .card{cursor:pointer}
+#catalogBody .card .acts{margin:auto 0 0}
 #catalogBody .needs,.catalog-detail .needs{align-items:center}
 .catalog-tip{position:relative;display:inline-flex}
 .catalog-tip.boards{margin-inline-start:auto}
@@ -781,7 +782,6 @@ const ICON = {
   bed: 'M19 7h-8v7H3V5H1v15h2v-3h18v3h2v-9a4 4 0 0 0-4-4M7 13a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3',
   chip: 'M6 4h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2m1 3v10h10V7H7m3 3h4v4h-4v-4M8 1h2v2H8V1m3 0h2v2h-2V1m3 0h2v2h-2V1M8 21h2v2H8v-2m3 0h2v2h-2v-2m3 0h2v2h-2v-2M1 8h2v2H1V8m0 3h2v2H1v-2m0 3h2v2H1v-2m20-6h2v2h-2V8m0 3h2v2h-2v-2m0 3h2v2h-2v-2',
   wifi: 'M2 8.8a15.5 15.5 0 0 1 20 0l-1.5 1.8a13.2 13.2 0 0 0-17 0L2 8.8zm3.5 4a10 10 0 0 1 13 0l-1.5 1.8a7.7 7.7 0 0 0-10 0l-1.5-1.8zm3.5 4a4.7 4.7 0 0 1 6 0L12 20l-3-3.2z',
-  thread: 'M5 2a3 3 0 1 1 0 6 3 3 0 0 1 0-6zm14 0a3 3 0 1 1 0 6 3 3 0 0 1 0-6zM5 16a3 3 0 1 1 0 6 3 3 0 0 1 0-6zm14 0a3 3 0 1 1 0 6 3 3 0 0 1 0-6zM9 4h6v2H9zM4 9h2v6H4zm14 0h2v6h-2zM9 18h6v2H9zM7.5 8.9l1.4-1.4 3.1 3.1 3.1-3.1 1.4 1.4-3.1 3.1 3.1 3.1-1.4 1.4-3.1-3.1-3.1 3.1-1.4-1.4 3.1-3.1z',
   bluetooth: 'M11 2h1l5.5 5.5L13 12l4.5 4.5L12 22h-1v-7.6l-4.3 4.3-1.4-1.4 5.3-5.3-5.3-5.3 1.4-1.4 4.3 4.3V2zm2 3.8v3.8l1.9-1.9L13 5.8zm0 8.6v3.8l1.9-1.9-1.9-1.9z',
   plus: 'M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z',
   share: 'M18,16.08C17.24,16.08 16.56,16.38 16.04,16.85L8.91,12.7C8.96,12.47 9,12.24 9,12C9,11.76 8.96,11.53 8.91,11.3L15.96,7.19C16.5,7.69 17.21,8 18,8A3,3 0 0,0 21,5A3,3 0 0,0 18,2A3,3 0 0,0 15,5C15,5.24 15.04,5.47 15.09,5.7L8.04,9.81C7.5,9.31 6.79,9 6,9A3,3 0 0,0 3,12A3,3 0 0,0 6,15C6.79,15 7.5,14.69 8.04,14.19L15.16,18.34C15.11,18.55 15.08,18.77 15.08,19C15.08,20.61 16.39,21.91 18,21.91C19.61,21.91 20.92,20.61 20.92,19A2.92,2.92 0 0,0 18,16.08Z',
@@ -796,7 +796,9 @@ const ICON = {
   recipe: 'M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2m8 1.5V8h4.5L14 3.5M7 12v2h10v-2H7m0 4v2h7v-2H7Z',
   sync: 'M12,18A6,6 0 0,1 6,12C6,11 6.25,10.03 6.7,9.2L5.24,7.74C4.46,8.97 4,10.43 4,12A8,8 0 0,0 12,20V23L16,19L12,15M12,4V1L8,5L12,9V6A6,6 0 0,1 18,12C18,13 17.75,13.97 17.3,14.8L18.76,16.26C19.54,15.03 20,13.57 20,12A8,8 0 0,0 12,4Z',
 };
-const icon = n => `<svg viewBox="0 0 24 24"><path d="${ICON[n]}"/></svg>`;
+// Thread mark from Dashboard Icons (Apache-2.0, www/thread.LICENSE).
+const THREAD_ICON = `<svg viewBox="0 0 165 165"><path d="M82.498,0C37.008,0,0,37.008,0,82.496c0,45.181,36.51,81.977,81.573,82.476V82.569l-27.002-0.002 c-8.023,0-14.554,6.53-14.554,14.561c0,8.023,6.531,14.551,14.554,14.551v17.98c-17.939,0-32.534-14.595-32.534-32.531 c0-17.944,14.595-32.543,32.534-32.543l27.002,0.004v-9.096c0-14.932,12.146-27.08,27.075-27.08 c14.932,0,27.082,12.148,27.082,27.08c0,14.931-12.15,27.08-27.082,27.08l-9.097-0.001v80.641 C136.889,155.333,165,122.14,165,82.496C165,37.008,127.99,0,82.498,0z"/><path d="M117.748,55.493c0-5.016-4.082-9.098-9.1-9.098c-5.015,0-9.097,4.082-9.097,9.098v9.097l9.097,0.001 C113.666,64.591,117.748,60.51,117.748,55.493z"/></svg>`;
+const icon = n => n === 'thread' ? THREAD_ICON : `<svg viewBox="0 0 24 24"><path d="${ICON[n]}"/></svg>`;
 
 let state = null, statuses = {}, shownTokens = {}, tab = 'devices', catalogFilter = 'all', query = '', catalogQuery = '';
 let specs = null, exampleTexts = {}, recipes = null;

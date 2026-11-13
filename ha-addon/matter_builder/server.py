@@ -55,6 +55,7 @@ PROGRAM_NAME = "Matter Builder" if STANDALONE else "Home Assistant"
 PROXIES = DATA / "proxies.json"
 PAGES = DATA / "pages"  # each device's own settings page, kept with its ETag
 SETTINGS = DATA / "settings.json"
+WIFI_DEFAULT = DATA / "wifi-default.json"
 NOTIFIED = DATA / "notified.json"
 RELEASES = DATA / "releases"
 RELEASE_CACHE = RELEASES / "verified.json"  # the merged, signature-checked list
@@ -105,15 +106,43 @@ def save_proxies(proxies):
 
 
 def load_settings():
+    defaults = {"dev_mode": False, "night_hour": 3, "editor_mode": "visual"}
     try:
-        return {"dev_mode": False, "night_hour": 3, **json.loads(SETTINGS.read_text())}
+        return {**defaults, **json.loads(SETTINGS.read_text())}
     except (OSError, ValueError):
-        return {"dev_mode": False, "night_hour": 3}
+        return defaults
 
 
 def save_settings(settings):
     SETTINGS.parent.mkdir(parents=True, exist_ok=True)
     SETTINGS.write_text(json.dumps(settings))
+
+
+def load_wifi_default():
+    try:
+        network = json.loads(WIFI_DEFAULT.read_text())
+        return network if isinstance(network, dict) and all(isinstance(network.get(k), str) for k in ("ssid", "password")) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def save_wifi_default(ssid, password):
+    if not isinstance(ssid, str) or not 1 <= len(ssid.encode()) <= 32 or "\0" in ssid:
+        raise ValueError("Enter a network name of 1–32 bytes.")
+    if not isinstance(password, str) or "\0" in password:
+        raise ValueError("Enter a valid Wi-Fi password.")
+    size = len(password.encode())
+    if not (8 <= size <= 63 or re.fullmatch(r"[0-9a-fA-F]{64}", password)):
+        raise ValueError("Enter an 8–63 byte Wi-Fi password or a 64-digit hexadecimal key.")
+    WIFI_DEFAULT.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(mode="w", dir=WIFI_DEFAULT.parent, delete=False) as tmp:
+        path = Path(tmp.name)
+        try:
+            json.dump({"ssid": ssid, "password": password}, tmp)
+            tmp.close()
+            path.replace(WIFI_DEFAULT)
+        finally:
+            path.unlink(missing_ok=True)
 
 
 def system_info():
@@ -1906,6 +1935,21 @@ def send_line(proxy, line):
         plain = bytes.fromhex(match.group(2)).decode(errors="replace")
         status, text = command(proxy, f"wifi {match.group(1)} {plain}")
     return status, text
+
+
+def apply_wifi_default(proxy, network):
+    # Use the same management commands as the device page. The replies are
+    # intentionally reduced to a status before returning anything to the UI.
+    for key in ("password", "ssid"):
+        line = f"wifi {key}-hex {network[key].encode().hex()}"
+        if not allowed(line):
+            return False
+        status, reply = command(proxy, line, timeout=5)
+        if status != 200 or reply.strip() != "ok":
+            return False
+    return True
+
+
 SETTING_SET = re.compile(r"settings set [a-z_][a-z0-9_]{0,31} [A-Za-z0-9_.:-]{1,64}")
 
 
@@ -2548,7 +2592,11 @@ def link_poll(link_id):
                    if p["host"] != pending["host"] and not (device.get("id") and p.get("device_id") == device["id"])]
         save_proxies(proxies + [proxy])
         dismiss(device.get("id"))
-        return {"state": "linked", "id": proxy["id"]}
+        result = {"state": "linked", "id": proxy["id"]}
+        network = load_wifi_default()
+        if network:
+            result["default_wifi"] = apply_wifi_default(proxy, network)
+        return result
     if reply.get("state") != "waiting":
         links.pop(link_id, None)
     return reply
@@ -2829,7 +2877,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                "release": release_state["release"], "release_error": release_state["error"],
                                "ignored": [{"id": k, **v} for k, v in ignored_devices().items()],
                                "share_github": bool(github_client_id()),
-                               "settings": load_settings(), "system": system_info(), "standalone": STANDALONE})
+                               "settings": load_settings(), "wifi_default": load_wifi_default().get("ssid"),
+                               "system": system_info(), "standalone": STANDALONE})
         if path == "/api/specs":
             return self.reply({"specs": list_specs(), "examples": examples()})
         if path.startswith("/api/specs/"):
@@ -2995,8 +3044,42 @@ class Handler(http.server.BaseHTTPRequestHandler):
             save_settings(settings)
             check_releases()
             return self.reply({"ok": True})
+        if path == "/api/wifi-default":
+            action = data.get("action")
+            if action == "save":
+                ssid = data.get("ssid")
+                try:
+                    save_wifi_default(ssid, data.get("password"))
+                except UnicodeError:
+                    return self.reply({"error": "Enter valid Wi-Fi credentials."}, 400)
+                except ValueError as err:
+                    return self.reply({"error": str(err)}, 400)
+                except OSError:
+                    return self.reply({"error": "Could not save default Wi-Fi."}, 500)
+                return self.reply({"ssid": ssid})
+            if action == "remove":
+                try:
+                    WIFI_DEFAULT.unlink(missing_ok=True)
+                except OSError:
+                    return self.reply({"error": "Could not remove default Wi-Fi."}, 500)
+                return self.reply({"ssid": None})
+            if action == "apply":
+                network = load_wifi_default()
+                if not network or data.get("ssid") != network["ssid"]:
+                    return self.reply({"error": "The saved network changed. Refresh Settings and try again."}, 409)
+                ids = data.get("ids")
+                if not isinstance(ids, list) or any(not isinstance(i, str) for i in ids):
+                    return self.reply({"error": "Invalid device list."}, 400)
+                proxies = [proxy for proxy in load_proxies() if proxy["id"] in ids]
+                return self.reply({"results": [{"name": proxy["name"], "ok": apply_wifi_default(proxy, network)}
+                                               for proxy in proxies]})
+            return self.reply({"error": "Unknown Wi-Fi action."}, 400)
         if path == "/api/settings":
             settings = load_settings()
+            if "editor_mode" in data:
+                if data["editor_mode"] not in ("visual", "yaml"):
+                    return self.reply({"error": "Choose Visual editor or YAML."}, 400)
+                settings["editor_mode"] = data["editor_mode"]
             if "community_ok" in data:
                 settings["community_ok"] = bool(data["community_ok"])
             if "dev_mode" in data:

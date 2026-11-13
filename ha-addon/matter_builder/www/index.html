@@ -123,7 +123,7 @@ button.spec-name{min-width:0;flex:1 1 160px;justify-content:flex-start;text-alig
 .device-settings-card .switch input{flex:none;accent-color:var(--editor-action,var(--primary))}
 .device-settings-card a:not(.button){color:var(--editor-action,var(--primary))}
 .device-settings-card .actions{justify-content:flex-end}
-.firmware-packets>summary{padding:10px 0;cursor:pointer;font-weight:500}
+.firmware-packets{margin-top:20px}
 .firmware-packets h4{margin:16px 0 4px;font-size:14px;font-weight:600}
 .firmware-packets dl{margin:0}
 .firmware-packets dd{margin:0}
@@ -145,7 +145,12 @@ button.spec-name{min-width:0;flex:1 1 160px;justify-content:flex-start;text-alig
 .health-status{margin-inline-start:auto;flex:none}
 @media(max-width:480px){.hrow{flex-wrap:wrap}.health-status{margin-inline-start:22px}}
 #logDlg[open]{position:fixed;inset:0 0 0 auto;z-index:12;pointer-events:auto}
-#specExampleField{margin-top:14px;max-width:300px}
+#specExampleField{background:var(--card);border-radius:var(--radius);padding:16px;margin-bottom:12px}
+#specExampleField .field{max-width:360px;margin-top:10px}
+.fingerprint-help summary{display:inline-flex;align-items:center;gap:8px;cursor:pointer;list-style:none;width:fit-content}
+.fingerprint-help summary::-webkit-details-marker{display:none}
+.fingerprint-help .info-mark{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;background:var(--fill);color:var(--primary);font-weight:600}
+.fingerprint-help p{max-width:60ch;margin:8px 0 12px}
 #specEditorHost > mb-yaml-editor{--yaml-height:50vh}
 #specEditor .spec-editor-section{background:var(--card);border-radius:var(--radius);padding:16px;margin-top:12px}
 #specEditor .spec-editor-section .ed-section:first-child{margin-top:0}
@@ -361,7 +366,7 @@ a.button.pri{background:var(--primary);color:var(--on-primary)}
 .auth .actions{margin-top:16px}
 .auth .error{margin-top:10px}
 .taskbar .bar>div:nth-child(2){flex:1 1 180px}
-.ble-setup-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;align-items:flex-start}
+.ble-setup-actions{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 16px;align-items:flex-start}
 .ble-presets{flex:1 0 100%;min-width:0}
 .ble-presets>summary{display:inline-flex;align-items:center;gap:8px;min-height:36px;padding:0 14px;border-radius:18px;background:var(--fill);font-weight:500;list-style:none;cursor:pointer}
 .ble-presets>summary::-webkit-details-marker{display:none}
@@ -527,7 +532,11 @@ dialog.side{max-width:100vw}
 <section id="specEditor" hidden>
   <div class="error" id="specError" role="alert" hidden></div>
   <div class="notice" id="specNotice" role="status" hidden></div>
-  <label class="field" id="specExampleField" hidden><span data-t="startFrom"></span><select id="specExample"></select></label>
+  <section id="specExampleField" hidden aria-labelledby="specExampleTitle">
+    <h3 id="specExampleTitle">Start from an example</h3>
+    <div class="sub">Optional. Load a sample configuration and adapt it to your device.</div>
+    <label class="field"><span>Example configuration</span><select id="specExample"></select></label>
+  </section>
   <div id="specEditorHost"></div>
 </section>
   <section class="task-page" id="taskPage" hidden></section>
@@ -625,14 +634,28 @@ dialog.side{max-width:100vw}
         <div class="sub" id="passwordResult"></div>
         <div style="height:12px"></div>
       </div>
-      <section class="settings-section"><h3 data-t="allWifi"></h3>
-      <div class="sub" data-t="bulkWifiHelp"></div>
-      <form id="bulkWifi" class="form">
-        <label class="field"><span data-t="wifiName"></span><input id="bSsid" maxlength="32" autocomplete="off" data-1p-ignore data-lpignore="true"></label>
-        <label class="field"><span data-t="wifiPassword"></span><input id="bPass" type="password" maxlength="64" autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other"></label>
-        <div class="actions" style="margin-top:0"><button class="pri" type="submit" data-t="sendAll"></button></div>
-      </form>
-      <div id="bulkRows" aria-live="polite"></div></section>
+      <section class="settings-section">
+        <h3>Editor</h3>
+        <div class="sub">Choose which view opens first in device configuration, saved configs and setup wizards.</div>
+        <label class="field" style="max-width:360px;margin-top:12px"><span>Default editor</span>
+          <select id="defaultEditor"><option value="visual">Visual editor</option><option value="yaml">YAML</option></select>
+        </label>
+      </section>
+      <section class="settings-section">
+        <h3>Default Wi-Fi for configuration</h3>
+        <div class="sub">Used for configuration mode and firmware updates. New devices receive this network after linking. Matter uses the network chosen when pairing.</div>
+        <p class="sub" id="wifiDefaultState"></p>
+        <form id="bulkWifi" class="form">
+          <label class="field"><span data-t="wifiName"></span><input id="bSsid" maxlength="32" required autocomplete="off" data-1p-ignore data-lpignore="true"></label>
+          <label class="field"><span data-t="wifiPassword"></span><input id="bPass" type="password" data-private minlength="8" maxlength="64" required autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other"></label>
+          <div class="actions" style="margin-top:0">
+            <button class="pri" type="submit" id="wifiDefaultSave">Save default</button>
+            <button type="button" id="wifiDefaultApply">Apply to linked devices</button>
+            <button class="plain" type="button" id="wifiDefaultRemove">Remove default</button>
+          </div>
+        </form>
+        <div id="bulkRows" aria-live="polite"></div>
+      </section>
       <section class="settings-section"><h3 data-t="sourcesTitle"></h3>
       <div class="sub" data-t="sourcesHelp"></div>
       <div id="sourceList" style="margin-top:8px"></div>
@@ -928,8 +951,8 @@ const TEXT = {
   addFromLink: 'Add from link (GitHub owner/name)', confirmRemoveSource: r => `Remove ${r}? Devices keep their firmware.`,
   firmwareSection: 'Firmware', recipeSection: 'Recipes',
   noCatalog: 'Nothing found.', noRelease: 'No signed release found yet.', newEspOnly: 'For a new ESP32', updateOnly: 'Update file only',
-  showPassword: 'Show password', hidePassword: 'Hide password', settings: 'Settings', allWifi: 'Wi-Fi for all devices', bulkWifiHelp: 'The network every linked device uses for configuration mode (updates, first setup).',
-  wifiName: 'Network', wifiPassword: 'Password', sendAll: 'Send to all',
+  showPassword: 'Show password', hidePassword: 'Hide password', settings: 'Settings',
+  wifiName: 'Network', wifiPassword: 'Password',
   readyMade: 'Ready-made firmware', checkReleases: 'Check now', signedRelease: r => `Release ${r}, signature checked.`,
   noReleases: 'No signed release found yet.',
   devTitle: 'Developer mode', devHelp: 'Build firmware in Home Assistant, with fixed versions of ESP-IDF (v5.5.5) and esp-matter (release/v1.6). Nothing personal is built in.',
@@ -941,7 +964,7 @@ const TEXT = {
   specValidate: 'Validate', specDiscard: 'Discard unsaved changes to this config?', specExample: 'Choose an example',
   specSummary: (connections, rules) => [`${connections} connection${connections === 1 ? '' : 's'}`, ...(rules ? [`${rules} rule${rules === 1 ? '' : 's'}`] : [])],
   specUse: 'Use config', firmwareBuilds: 'Firmware builds', download: 'Download', downloadUpdate: 'Download update', downloadInstaller: 'Download installer',
-  startFrom: 'Start from', check: 'Check', save: 'Save', specOk: s => `Valid: ${s.name} ${s.version} (${s.app}).`, specSaved: 'Saved.', del: 'Delete',
+  check: 'Check', save: 'Save', specOk: s => `Valid: ${s.name} ${s.version} (${s.app}).`, specSaved: 'Saved.', del: 'Delete',
   build: 'Build', updateFile: 'Update file', factoryFile: 'For a new ESP32', confirmDelete: n => `Delete the spec “${n}”? Built files stay.`,
   standardBuilds: 'Standard firmware', genericTitle: 'Generic device', genericHelp: 'Build the standard firmware yourself, the same as the release.',
   ownBuilds: 'Own builds', noBuilds: 'Nothing built yet.', installToolchain: 'Install the toolchain first (Settings).',
@@ -1301,8 +1324,7 @@ const optOutput = (type, d) => isOutputType(type) || (d && ['on_off', 'dimmable'
 const optControl = (type, d) => ['button', 'contact', 'motion', 'ble_presence'].includes(type) || (d && ['button', 'contact', 'occupancy'].includes(d.matter));
 const ROW_OPTIONS = {power: 'off', off_after: 0, controls: null, group: ''};
 const EDITORS = {};
-let editorPref = 'visual';
-try { editorPref = localStorage.getItem('mbEditor') === 'yaml' ? 'yaml' : 'visual'; } catch (e) {}
+const defaultEditorMode = () => state?.settings?.editor_mode === 'yaml' ? 'yaml' : 'visual';
 
 // ---------------------------------------------------------------- rules
 // Rules on the device (firmware rules.h): "when … only if … then …". One JSON
@@ -1374,7 +1396,7 @@ function rulesYaml(rules) {
 class ConfigEditor {
   constructor(id) {
     this.id = id; this.host = null; this.name = ''; this.rows = []; this.pins = SAFE_PINS;
-    this.mode = editorPref; this.yaml = ''; this.error = ''; this.open = new Set(); this.cardYaml = {};
+    this.mode = 'visual'; this.yaml = ''; this.error = ''; this.open = new Set(); this.cardYaml = {};
     this.picking = false; this.live = null; this.tester = null; this.onChange = null;
     this.components = []; this.drivers = [];  // component types: from the config, or from the device
     this.rules = []; this.ruleOpen = new Set(); this.rulesSupported = true; this.clock = null;
@@ -1431,7 +1453,6 @@ class ConfigEditor {
       catch (e) { this.error = t('yamlError', e.message); this.render(); return; }
     }
     this.mode = mode; this.error = '';
-    try { localStorage.setItem('mbEditor', mode); } catch (e) {}
     this.render();
   }
   // The configuration as it stands; throws when the YAML is not valid
@@ -1579,7 +1600,7 @@ class ConfigEditor {
           ${linked ? `<span class="chip ok">${t('bleIsConnection')}</span>` : ''}<span class="chev"></span></summary>
         <div class="ed-item-body"><div class="ed-fields ble-cmd">
           <label class="field"><span>${t('bleCommandName')}</span><input maxlength="32" value="${esc(c.label)}" oninput="${ref}.bleCmd(${i}, 'label', this.value)"></label>
-          <div><label class="field"><span>${t('bleBytes')}</span><input class="mono" spellcheck="false" value="${esc(c.bytes)}" oninput="${ref}.bleCmd(${i}, 'bytes', this.value)"></label>
+          <div><label class="field"><span>${t('bleBytes')}</span><input class="mono" spellcheck="false" value="${esc(groupHex(bleHex(c.bytes)))}" oninput="${ref}.bleCmd(${i}, 'bytes', formatHexInput(this, bleHex, event))"></label>
             <div class="sub ble-field-help">${t('bleBytesHelp')}</div></div></div>
         <div class="ble-timing">
           <div><label class="field"><span>${t('bleTimes')}</span><input type="number" min="1" max="50" value="${c.times}" oninput="${ref}.bleCmd(${i}, 'times', +this.value)"></label>
@@ -2270,7 +2291,11 @@ async function addSourceFlow(repo, expected, then) {
     <p class="sub">${esc(p.description)}</p>
     <div class="row"><div class="label sub">${t('maker')}</div><div>${esc(p.owner)}</div></div>
     <div class="row"><div class="label sub">${t('stars')}</div><div>${esc(p.stars)}</div></div>
-    <div class="row"><div class="label sub">${t('keyFingerprint')}</div><div class="mono">${esc(p.fingerprint.match(/.{1,16}/g).join(' '))}</div></div>
+    <details class="fingerprint-help">
+      <summary>${t('keyFingerprint')} <span class="info-mark" aria-hidden="true">i</span></summary>
+      <p class="sub">The fingerprint identifies this source’s public signing key. Compare it with the fingerprint published by the source. Matter Builder remembers the key and uses it to verify firmware signatures.</p>
+    </details>
+    <p class="mono">${esc(p.fingerprint.match(/.{1,16}/g).join(' '))}</p>
     ${mismatch ? `<div class="error">${t('keyMismatch')}</div>` : `<p class="sub">${t('addSourceHelp')}</p>`}
     <div class="actions end"><button class="plain" id="srcCancel">${t('back')}</button>
       ${mismatch ? '' : `<button class="pri" id="srcAdd">${t('addSource')}</button>`}</div>`);
@@ -2460,6 +2485,7 @@ function openSpecEditor(isNew, title = specEditor.name) {
 }
 function newSpec() {
   if (pageTask) return;
+  specEditor.mode = defaultEditorMode();
   specEditor.specDevice = null;
   specEditor.board = null;
   specEditor.components = []; specEditor.drivers = [];
@@ -2490,6 +2516,7 @@ async function editSpec(slug) {
     const r = await api(`api/specs/${slug}`);
     if (r.error) { toast(r.error); return; }
     specEditor.grouping = false;
+    specEditor.mode = defaultEditorMode();
     specEditor.mount($('#specEditorHost'));
     await specEditor.loadText(r.text);
     openSpecEditor(false, specs?.find(sp => sp.slug === slug)?.name || slug);
@@ -2786,8 +2813,16 @@ devEditor.onChange = () => {
 // The settings a firmware without connections declares ('settings json':
 // values and a schema), edited as a form or as the settings: block in YAML
 class SettingsEditor {
-  constructor() { this.mode = editorPref; this.values = {}; this.saved = {}; this.schema = {}; this.yaml = ''; this.error = ''; this.notice = ''; }
-  load(j) { this.schema = j.schema; this.saved = {...j.settings}; this.values = {...j.settings}; this.error = this.notice = ''; this.dirty = false; }
+  constructor() { this.mode = 'visual'; this.values = {}; this.saved = {}; this.schema = {}; this.yaml = ''; this.error = ''; this.notice = ''; }
+  load(j) {
+    this.mode = defaultEditorMode();
+    this.schema = j.schema;
+    this.saved = {...j.settings};
+    this.values = {...j.settings};
+    this.yaml = this.toYaml();
+    this.error = this.notice = '';
+    this.dirty = false;
+  }
   toYaml(values = this.values) {
     return ['settings:', ...Object.keys(this.schema).map(k =>
       `  ${k}: ${values[k] ?? this.schema[k].default}`)].join('\n');
@@ -2840,8 +2875,7 @@ class SettingsEditor {
       }
       this.error = '';
     } catch (e) { this.error = e.message; this.render(); return; }
-    this.mode = editorPref = m;
-    try { localStorage.setItem('mbEditor', m); } catch (e) {}
+    this.mode = m;
     this.render();
   }
   set(k, v) { this.values[k] = v; this.error = this.notice = ''; this.render(); }
@@ -2999,6 +3033,7 @@ async function loadDeviceConfiguration(id, requestId, which, recipe) {
     try { device.ble = bleFromDevice(JSON.parse(await proxyCommand(id, 'bledev json')).bledev); } catch (e) { device.ble = undefined; }
     if (requestId !== deviceRequest) return;
     devEditor.bleSupported = device.ble !== undefined;
+    devEditor.mode = defaultEditorMode();
     devEditor.mount($('#devEditor'));
     devEditor.drivers = device.io.drivers || [];
     devEditor.components = [];
@@ -3089,10 +3124,10 @@ function bridgePacketFields(build, packets) {
   if (!packets) return '<p class="sub">Packet editing is unavailable for this firmware revision.</p>';
   const row = (label, key) => `<div class="row"><dt><label for="packet-${key}">${label}</label></dt>
     <dd><input class="mono" id="packet-${key}" data-packet="${key}" type="text" spellcheck="false"
-      autocomplete="off" autocapitalize="off" required maxlength="191" value="${esc(packets[key].match(/../g).join(' '))}"></dd></div>`;
+      autocomplete="off" autocapitalize="off" required maxlength="191" value="${esc(groupHex(packets[key]))}"></dd></div>`;
   const sourceUrl = `https://github.com/bramboe/matter-builder/tree/${build.revision}/components`;
-  return `<details class="firmware-packets">
-    <summary>Edit Bluetooth commands</summary>
+  return `<section class="firmware-packets">
+    <h3>Edit Bluetooth commands</h3>
     <p class="sub">Edit the complete hexadecimal packets, including their framing, length and checksum. The ESP32 uses the new bytes after you build and upload.</p>
     <p class="sub">Service <code>FFE0</code> · Command and notification characteristic <code>FFE1</code></p>
     <h4>Movement</h4>
@@ -3119,7 +3154,7 @@ function bridgePacketFields(build, packets) {
     </dl>
     <p class="sub"><a href="${sourceUrl}/octo_protocol/octo_protocol.cpp" target="_blank" rel="noopener">Packet encoders</a>
       · <a href="${sourceUrl}/octo_core/bed_link.cpp" target="_blank" rel="noopener">Bluetooth driver</a></p>
-  </details>`;
+  </section>`;
 }
 
 async function loadBridgeEditor(proxy, host) {
@@ -3154,6 +3189,7 @@ async function loadBridgeEditor(proxy, host) {
     const notice = form.querySelector('.notice'), error = form.querySelector('.error');
     const packetInputs = [...form.querySelectorAll('[data-packet]')];
     const normalize = raw => raw.replace(/\s/g, '').toUpperCase();
+    for (const input of packetInputs) input.addEventListener('input', event => formatHexInput(input, normalize, event));
     // Both views edit the same draft. Only the firmware action submits it.
     const baseline = {keepalive_ms: build.keepalive_ms, light_enabled: build.light_enabled, ...packets};
     const readVisual = () => ({
@@ -3200,7 +3236,7 @@ async function loadBridgeEditor(proxy, host) {
         const values = readYaml();
         form.elements.interval.value = values.keepalive_ms / 1000;
         form.elements.light.checked = !!values.light_enabled;
-        for (const input of packetInputs) input.value = values[input.dataset.packet].match(/.{1,2}/g)?.join(' ') || '';
+        for (const input of packetInputs) input.value = groupHex(values[input.dataset.packet]);
         setError('');
       },
       syncYaml() {
@@ -3648,6 +3684,23 @@ async function parseSpec(text) {
 // connecting (a PIN) is set on the device's own page, never here.
 const BLE_COMMANDS_MAX = 8;
 const bleHex = v => String(v).replace(/[\s:-]/g, '').toUpperCase();
+const groupHex = value => value.match(/.{1,2}/g)?.join(' ') || '';
+function formatHexInput(input, normalize, event) {
+  const raw = input.value;
+  if (event.isComposing) return raw;
+  const value = groupHex(normalize(raw));
+  if (value !== raw) {
+    // Keep the caret next to the same byte when spacing changes.
+    const position = index => {
+      const count = normalize(raw.slice(0, index)).length;
+      return count + Math.floor(Math.max(0, count - 1) / 2);
+    };
+    const start = position(input.selectionStart), end = position(input.selectionEnd);
+    input.value = value;
+    input.setSelectionRange(start, end);
+  }
+  return value;
+}
 const hexOfText = text => Array.from(new TextEncoder().encode(text), b => b.toString(16).padStart(2, '0')).join('');
 // Octo beds: the remote's packets, framed and checksummed
 function octoPacket(c0, c1, data = []) {
@@ -3905,6 +3958,7 @@ function startCatalogWizard(step, extra) {
 }
 function openWizard(step, host, extra) {
   if (pageTask) return;
+  wizEditor.mode = defaultEditorMode();
   $$('details.more').forEach(d => { d.open = false; });
   wiz = {step: step || 'start', host: host || '', file: null, method: 'browser', backup: true, status: '', configSpec: null, ...(extra || {})};
   if (wiz.step === 'method' && !wiz.file) wiz.step = 'board';
@@ -4197,6 +4251,8 @@ function renderWizard() {
     title = t('wLinked');
     const a = wiz.apply || {};
     body = `<p>${esc(wiz.configSpec ? t('linkedName', wiz.linkedName || '') : t('linkedText', wiz.linkedName || ''))}</p>
+      ${wiz.defaultWifi === true ? '<p class="sub">The default configuration Wi-Fi was saved on this device.</p>' : ''}
+      ${wiz.defaultWifi === false ? '<p class="error">Could not save the default configuration Wi-Fi. You can retry from Settings.</p>' : ''}
       ${a.state === 'applying' ? `<p class="notice">${t('applyingConfig')}</p>` : ''}
       ${a.state === 'trial' ? `<p class="notice">${t('configOnTrial', a.trial)}</p>` : ''}
       ${a.state === 'kept' ? `<p class="notice">${t('configKept')}</p>` : ''}
@@ -4398,15 +4454,16 @@ async function startLink() {
   if (r.error) { wiz.error = r.error === 'wrong password' ? t('wrongPassword') : r.error; renderWizard(); return; }
   wiz.waiting = true;
   const until = Date.now() + r.seconds * 1000;
-  const before = new Set(state.proxies.map(p => p.id));
   const poll = async () => {
     if (!wiz) return;
     const s = await api(`api/link/${r.link}`);
     if (s.state === 'linked') {
       await refresh();
-      const added = state.proxies.find(p => !before.has(p.id)) || state.proxies.find(p => p.host === host);
+      if (!wiz) return;
+      const added = state.proxies.find(p => p.id === s.id);
       wiz.waiting = false;
-      wiz.linkedId = added && added.id;
+      wiz.defaultWifi = s.default_wifi;
+      wiz.linkedId = s.id;
       wiz.linkedName = added ? added.name : host;
       go('done');
       loadStatuses();
@@ -4425,6 +4482,8 @@ async function startLink() {
 function renderSettings() {
   const dev = state.settings.dev_mode;
   $('#devMode').checked = dev;
+  if (!$('#defaultEditor').disabled) $('#defaultEditor').value = defaultEditorMode();
+  renderDefaultWifi();
   if (document.activeElement !== $('#nightHour')) $('#nightHour').value = String(state.settings.night_hour ?? 3);
   $('#devSettings').hidden = !dev;
   setHtml($('#sourceList'), (state.sources || []).map(s => `<div class="row"><div class="label">${esc(s.repo)}
@@ -4443,21 +4502,64 @@ function renderSettings() {
   $('#toolchainBtn').disabled = state.job.running;
 }
 $('#settingsBtn').onclick = () => openTask({title: t('settings'), content: $('#settingsPage'),
-  cleanup: () => { $('#bPass').value = ''; $('#pOld').value = ''; $('#pNew').value = ''; }});
-$('#bulkWifi').onsubmit = async e => {
+  cleanup: () => { $('#bulkWifi').reset(); $('#bulkRows').textContent = ''; $('#pOld').value = ''; $('#pNew').value = ''; }});
+let wifiDefaultBusy = false;
+function renderDefaultWifi() {
+  const saved = state.wifi_default;
+  $('#wifiDefaultState').textContent = saved ? `Saved network · ${saved}` : 'No default network saved.';
+  $('#wifiDefaultSave').disabled = wifiDefaultBusy;
+  $('#wifiDefaultApply').disabled = wifiDefaultBusy || !saved || !state.proxies.length;
+  $('#wifiDefaultRemove').hidden = !saved;
+  $('#wifiDefaultRemove').disabled = wifiDefaultBusy;
+}
+async function updateDefaultWifi(action, fields = {}) {
+  if (wifiDefaultBusy) return;
+  wifiDefaultBusy = true;
+  renderDefaultWifi();
+  const result = $('#bulkRows');
+  result.textContent = action === 'apply' ? 'Sending Wi-Fi settings…' : '';
+  try {
+    const response = await api('api/wifi-default', {action, ...fields});
+    if (response.error) throw new Error(response.error);
+    if (action === 'apply') {
+      setHtml(result, response.results.map(device => `<div class="row"><div class="label">${esc(device.name)}</div>
+        <span class="chip ${device.ok ? 'ok' : 'bad'}">${device.ok ? 'Saved on device' : 'Could not save'}</span></div>`).join(''));
+    } else {
+      state.wifi_default = response.ssid;
+      $('#bulkWifi').reset();
+      result.textContent = action === 'save' ? 'Default Wi-Fi saved.' : 'Default Wi-Fi removed.';
+    }
+  } catch (e) { result.textContent = e.message; }
+  finally { wifiDefaultBusy = false; renderDefaultWifi(); }
+}
+$('#bulkWifi').onsubmit = e => {
   e.preventDefault();
-  const ssid = $('#bSsid').value.trim(), pass = $('#bPass').value;
-  if (!ssid) return;
-  const targets = [...state.proxies];
-  if (!targets.length) { $('#bulkRows').textContent = 'No linked devices.'; return; }
-  if (!await confirmAction('Send Wi-Fi settings?', `This updates configuration Wi-Fi for ${targets.length} devices: ${targets.map(p => p.name).join(', ')}.`, 'Send to all')) return;
-  // As hex, so spaces arrive as typed; an empty password field keeps each device's password
-  const hex = text => Array.from(new TextEncoder().encode(text), b => b.toString(16).padStart(2, '0')).join('');
-  const r = await api('api/bulk', {ids: targets.map(p => p.id), lines: [`wifi ssid-hex ${hex(ssid)}`].concat(pass ? [`wifi password-hex ${hex(pass)}`] : [])});
-  $('#bPass').value = '';
-  if (r.error) { $('#bulkRows').textContent = r.error; return; }
-  $('#bulkRows').innerHTML = (r.results || []).map(x => `<div class="row"><div class="label">${esc(x.name)}<div class="sub">${esc(x.text)}</div></div>
-    <span class="chip ${x.ok ? 'ok' : 'bad'}">${x.ok ? 'OK' : '!'}</span></div>`).join('');
+  const pass = $('#bPass');
+  const password = pass.value;
+  pass.value = '';
+  updateDefaultWifi('save', {ssid: $('#bSsid').value, password});
+};
+$('#wifiDefaultApply').onclick = async () => {
+  const ssid = state.wifi_default;
+  const ids = state.proxies.map(p => p.id);
+  if (await confirmAction('Apply default Wi-Fi?', `Save “${ssid}” for configuration mode on ${ids.length} linked devices.`, 'Apply to devices')) {
+    await updateDefaultWifi('apply', {ssid, ids});
+  }
+};
+$('#wifiDefaultRemove').onclick = async () => {
+  if (await confirmAction('Remove default Wi-Fi?', 'Future links will stop receiving this network. Devices keep the Wi-Fi settings they already have.', 'Remove default')) {
+    updateDefaultWifi('remove');
+  }
+};
+$('#defaultEditor').onchange = async () => {
+  const select = $('#defaultEditor');
+  select.disabled = true;
+  try {
+    const result = await api('api/settings', {editor_mode: select.value});
+    if (result.error) throw new Error(result.error);
+    state.settings.editor_mode = result.editor_mode;
+  } catch (e) { toast(e.message); }
+  finally { select.value = defaultEditorMode(); select.disabled = false; }
 };
 $('#checkReleases').onclick = async () => {
   const button = $('#checkReleases');
@@ -4548,12 +4650,11 @@ document.addEventListener('click', e => {
 });
 
 for (const [sel, ic] of [['#lClose', 'close'], ['#dClose', 'close'], ['#wClose', 'close'], ['#sClose', 'close'], ['#iClose', 'close'], ['#shClose', 'close'], ['#emptyIcon', 'chip']]) $(sel).innerHTML = icon(ic);
-// An eye on every password field, also those drawn later: show or hide what
-// is typed. Submitting a form hides them again.
+// Password fields can offer a reveal button. Submitting hides them again.
 const EYE = 'M12,9A3,3 0 0,0 9,12A3,3 0 0,0 12,15A3,3 0 0,0 15,12A3,3 0 0,0 12,9M12,17A5,5 0 0,1 7,12A5,5 0 0,1 12,7A5,5 0 0,1 17,12A5,5 0 0,1 12,17M12,4.5C7,4.5 2.73,7.61 1,12C2.73,16.39 7,19.5 12,19.5C17,19.5 21.27,16.39 23,12C21.27,7.61 17,4.5 12,4.5Z';
 const EYE_OFF = 'M11.83,9L15,12.16C15,12.11 15,12.05 15,12A3,3 0 0,0 12,9C11.94,9 11.89,9 11.83,9M7.53,9.8L9.08,11.35C9.03,11.56 9,11.77 9,12A3,3 0 0,0 12,15C12.22,15 12.44,14.97 12.65,14.92L14.2,16.47C13.53,16.8 12.79,17 12,17A5,5 0 0,1 7,12C7,11.21 7.2,10.47 7.53,9.8M2,4.27L4.28,6.55L4.73,7C3.08,8.3 1.78,10 1,12C2.73,16.39 7,19.5 12,19.5C13.55,19.5 15.03,19.2 16.38,18.66L16.81,19.08L19.73,22L21,20.73L3.27,3M12,7A5,5 0 0,1 17,12C17,12.64 16.87,13.26 16.64,13.82L19.57,16.75C21.07,15.5 22.27,13.86 23,12C21.27,7.61 17,4.5 12,4.5C10.6,4.5 9.26,4.75 8,5.2L10.17,7.35C10.74,7.13 11.35,7 12,7Z';
 function addEye(input) {
-  if (input.dataset.eye) return;
+  if (input.dataset.eye || input.hasAttribute('data-private')) return;
   input.dataset.eye = '1';
   const field = input.closest('.field') || input.parentElement;
   field.classList.add('has-eye');
@@ -4572,7 +4673,7 @@ function addEye(input) {
   field.appendChild(button);
 }
 document.querySelectorAll('input[type=password]').forEach(addEye);
-new MutationObserver(() => document.querySelectorAll('input[type=password]:not([data-eye])').forEach(addEye))
+new MutationObserver(() => document.querySelectorAll('input[type=password]:not([data-eye],[data-private])').forEach(addEye))
   .observe(document.body, {childList: true, subtree: true});
 document.addEventListener('submit', () => document.querySelectorAll('input[data-eye]').forEach(i => {
   if (i.type === 'text') { i.type = 'password'; i.redrawEye(); }

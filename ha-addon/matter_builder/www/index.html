@@ -695,7 +695,10 @@ const TEXT = {
   tabDevices: 'Devices', tabCatalog: 'Catalog', tabConfigs: 'Configs', configuration: 'Configuration', searchDevices: 'Search devices', searchCatalog: 'Search the catalog',
   myConfigs: 'My configs', saveConfig: 'Save to My configs', configSaved: n => `Saved as “${n}” in My configs.`,
   readOnlyYaml: 'This firmware has no configurable connections; its own settings are on its page. This is what it reports:',
-  settingsHelp: 'Settings of this device. Saving restarts it; on Thread it is back within a minute.', settingsLabel: 'Settings', bedsLabel: 'Beds', bedN: n => `Bed ${n}`, bedsHelp: 'Beds are paired and named on the device page:', settingsYamlHelp: 'Only the settings: block can change; Wi-Fi, Thread and passwords are never in here.',
+  settingsHelp: 'Settings of this device. Saving restarts it; on Thread it is back within a minute.', settingsLabel: 'Settings', bedsLabel: 'Beds', bedN: n => `Bed ${n}`, bedsHelp: 'Beds are paired and named on the device page:', settingsYamlHelp: 'Edit the same device settings as in the visual editor.',
+  settingsYamlBlock: 'Use the settings: block with two spaces before each setting.',
+  settingsYamlDuplicate: k => `Duplicate setting: ${k}`,
+  settingsYamlMissing: 'Keep every device setting in the settings: block.',
   settingsSaved: 'Saved: the device restarts with the new settings.', settingsSame: 'Nothing changed: the device keeps these settings.', saving: 'Saving…', settingsUnknown: k => `Unknown setting: ${k}`,
   settingsRange: (k, a, b) => `${k}: a whole number from ${a} to ${b}`, settingsChoice: (k, c) => `${k}: one of ${c.join(', ')}`,
   wConfigure: 'Configure the device', configureHelp: 'Its name and what is connected. Wi-Fi, Thread and passwords are set on the device itself.',
@@ -2774,19 +2777,22 @@ class SettingsEditor {
   constructor() { this.mode = editorPref; this.values = {}; this.saved = {}; this.schema = {}; this.yaml = ''; this.error = ''; this.notice = ''; }
   load(j) { this.schema = j.schema; this.saved = {...j.settings}; this.values = {...j.settings}; this.error = this.notice = ''; this.dirty = false; }
   toYaml(values = this.values) {
-    const d = this.device || {};
-    return ['device:', `  name: ${d.name || ''}`, `  app: ${d.app || ''}`, `  version: ${d.version || ''}`, 'settings:',
-      ...Object.keys(this.schema).map(k => `  ${k}: ${values[k] ?? this.schema[k].default}`)].join('\n');
+    return ['settings:', ...Object.keys(this.schema).map(k =>
+      `  ${k}: ${values[k] ?? this.schema[k].default}`)].join('\n');
   }
-  // Only the settings: block is read; the rest is what the device reports
   fromYaml(text) {
-    const out = {};
-    let inside = false;
-    for (const line of text.split('\n')) {
-      if (/^\S/.test(line)) { inside = /^settings:\s*(#.*)?$/.test(line); continue; }
-      const m = inside && line.match(/^\s+([a-z_][a-z0-9_]*):\s*(.*?)\s*(#.*)?$/);
-      if (m) out[m[1]] = m[2].replace(/^["']|["']$/g, '');
+    const out = Object.create(null);
+    const lines = text.split('\n').filter(line => !/^\s*(?:#.*)?$/.test(line));
+    if (!/^settings:\s*(?:#.*)?$/.test(lines.shift() || '')) throw new Error(t('settingsYamlBlock'));
+    for (const line of lines) {
+      const m = /^  ([a-z_][a-z0-9_]*):\s*(.*?)(?:\s+#.*)?\s*$/.exec(line);
+      if (!m) throw new Error(t('settingsYamlBlock'));
+      const [, key, raw] = m;
+      if (!Object.hasOwn(this.schema, key)) throw new Error(t('settingsUnknown', key));
+      if (Object.hasOwn(out, key)) throw new Error(t('settingsYamlDuplicate', key));
+      out[key] = raw.replace(/^["']|["']$/g, '');
     }
+    if (Object.keys(out).length !== Object.keys(this.schema).length) throw new Error(t('settingsYamlMissing'));
     return out;
   }
   check(values) {
@@ -2829,18 +2835,26 @@ class SettingsEditor {
   set(k, v) { this.values[k] = v; this.error = this.notice = ''; this.render(); }
   setYaml(text) {
     this.yaml = text;
-    if (this.dirty) return;
-    this.dirty = true;
+    this.dirty = text.trim() !== this.toYaml().trim();
     this.notice = '';
-    $('#setSave').disabled = this.busy || !!bridgeEditor?.busy;
-    $('#setSave').classList.add('pri');
+    const save = $('#setSave');
+    const changed = this.changed();
+    save.disabled = !changed || this.busy || !!bridgeEditor?.busy;
+    save.classList.toggle('pri', changed);
   }
   changed() {
-    if (this.mode === 'yaml') return !!this.dirty;
-    return Object.keys(this.schema).some(k => String(this.values[k] ?? this.schema[k].default) !== String(this.saved[k] ?? this.schema[k].default));
+    let values = this.values;
+    if (this.mode === 'yaml') {
+      try { values = this.check(this.fromYaml(this.yaml)); }
+      catch (e) { return !!this.dirty; }
+    }
+    return Object.keys(this.schema).some(k => String(values[k] ?? this.schema[k].default) !== String(this.saved[k] ?? this.schema[k].default));
   }
   async save() {
     if (this.busy || bridgeEditor?.busy || !this.changed() || openId !== this.proxy) return;
+    let values;
+    try { values = this.mode === 'yaml' ? this.check(this.fromYaml(this.yaml)) : this.check(this.values); }
+    catch (e) { this.error = e.message; this.render(); return; }
     this.busy = true;
     bridgeEditor?.sync();
     if (!await confirmAction(t('applyConfigTitle', this.device.name),
@@ -2852,7 +2866,6 @@ class SettingsEditor {
     this.error = this.notice = '';
     this.render();
     try {
-      const values = this.mode === 'yaml' ? this.check(this.fromYaml(this.yaml)) : this.check(this.values);
       const changed = Object.keys(values).filter(k => String(values[k]) !== String(this.saved[k]));
       for (const k of changed) {
         const reply = (await proxyCommand(this.proxy, `settings set ${k} ${values[k]}`)).trim();
@@ -2862,6 +2875,7 @@ class SettingsEditor {
       Object.assign(this.saved, values); Object.assign(this.values, values);
       this.notice = changed.length ? t('settingsSaved') : t('settingsSame');
       this.dirty = false;
+      this.yaml = this.toYaml();
       if (changed.length && this.beds) this.refreshBeds(this.proxy, Date.now() + 120000);
     } catch (e) { this.error = e.message; }
     this.busy = false;

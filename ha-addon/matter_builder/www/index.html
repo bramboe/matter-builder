@@ -129,6 +129,8 @@ button.spec-name{min-width:0;flex:1 1 160px;justify-content:flex-start;text-alig
 .firmware-packets .row{flex-wrap:wrap;gap:4px 16px}
 .firmware-packets .row dt{flex:1 0 140px}
 .firmware-packets .row dd{min-width:0}
+.firmware-packets input{width:min(100%,420px);padding:10px;border:1px solid var(--control);border-radius:8px;background:var(--fill);color:var(--fg)}
+.firmware-packets .row dd:has(input){flex:1 1 300px}
 
 .device-config-page button.pri{background:var(--editor-action);color:var(--on-primary)}
 #settingsPage .dlg-body{display:grid;gap:12px}
@@ -3046,42 +3048,40 @@ async function openFirmwareEditor() {
   }
 }
 
-// These packets are verified against the protocol vectors and bridge driver at
-// this source revision. Device-specific builds from it only change the two
-// reported settings and retain the same packet encoders.
-function bridgePacketReference(build) {
-  const revision = 'f6a1cb819667756025a5bdca35bb8aa894b6fe84';
-  if (build.revision !== revision) return `<section class="device-settings-card">
+function bridgePacketFields(build, packets) {
+  if (!packets) return `<section class="device-settings-card">
     <h3>Bluetooth commands</h3>
-    <p class="sub">A verified command reference is unavailable for this firmware revision.</p>
+    <p class="sub">Packet editing is unavailable for this firmware revision.</p>
   </section>`;
-  const row = (label, bytes) => `<div class="row"><dt>${label}</dt><dd><code class="mono">${bytes}</code></dd></div>`;
-  const sourceUrl = `https://github.com/bramboe/matter-builder/tree/${revision}/components`;
+  const row = (label, key) => `<div class="row"><dt><label for="packet-${key}">${label}</label></dt>
+    <dd><input class="mono" id="packet-${key}" data-packet="${key}" type="text" spellcheck="false"
+      autocomplete="off" autocapitalize="off" required maxlength="191" value="${esc(packets[key].match(/../g).join(' '))}"></dd></div>`;
+  const sourceUrl = `https://github.com/bramboe/matter-builder/tree/${build.revision}/components`;
   return `<section class="device-settings-card firmware-packets">
     <h3>Bluetooth commands</h3>
-    <p class="sub">Built-in commands from the running firmware. Packets are shown in hexadecimal.</p>
+    <p class="sub">Edit the complete hexadecimal packets, including their framing, length and checksum. The ESP32 uses the new bytes after you build and upload.</p>
     <p class="sub">Service <code>FFE0</code> · Command and notification characteristic <code>FFE1</code></p>
     <h4>Movement</h4>
     <p class="sub">While moving, the firmware sends a command every 375 ms. It sends Stop when movement ends.</p>
     <dl>
-      ${row('Head up', '40 02 70 00 01 0B 02 40')}
-      ${row('Head down', '40 02 71 00 01 0A 02 40')}
-      ${row('Legs up', '40 02 70 00 01 09 04 40')}
-      ${row('Legs down', '40 02 71 00 01 08 04 40')}
-      ${row('Head and legs up', '40 02 70 00 01 07 06 40')}
-      ${row('Head and legs down', '40 02 71 00 01 06 06 40')}
-      ${row('Stop', '40 02 73 00 00 0B 40')}
+      ${row('Head up', 'head_up')}
+      ${row('Head down', 'head_down')}
+      ${row('Legs up', 'legs_up')}
+      ${row('Legs down', 'legs_down')}
+      ${row('Head and legs up', 'both_up')}
+      ${row('Head and legs down', 'both_down')}
+      ${row('Stop', 'stop')}
     </dl>
     <h4>Under-bed light</h4>
     <p class="sub">${build.light_enabled ? 'Enabled' : 'Disabled'} in the running firmware.</p>
     <dl>
-      ${row('Light on', '40 20 72 00 08 DE 00 01 02 01 01 01 01 01 40')}
-      ${row('Light off', '40 20 72 00 08 DF 00 01 02 01 01 01 01 00 40')}
+      ${row('Light on', 'light_on')}
+      ${row('Light off', 'light_off')}
     </dl>
     <h4>Connection</h4>
     <dl>
       <div class="row"><dt>Authenticate and keep alive</dt><dd>Command ID <code class="mono">20 43</code> · PIN payload hidden</dd></div>
-      ${row('Read bed capabilities', '40 20 71 00 00 EF 40')}
+      ${row('Read bed capabilities', 'capabilities')}
     </dl>
     <p class="sub"><a href="${sourceUrl}/octo_protocol/octo_protocol.cpp" target="_blank" rel="noopener">Packet encoders</a>
       · <a href="${sourceUrl}/octo_core/bed_link.cpp" target="_blank" rel="noopener">Bluetooth driver</a></p>
@@ -3099,28 +3099,37 @@ async function showFirmwareEditor(proxy) {
     const result = await api(endpoint);
     if (result.error) throw new Error(result.error);
     if (pageTask?.content !== page) return;
-    const {build, toolchain} = result;
+    const {build, packets, toolchain} = result;
     $('#taskSubtitle').textContent = `Octo bed bridge · ${build.version}`;
     $('#taskSubtitle').hidden = false;
-    page.innerHTML = `<form class="device-settings-card">
+    page.innerHTML = `<form><section class="device-settings-card">
       <h3>Bluetooth firmware settings</h3>
       <p class="sub">From the running build. A new version is built locally and uploaded to this ESP32.</p>
       <label class="field"><span>Connection keep-alive (seconds)</span>
         <input name="interval" type="number" min="15" max="25" step="0.001" required value="${build.keepalive_ms / 1000}"></label>
       <div class="row"><label class="switch" style="flex:1"><span>Enable under-bed light command</span>
         <input name="light" type="checkbox" ${build.light_enabled ? 'checked' : ''}></label></div>
+    </section>
+    ${bridgePacketFields(build, packets)}
+    <section class="device-settings-card">
       <p class="notice" role="status">${toolchain ? '' : 'Install the build toolchain in Settings to build and upload.'}</p>
       <p class="error" role="alert" hidden></p>
       <div class="actions"><button class="pri" type="submit" disabled>Build &amp; upload</button></div>
-    </form>
-    ${bridgePacketReference(build)}`;
+    </section></form>`;
     const form = page.querySelector('form'), button = form.querySelector('button');
     const notice = form.querySelector('.notice'), error = form.querySelector('.error');
+    const packetInputs = [...form.querySelectorAll('[data-packet]')];
+    let submitted = false;
     const values = () => ({keepalive_ms: Math.round(form.elements.interval.valueAsNumber * 1000),
-      light_enabled: Number(form.elements.light.checked)});
+      light_enabled: Number(form.elements.light.checked),
+      ...(packets && {packets: Object.fromEntries(packetInputs.map(input =>
+        [input.dataset.packet, input.value.replace(/\s/g, '').toUpperCase()]))})});
+    const changedPackets = next => packetInputs.filter(input =>
+      next.packets[input.dataset.packet] !== packets[input.dataset.packet]);
     const sync = () => {
       const next = values();
-      dirty = next.keepalive_ms !== build.keepalive_ms || next.light_enabled !== build.light_enabled;
+      dirty = !submitted && (next.keepalive_ms !== build.keepalive_ms ||
+        next.light_enabled !== build.light_enabled || changedPackets(next).length > 0);
       button.disabled = busy || !toolchain || !dirty || !form.checkValidity();
     };
     form.oninput = sync;
@@ -3131,6 +3140,8 @@ async function showFirmwareEditor(proxy) {
       const changes = [];
       if (next.keepalive_ms !== build.keepalive_ms) changes.push(`Connection keep-alive: ${build.keepalive_ms / 1000} → ${next.keepalive_ms / 1000} seconds.`);
       if (next.light_enabled !== build.light_enabled) changes.push(`Under-bed light command: ${next.light_enabled ? 'enabled' : 'disabled'}.`);
+      const changed = changedPackets(next);
+      if (changed.length) changes.push(`Bluetooth packets changed: ${changed.map(input => input.labels[0].textContent).join(', ')}.`);
       if (!await confirmAction(`Build & upload to ${proxy.name}?`, changes.join(' ') + ' The device restarts after upload.', 'Build & upload')) return;
       if (pageTask?.content !== page) return;
       busy = true;
@@ -3140,7 +3151,8 @@ async function showFirmwareEditor(proxy) {
         const response = await api(endpoint, {base: build, ...next});
         if (!response.started) throw new Error(response.error || 'Another job is running.');
         dirty = false;
-        form.elements.interval.disabled = form.elements.light.disabled = true;
+        submitted = true;
+        for (const input of form.querySelectorAll('input')) input.disabled = true;
         notice.textContent = 'Build and upload started. Follow progress in the task bar.';
         await refresh();
         await loadJob();

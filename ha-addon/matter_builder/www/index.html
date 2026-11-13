@@ -1130,7 +1130,7 @@ function deviceCard(p) {
     : work ? `<span class="chip">${t('updateQueued')}</span>` : statusChip(s);
   return `<div class="card"${work && !work.queued ? ' aria-busy="true"' : ''}>
     <div class="head"><span class="ico">${appIcon(r ? r.app : p.app)}</span><div class="info"><h3>${esc(p.name)}</h3>
-      ${r ? `<div class="sub">${esc(appTitle(r.app))} ${esc(r.version)}${netName(r) ? ' · ' + esc(netName(r)) : ''}</div>`
+      ${r ? `<div class="sub">${esc(appTitle(r.app))} ${esc(r.version)}</div>`
         : s ? `<div class="sub mono" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(p.host)}">${esc(p.host)}</div>`
         : '<span class="skel" style="width:70%;margin-top:6px"></span>'}</div>${chip}</div>
     ${work && !work.queued ? `<div class="cardwork"><div class="sub">${esc(work.phase.replace(/^Update .+ with /, ''))}</div>
@@ -1138,8 +1138,8 @@ function deviceCard(p) {
     <div class="meta">
       ${s && !s.ok && !s.auth ? `<div class="sub">${t('notReachable')}</div>` : ''}
       ${what ? `<div class="sub">${esc(what)}</div>` : ''}
-      ${r ? needChips(needs(s.io ? (s.io.bluetooth === 'on' || s.io.slots.some(c => isBle(c.type)) ? ['bluetooth'] : [])
-        : (pkgOf(r.app) || {}).requires, /^thread/.test(r.net) ? 'thread' : /^wifi|^configuration/.test(r.net) ? 'wifi' : null)) : ''}
+      ${r ? protocolIcons(needs(s.io ? (s.io.bluetooth === 'on' || s.io.slots.some(c => isBle(c.type)) ? ['bluetooth'] : [])
+        : (pkgOf(r.app) || {}).requires, /^thread/.test(r.net) ? 'thread' : /^wifi|^configuration/.test(r.net) ? 'wifi' : null), `device-${p.id}`) : ''}
     </div>
     <div class="acts">
       ${up ? `<button class="text" onclick="updateProxy('${p.id}', '${esc(up)}')" ${state.job.running ? 'disabled' : ''}>${t('updateTo', fileVersion(up))}</button>` : ''}
@@ -1961,7 +1961,7 @@ function catalogCompatibility(it, variants) {
 const catalogBoardNotice = it => `<div class="sub">${t(it.custom_build ? 'catalogCustomBuild' : 'catalogBoardsUnknown')}</div>`;
 
 function catalogCompatibilityHtml(it, {labels, boards, experimental}) {
-  return `${catalogProtocolIcons(labels, 'item')}
+  return `${protocolIcons(labels, 'item')}
     ${boards.length ? `<div class="sub"><b>${t('catalogBoards')}</b> · ${esc(boards.join(', '))}</div>` : ''}
     ${experimental.length ? `<div class="sub"><b>${t('catalogExperimental')}</b> · ${esc(experimental.join(', '))}</div>` : ''}
     ${!boards.length && !experimental.length ? catalogBoardNotice(it) : ''}`;
@@ -1985,19 +1985,20 @@ function catalogTip(id, glyph, label, description = label, style = '') {
     <span id="${id}" role="tooltip">${esc(description)}</span></span>`;
 }
 
-const CATALOG_PROTOCOL_ICONS = new Map([
+const PROTOCOL_ICONS = new Map([
   [NET_NAMES.wifi, {glyph: 'wifi'}],
   [NET_NAMES.thread, {glyph: 'thread'}],
+  ['Bluetooth', {glyph: 'bluetooth', style: 'required'}],
   [t('catalogBle'), {glyph: 'bluetooth', style: 'required'}],
   [t('catalogBleOptional'), {glyph: 'bluetooth', style: 'optional'}],
 ]);
 
-function catalogProtocolIcons(labels, id, extra = '') {
-  const badges = labels.filter(label => CATALOG_PROTOCOL_ICONS.has(label)).map((label, index) => {
-    const {glyph, style} = CATALOG_PROTOCOL_ICONS.get(label);
-    return catalogTip(`catalog-protocol-${id}-${index}`, glyph, label, label, style);
+function protocolIcons(labels, id, extra = '') {
+  const badges = labels.filter(label => PROTOCOL_ICONS.has(label)).map((label, index) => {
+    const {glyph, style} = PROTOCOL_ICONS.get(label);
+    return catalogTip(`protocol-${esc(id)}-${index}`, glyph, label, label, style);
   });
-  return needChips(labels.filter(label => !CATALOG_PROTOCOL_ICONS.has(label)), badges.join('') + extra);
+  return needChips(labels.filter(label => !PROTOCOL_ICONS.has(label)), badges.join('') + extra);
 }
 
 function catalogBoardTooltip(names, i) {
@@ -2027,7 +2028,7 @@ function catalogCard(it, i) {
     <div class="head"><span class="ico">${it.kind === 'firmware' ? appIcon(it.app) : icon('recipe')}</span>
       <div class="info"><h3>${esc(it.title)}</h3><div class="sub">${it.kind === 'firmware' ? esc(it.version || '') : t('recipe')} · ${esc(it.maker || (it.source || '').split('/')[0])}</div></div></div>
     <div class="meta"><div class="sub">${esc(catalogDescription(it))}</div>
-      ${catalogProtocolIcons(labels, i, supported.length ? catalogBoardTooltip(supported, i) : '')}
+      ${protocolIcons(labels, i, supported.length ? catalogBoardTooltip(supported, i) : '')}
       ${supported.length ? '' : catalogBoardNotice(it)}</div>
     <div class="acts">${badge(it)}<span class="grow"></span>${it.stars ? `<span class="sub">★ ${it.stars}</span>` : ''}</div></div>`;
 }

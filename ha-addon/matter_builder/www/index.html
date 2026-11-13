@@ -93,8 +93,8 @@ button.spec-name{min-width:0;flex:1 1 160px;justify-content:flex-start;text-alig
 .spec-builds>.card{gap:12px}
 .spec-build-list{margin-top:4px}
 #specEditor{max-width:960px;margin:0 auto}
-#specEditor,.spec-editor-bar{--editor-action:#006985;--mute:#555}
-@media (prefers-color-scheme:dark){#specEditor,.spec-editor-bar{--editor-action:#75d7f1;--mute:#bdbdbd}}
+#specEditor,.spec-editor-bar,.device-config-page{--editor-action:#006985;--mute:#555}
+@media (prefers-color-scheme:dark){#specEditor,.spec-editor-bar,.device-config-page{--editor-action:#75d7f1;--mute:#bdbdbd}}
 .spec-editor-bar h1{display:block;flex:1 1 120px;min-width:0;overflow-wrap:anywhere}
 @media (max-width:640px){header .spec-editor-bar>button{margin-bottom:0}}
 .task-page{width:min(100%,1080px);margin:0 auto}
@@ -102,6 +102,21 @@ button.spec-name{min-width:0;flex:1 1 160px;justify-content:flex-start;text-alig
 .task-page > section > .dlg > .dlg-body{overflow:visible}
 .task-page > section > .dlg > .dlg-head{display:none}
 .task-page .dlg-body{padding:16px 0}
+.device-config-page .tabs{margin:0}
+.device-config-page .tabs button.on{color:var(--editor-action);border-bottom-color:var(--editor-action)}
+.device-config-page .seg button.on{color:var(--editor-action)}
+.device-config-page .ed-add{background:var(--fill);border:0;color:var(--editor-action)}
+.device-config-page .ed-add:hover{background:var(--chip)}
+.device-config-page .ed-section:first-child{margin-top:0}
+.device-settings-card{background:var(--card);border-radius:var(--radius);padding:16px;margin-bottom:12px}
+.device-settings-card h3{margin:0 0 8px}
+.device-settings-card .row{border:0;padding:8px 0}
+.device-settings-card .row + .row{border-top:1px solid var(--line)}
+.device-settings-card .switch{justify-content:space-between;min-height:44px;color:var(--fg)}
+.device-settings-card .switch input{flex:none;accent-color:var(--editor-action,var(--primary))}
+.device-settings-card a:not(.button){color:var(--editor-action,var(--primary))}
+.device-settings-card .actions{justify-content:flex-end}
+.device-config-page button.pri{background:var(--editor-action);color:var(--card)}
 #settingsPage .dlg-body{display:grid;gap:12px}
 #settingsPage .settings-section{background:var(--card);padding:16px;border-radius:var(--radius)}
 #settingsPage h3{margin-top:0}
@@ -114,7 +129,7 @@ button.spec-name{min-width:0;flex:1 1 160px;justify-content:flex-start;text-alig
 #specEditor .ed-add:hover{background:var(--chip)}
 #specEditor .seg button.on{color:var(--editor-action)}
 .spec-editor-bar button.pri{background:var(--editor-action);color:var(--card)}
-:is(#specEditor,.spec-editor-bar) :is(button,summary,input,select,textarea):focus-visible{outline:2px solid var(--editor-action);outline-offset:2px}
+:is(#specEditor,.spec-editor-bar,.device-config-page) :is(button,summary,input,select,textarea):focus-visible{outline:2px solid var(--editor-action);outline-offset:2px}
 
 #catalogView{margin-inline-start:auto}
 @media (max-width:599px){#catalogView{margin-inline-start:0}}
@@ -515,7 +530,7 @@ dialog.side{max-width:100vw}
           <div class="notice" id="recipeNotice" hidden></div>
           <div id="devEditor"></div>
           <div class="sub" data-t="manageHelp" style="margin-top:12px"></div>
-          <div class="error" id="mError" hidden></div>
+          <div class="error" id="mError" role="alert" hidden></div>
           <div class="notice" id="mNotice" hidden></div>
           <div class="actions end"><button class="plain" id="mSaveConfig" data-t="saveConfig"></button><span class="grow"></span><button id="mSave" data-t="saveDraft"></button>
             <button class="pri" id="mApply" data-t="applyRestart" hidden></button>
@@ -767,7 +782,7 @@ const TEXT = {
     ir_send: 'An IR LED (through a transistor) sends this code. Appears as a switch that sends it and turns itself off. Codes of the same LED share its pin.',
     ir_receive: 'An IR receiver sees this code. Appears as a button: a press each time. Codes of the same receiver share its pin.',
     ble_sensor: 'A thermometer that broadcasts its readings (BTHome, or Xiaomi with pvvx/ATC firmware). No wires.',
-    ble_presence: 'A Bluetooth tag with a fixed address: present while it was seen in the last minute. Phones change their address, so they do not work.'}, deviceName: 'Device name', addConnection: 'Add connection', saveDraft: 'Save', applyRestart: 'Apply (restart)', keep: 'Keep',
+    ble_presence: 'A Bluetooth tag with a fixed address: present while it was seen in the last minute. Phones change their address, so they do not work.'}, deviceName: 'Device name', addConnection: 'Add connection', saveDraft: 'Save draft', applyRestart: 'Apply & restart', keep: 'Keep',
   manageHelp: 'Saving keeps the changes as a draft on the device. Applying restarts it with them on trial: keep them within 2 minutes, or it goes back by itself.',
   slot: 'Connection', type: 'Type', pin: 'Pin', scl: 'SCL', inverted: 'Inverted', remove: 'Remove', name: 'Name',
   types: {relay: 'Relay', led: 'LED', button: 'Push button', contact: 'Contact', motion: 'Motion sensor', sht4x: 'SHT4x',
@@ -1711,10 +1726,15 @@ class ConfigEditor {
     this.row(slot).group = group;
     this.changed();
   }
-  renameGroup(from, to) {
+  renameGroup(from, to, field) {
     to = to.trim().replace(/["\\]/g, '').slice(0, 23);
     if (!to || to === from) { this.render(); return; }
-    if (groupNames(this.rows).includes(to)) { toast(t('groupExists', to)); this.render(); return; }
+    if (groupNames(this.rows).includes(to)) {
+      const error = field.parentElement.querySelector('.group-error');
+      error.textContent = t('groupExists', to);
+      field.setAttribute('aria-invalid', 'true');
+      return;
+    }
     this.rows.forEach(r => { if (r.group === from) r.group = to; });
     this.changed();
   }
@@ -1729,7 +1749,8 @@ class ConfigEditor {
     const ref = this.ref, names = groupNames(this.rows), zone = (group, inner, extra = '') =>
       `<div class="ed-group" ${extra} ondragover="${ref}.dragOver(event, this)" ondragleave="this.classList.remove('over')" ondrop="${ref}.drop(event, this, ${group === null ? 'null' : `'${esc(group)}'`})">${inner}</div>`;
     const groups = names.map(g => zone(g, `<div class="ed-group-head"><span class="ico">${icon('group')}</span>
-        <input value="${esc(g)}" maxlength="23" aria-label="${t('groupName')}" onchange="${ref}.renameGroup('${esc(g)}', this.value)">
+        <input value="${esc(g)}" maxlength="23" aria-label="${t('groupName')}" oninput="this.removeAttribute('aria-invalid'); this.parentElement.querySelector('.group-error').textContent = ''"
+          onchange="${ref}.renameGroup('${esc(g)}', this.value, this)"><span class="group-error sub warnText" role="status"></span>
         <span class="sub">${t('groupHelpShort')}</span></div>
         ${this.rows.filter(r => r.group === g).map(r => this.card(r)).join('')}
         <div class="ed-drop">${t('dropHere')}</div>`)).join('');
@@ -2471,7 +2492,7 @@ function openTask({title, content, cleanup, blocked, dirty, after}, context = la
     $('#taskPage').append(content);
     content.hidden = false;
     $('#taskTitle').textContent = title;
-    $('#taskBack').disabled = false;
+    $('#taskBack').disabled = !!blocked?.();
     showTab('task');
     $('#taskTitle').focus();
   } else showTab('config-editor');
@@ -2793,8 +2814,9 @@ class SettingsEditor {
     const v = this.values[k] ?? f.default;
     const on = `onchange="setEditor.set('${k}', this.type === 'checkbox' ? this.checked : this.value)"`;
     let input;
-    if (f.type === 'bool') input = `<input type="checkbox" ${v ? 'checked' : ''} ${on}>`;
-    else if (f.options || (f.type === 'int' && f.max - f.min <= 8)) {
+    if (f.type === 'bool') return `<div class="row"><label class="switch" style="flex:1"><span>${esc(f.title || k)}</span>
+      <input type="checkbox" ${v ? 'checked' : ''} ${on}></label></div>`;
+    if (f.options || (f.type === 'int' && f.max - f.min <= 8)) {
       const opts = f.options || Array.from({length: f.max - f.min + 1}, (_, i) => String(f.min + i));
       input = `<select ${on}>${opts.map(o => `<option ${String(v) === o ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
     } else input = `<input ${f.type === 'int' ? `type="number" min="${f.min ?? ''}" max="${f.max ?? ''}"` : ''} value="${esc(String(v))}" ${on}>`;
@@ -2805,16 +2827,16 @@ class SettingsEditor {
     const head = `<div class="ed-head"><span class="grow"></span><div class="seg" style="margin:0">
         <button class="${this.mode === 'visual' ? 'on' : ''}" onclick="setEditor.setMode('visual')">${t('visualEditor')}</button>
         <button class="${this.mode === 'yaml' ? 'on' : ''}" onclick="setEditor.setMode('yaml')">YAML</button></div></div>`;
-    const help = `<div class="sub" style="margin:2px 2px 10px">${t('settingsHelp')}</div>`;
+    const help = `<p class="sub" style="margin:0 0 12px">${t('settingsHelp')}</p>`;
     const body = this.mode === 'yaml'
       ? `${yamlEditor(this.yaml, 'setEditor.setYaml(this.value)', '160px', this.toYaml(this.saved))}<div class="sub">${t('settingsYamlHelp')}</div>`
       : Object.entries(this.schema).map(([k, f]) => this.field(k, f)).join('');
-    const beds = (this.beds || []).length ? `<div class="ed-section"><h3>${t('bedsLabel')}</h3></div>
+    const beds = (this.beds || []).length ? `<section class="device-settings-card"><h3>${t('bedsLabel')}</h3>
       ${this.beds.map(b => `<div class="row"><span class="ico">${icon('bed')}</span><div class="label">${esc(b.name || t('bedN', b.index + 1))}
         <div class="sub">${esc(b.state || '')}${b.rssi ? ` · ${b.rssi} dBm` : ''}</div></div></div>`).join('')}
-      <div class="sub" style="margin:4px 2px 12px">${t('bedsHelp')} <a href="${esc(this.page || '#')}">${t('openPage')}</a></div>` : '';
-    this.host.innerHTML = `${head}${beds}${help}${body}${this.error ? `<div class="error">${esc(this.error)}</div>` : ''}${this.notice ? `<div class="notice">${esc(this.notice)}</div>` : ''}
-      <div class="actions"><button id="setSave" class="${this.changed() ? 'pri' : ''}" onclick="setEditor.save()" ${this.busy || !this.changed() ? 'disabled' : ''}>${this.busy ? t('saving') : t('save')}</button></div>`;
+      <div class="sub" style="margin-top:8px">${t('bedsHelp')} <a href="${esc(this.page || '#')}">${t('openPage')}</a></div></section>` : '';
+    this.host.innerHTML = `${head}${beds}<section class="device-settings-card"><h3>${t('settingsLabel')}</h3>${help}${body}${this.error ? `<div class="error">${esc(this.error)}</div>` : ''}${this.notice ? `<div class="notice">${esc(this.notice)}</div>` : ''}
+      <div class="actions"><button id="setSave" class="${this.changed() ? 'pri' : ''}" onclick="setEditor.save()" ${this.busy || !this.changed() ? 'disabled' : ''}>${this.busy ? t('saving') : t('save')}</button></div></section>`;
   }
 }
 const setEditor = new SettingsEditor();
@@ -2849,7 +2871,10 @@ async function openDevice(id, which, recipe) {
   catch (e) {
     if (requestId === deviceRequest) toast(e.message);
   } finally {
-    if (requestId === deviceRequest) deviceBusy = false;
+    if (requestId === deviceRequest) {
+      deviceBusy = false;
+      if (pageTask?.content?.contains($('#dConnections'))) $('#taskBack').disabled = false;
+    }
   }
 }
 async function loadDeviceConfiguration(id, requestId, which, recipe) {
@@ -2905,6 +2930,7 @@ function openDevicePage() {
   const context = deviceContext || launchContext();
   if (dialog.open) dialog.close();
   const page = document.createElement('section');
+  page.className = 'device-config-page';
   page.append(panel);
   openTask({title: state.proxies.find(p => p.id === openId)?.name, content: page,
     dirty: () => $('#mSave').classList.contains('pri') || setEditor.changed() && !!managed?.settings,
@@ -3372,6 +3398,7 @@ async function saveManage() {
   if (deviceBusy || !managed?.io) return;
   deviceBusy = true;
   try { await saveManageNow(); }
+  catch (e) { $('#mError').textContent = e.message; $('#mError').hidden = false; }
   finally { deviceBusy = false; }
 }
 async function saveManageNow() {
@@ -3505,9 +3532,8 @@ function openWizard(step, host, extra) {
     cleanup: () => { clearTimeout(wiz?.linkTimer); wiz = null; },
     blocked: () => wiz?.step === 'install' && !wiz.error || wiz?.apply?.state === 'applying',
     dirty: () => !!wiz?.editorDirty,
-    after: () => { if (wizReturn) wizReturn(); }
+    after: extra?.returnToItem
   }, extra?.context);
-  const wizReturn = extra?.returnToItem;
   if (!specs) loadSpecs().then(renderWizard);
   if (!catalogData && !recipes) loadCatalog().then(renderWizard);
 }

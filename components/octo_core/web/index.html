@@ -437,7 +437,7 @@ const TEXT = {
     accessTitle: 'Programs with access', accessHelp: 'Programs such as the Home Assistant add-on get a key of their own. They ask with this password and need a press of the BOOT button.', accessNone: 'No programs linked.', accessPending: (n, s) => `${n} asks for access: press the BOOT button briefly (${s} s left).`, revoke: 'Revoke', confirmRevoke: n => `Revoke the access of ${n}?`, pairAfterConfig: 'Pairing works once the bridge is back on Thread.',
     pairFirst: 'Not paired yet. Scan the code in Home Assistant (Add Matter device) or in Apple Home.',
     disconnect: 'Disconnect', confirmDisconnect: v => `Disconnect ${v}? The beds disappear there until you pair again.`,
-    confirmRestart: 'Restart?', hours: 'h',
+    restart: 'Restart', confirmRestart: 'Restart?', hours: 'h',
     waiting: 'Connecting to the bed…', waitingHelp: 'Keep the bed in range and turn off the OCTO app and other bridges: a bed accepts only one connection. The controls appear once the bed has accepted the PIN.', pinRefused: 'The bed refused the PIN. Remove the bed and add it again with the right PIN.',
   },
   nl: {
@@ -490,7 +490,7 @@ const TEXT = {
     accessTitle: 'Programma’s met toegang', accessHelp: 'Programma’s zoals de Home Assistant-add-on krijgen een eigen sleutel. Ze vragen die aan met dit wachtwoord en een druk op de BOOT-knop.', accessNone: 'Geen programma’s gekoppeld.', accessPending: (n, s) => `${n} vraagt toegang: druk kort op de BOOT-knop (nog ${s} s).`, revoke: 'Intrekken', confirmRevoke: n => `Toegang van ${n} intrekken?`, pairAfterConfig: 'Koppelen kan zodra de bridge weer op Thread is.',
     pairFirst: 'Nog niet gekoppeld. Scan de code in Home Assistant (Matter-apparaat toevoegen) of in Apple Home.',
     disconnect: 'Loskoppelen', confirmDisconnect: v => `${v} loskoppelen? De bedden verdwijnen daar tot je opnieuw koppelt.`,
-    confirmRestart: 'Herstarten?', hours: 'u',
+    restart: 'Herstarten', confirmRestart: 'Herstarten?', hours: 'u',
     waiting: 'Verbinden met het bed…', waitingHelp: 'Houd het bed binnen bereik en zet de OCTO-app en andere bridges uit: een bed accepteert maar één verbinding. De bediening verschijnt zodra het bed de PIN heeft geaccepteerd.', pinRefused: 'Het bed weigerde de PIN. Verwijder het bed en voeg het opnieuw toe met de juiste PIN.',
   },
   de: {
@@ -543,7 +543,7 @@ const TEXT = {
     accessTitle: 'Programme mit Zugriff', accessHelp: 'Programme wie das Home-Assistant-Add-on erhalten einen eigenen Schlüssel. Sie fragen mit diesem Passwort und einem Druck auf die BOOT-Taste an.', accessNone: 'Keine Programme verbunden.', accessPending: (n, s) => `${n} bittet um Zugriff: BOOT-Taste kurz drücken (noch ${s} s).`, revoke: 'Entziehen', confirmRevoke: n => `Zugriff von ${n} entziehen?`, pairAfterConfig: 'Koppeln geht, sobald die Bridge wieder im Thread-Netz ist.',
     pairFirst: 'Noch nicht gekoppelt. Scannen Sie den Code in Home Assistant (Matter-Gerät hinzufügen) oder in Apple Home.',
     disconnect: 'Trennen', confirmDisconnect: v => `${v} trennen? Die Betten verschwinden dort, bis Sie erneut koppeln.`,
-    confirmRestart: 'Neu starten?', hours: 'Std.',
+    restart: 'Neu starten', confirmRestart: 'Neu starten?', hours: 'Std.',
     waiting: 'Verbinde mit dem Bett…', waitingHelp: 'Halten Sie das Bett in Reichweite und schalten Sie die OCTO-App und andere Bridges aus: Ein Bett akzeptiert nur eine Verbindung. Die Bedienung erscheint, sobald das Bett die PIN akzeptiert hat.', pinRefused: 'Das Bett hat die PIN abgelehnt. Entfernen Sie das Bett und fügen Sie es mit der richtigen PIN erneut hinzu.',
   },
   es: {
@@ -596,7 +596,7 @@ const TEXT = {
     accessTitle: 'Programas con acceso', accessHelp: 'Programas como el complemento de Home Assistant reciben una clave propia. La piden con esta contraseña y una pulsación del botón BOOT.', accessNone: 'Ningún programa vinculado.', accessPending: (n, s) => `${n} pide acceso: pulse brevemente el botón BOOT (quedan ${s} s).`, revoke: 'Revocar', confirmRevoke: n => `¿Revocar el acceso de ${n}?`, pairAfterConfig: 'La vinculación funciona cuando el puente vuelva a Thread.',
     pairFirst: 'Aún no vinculado. Escanee el código en Home Assistant (Añadir dispositivo Matter) o en Apple Home.',
     disconnect: 'Desvincular', confirmDisconnect: v => `¿Desvincular ${v}? Las camas desaparecen allí hasta que vuelva a vincular.`,
-    confirmRestart: '¿Reiniciar?', hours: 'h',
+    restart: 'Reiniciar', confirmRestart: '¿Reiniciar?', hours: 'h',
     waiting: 'Conectando con la cama…', waitingHelp: 'Mantenga la cama al alcance y apague la app OCTO y otros puentes: una cama solo acepta una conexión. Los controles aparecen cuando la cama haya aceptado el PIN.', pinRefused: 'La cama rechazó el PIN. Elimine la cama y vuelva a añadirla con el PIN correcto.',
   },
 };
@@ -860,7 +860,7 @@ function presetCard(b, p) {
       ${other && other.configured ? `<button ${dis} onclick="run('preset ${i} match')">${t('match', esc(other.name))}</button>` : ''}
     </div>
     <div class="row" style="flex-basis:100%;min-height:44px"><div class="label">${t('saveCurrent')}<div class="sub">${t('headLegs', p.head, p.legs)}</div></div>
-      ${[1, 2, 3].map(n => `<button class="text" onclick="if (confirm('${quote(t('confirmSave', n))}')) run('preset ${i} save ${n}')">${n}</button>`).join('')}
+      ${[1, 2, 3].map(n => `<button class="text" onclick="saveBedPreset(${i}, ${n})">${n}</button>`).join('')}
     </div></div>`;
 }
 
@@ -961,6 +961,10 @@ function toggleBedMenu(e, i) {
   menu.classList.toggle('open', open);
 }
 const closeMenus = () => document.querySelectorAll('.menu.open').forEach(m => m.classList.remove('open'));
+
+async function saveBedPreset(i, n) {
+  if (await deviceDecision(t('confirmSave', n), t('save'))) run(`preset ${i} save ${n}`);
+}
 
 async function renameBed(i, old) {
   const name = await deviceDecision(t('newName'), t('rename'), old);

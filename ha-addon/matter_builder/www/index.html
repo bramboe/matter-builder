@@ -619,6 +619,7 @@ const TEXT = {
   bleBrowse: 'Browse presets', bleManual: 'Set up manually', bleUsePreset: 'Use preset',
   bleUseNamedPreset: name => `Use preset: ${name}`,
   bleOctoPreset: 'Fills in the connection settings and eight remote commands for an Octo bed, including head and leg controls, stop and light. Add your bed’s Bluetooth address to connect.',
+  bleSwitchBotStripPreset: 'Fills in the settings for the SwitchBot LED Strip Light (W1701100) and six commands for power, red, green, blue and 50% brightness. Add your strip’s Bluetooth address to connect.',
   bleAddress: 'Bluetooth address', bleAddressHint: 'AA:BB:CC:DD:EE:FF', bleAddressType: 'Address type', blePublic: 'Public', bleRandom: 'Random',
   bleService: 'Service UUID', bleCharacteristic: 'Characteristic UUID', bleWrite: 'Write mode', bleWriteResp: 'With response', bleWriteNoResp: 'Without response',
   bleIdle: 'Disconnect after inactivity (s)', bleIdleHelp: '0 disconnects after each command. 3600 keeps the connection open.',
@@ -1430,7 +1431,7 @@ class ConfigEditor {
         <div class="ble-preset-list">
           ${Object.entries(BLE_TEMPLATES).map(([key, preset]) => `
             <div class="ble-preset">
-              <span class="ico" aria-hidden="true">${icon(preset.icon)}</span>
+              <span class="ico" aria-hidden="true">${preset.icon}</span>
               <div class="info"><b>${esc(preset.title)}</b><p class="sub">${esc(t(preset.description))}</p></div>
               <button aria-label="${esc(t('bleUseNamedPreset', preset.title))}" onclick="${ref}.bleStart('${key}')">${t('bleUsePreset')}</button>
             </div>`).join('')}
@@ -3044,11 +3045,25 @@ function octoPacket(c0, c1, data = []) {
   return out.map(b => b.toString(16).padStart(2, '0').toUpperCase()).join('');
 }
 const BLE_TEMPLATES = {
-  octo: {title: 'Octo bed', icon: 'bed', description: 'bleOctoPreset', service: 'FFE0', characteristic: 'FFE1', write: 'no-response', idle: 25,
+  octo: {title: 'Octo bed', icon: icon('bed'), description: 'bleOctoPreset', service: 'FFE0', characteristic: 'FFE1', write: 'no-response', idle: 25,
     commands: [['Head up', octoPacket(2, 0x70, [2]), 8, 375], ['Head down', octoPacket(2, 0x71, [2]), 8, 375],
       ['Legs up', octoPacket(2, 0x70, [4]), 8, 375], ['Legs down', octoPacket(2, 0x71, [4]), 8, 375],
       ['Both up', octoPacket(2, 0x70, [6]), 8, 375], ['Both down', octoPacket(2, 0x71, [6]), 8, 375],
       ['Stop', octoPacket(2, 0x73), 1, 0], ['Light on', octoPacket(0x20, 0x72, [0, 1, 2, 1, 1, 1, 1, 1]), 1, 0]]},
+  // SwitchBot LED Strip Light BLE API (W1701100), command 0x570F4901.
+  switchbotStrip: {
+    title: 'SwitchBot LED Strip Light', icon: typeIcon('led'), description: 'bleSwitchBotStripPreset',
+    service: 'CBA20D00-224D-11E6-9FB8-0002A5D5C51B', characteristic: 'CBA20002-224D-11E6-9FB8-0002A5D5C51B',
+    write: 'no-response', idle: 8,
+    commands: [
+      ['Turn on', '570F490101', 1, 0],
+      ['Turn off', '570F490102', 1, 0],
+      ['Red', '570F490116FF0000', 1, 0],
+      ['Green', '570F49011600FF00', 1, 0],
+      ['Blue', '570F4901160000FF', 1, 0],
+      ['Brightness 50%', '570F49011432', 1, 0],
+    ],
+  },
 };
 const bleEmpty = () => ({address: '', address_type: 'public', service: '', characteristic: '', write: 'response', idle: 30, commands: []});
 // From the device ("bledev json"): null when nothing is set

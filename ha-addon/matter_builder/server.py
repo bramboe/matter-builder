@@ -1911,7 +1911,7 @@ SETTING_SET = re.compile(r"settings set [a-z_][a-z0-9_]{0,31} [A-Za-z0-9_.:-]{1,
 
 def allowed(line):
     return line in ("io json", "json", "wifi json", "matter", "matter json", "matter open", "matter share", "matter close", "pairing", "pairing ble on",
-                    "pairing ble off", "reboot", "settings json", "system json", "bledev json", "events") or line.startswith(ALLOWED_COMMANDS) \
+                    "pairing ble off", "reboot", "settings json", "settings build", "system json", "bledev json", "events") or line.startswith(ALLOWED_COMMANDS) \
         or SETTING_SET.fullmatch(line) is not None
 
 
@@ -1939,7 +1939,8 @@ def update_all():
             continue
         status, system = command(proxy, "system")
         running = (system.split("\n")[0].split(": ")[-1].split(" (")[0] if status == 200 else "")
-        if running.endswith(" " + name.rsplit("-", 1)[-1].removesuffix(".bin")):
+        current_version = running.rsplit(" ", 1)[-1]
+        if running and version_key(f"x-{current_version}.bin") >= version_key(name):
             log(f"== {proxy['name']}: already on {running}")
             continue
         image = FIRMWARE / name if (FIRMWARE / name).is_file() else release_image(name)
@@ -1947,6 +1948,94 @@ def update_all():
             log("!! Stopped: the other proxies keep their firmware")
             return False
     log("== All proxies up to date")
+    return True
+
+
+def bridge_build_state(proxy):
+    """Read the build metadata from the linked ESP32 through its authorized command."""
+    address = resolve(proxy["host"]) or proxy["host"]
+    info = device_info(address)
+    if not info or info.get("app") != "octo_bridge" or info.get("chip") != "esp32c6" or info.get("network") != "thread":
+        raise ValueError("Connect a supported Octo bed bridge first.")
+    if not proxy.get("device_id") or info.get("id") != proxy["device_id"]:
+        raise ValueError("The responding ESP32 does not match this link.")
+    status, text = request(address, "/cmd", proxy["token"], b"settings build")
+    try:
+        build = json.loads(text) if status == 200 else None
+    except ValueError:
+        build = None
+    if (not isinstance(build, dict) or build.get("format") != 1 or build.get("version") != info.get("version")
+            or not re.fullmatch(r"[0-9a-f]{40}", str(build.get("revision", "")))):
+        raise ValueError("Install an official firmware version that includes its build configuration.")
+    interval, light = build.get("keepalive_ms"), build.get("light_enabled")
+    if type(interval) is not int or not 15000 <= interval <= 25000 or type(light) is not int or light not in (0, 1):
+        raise ValueError("The firmware reported unsupported Bluetooth settings.")
+    return info, build
+
+
+def bridge_build_and_upload(proxy, base, edits):
+    current = find_proxy(proxy["id"])
+    if not current or current.get("device_id") != proxy.get("device_id"):
+        raise ValueError("The linked ESP32 changed.")
+    _, running = bridge_build_state(current)
+    if running != base:
+        raise ValueError("Firmware changed. Open the editor again.")
+    folder = DATA / "device-firmware" / proxy["id"]
+    folder.mkdir(parents=True, exist_ok=True)
+    previous = [int(p.stem.split(".")[-1]) for p in folder.glob("1.99.*.json")
+                if re.fullmatch(r"1\.99\.\d{1,2}", p.stem)]
+    version = base["version"]
+    current_number = int(version.split(".")[-1]) if re.fullmatch(r"1\.99\.\d{1,2}", version) else 0
+    number = max([current_number, *previous]) + 1
+    if number > 99:
+        raise ValueError("This device has reached the limit of local firmware revisions.")
+    version = f"1.99.{number}"
+    manifest = folder / f"{version}.json"
+    revision = base["revision"]
+    if current_number:
+        saved = folder / f'{base["version"]}.json'
+        if not saved.is_file():
+            raise ValueError("The source record for this local build is missing.")
+        source_version = json.loads(saved.read_text())["official_version"]
+    else:
+        source_version = base["version"]
+    official = re.fullmatch(r"1\.0\.(\d{1,2})", source_version)
+    if not official:
+        raise ValueError("The source is not an official Octo bridge release.")
+    tag = f"v0.1.{official[1]}"
+    source_url = f"https://github.com/{DEFAULT_RELEASES_REPO}.git"
+    # A device reports the source hash, but only an official release tag can authorize a local build.
+    log(f"== Building Octo bed bridge {version} for {proxy['name']}")
+    with tempfile.TemporaryDirectory(prefix="bridge-build-", dir=folder) as tmp:
+        checkout = Path(tmp) / "source"
+        subprocess.run(["git", "init", "-q", str(checkout)], check=True)
+        subprocess.run(["git", "-C", str(checkout), "fetch", "--quiet", "--depth", "1",
+                        source_url, f"refs/tags/{tag}"], check=True, timeout=120)
+        subprocess.run(["git", "-C", str(checkout), "checkout", "--quiet", "--detach", "FETCH_HEAD"], check=True)
+        if subprocess.check_output(["git", "-C", str(checkout), "rev-parse", "HEAD"], text=True).strip() != revision:
+            raise ValueError("The firmware source revision did not match.")
+        manifest.write_text(json.dumps({"base": base, "configuration": edits, "version": version,
+                                        "official_version": source_version}) + "\n")
+        env = {"MB_SRC": str(checkout), "MB_SOURCE_REVISION": revision, "MB_CHIP": "esp32c6", "MB_NETWORK": "thread",
+               "MB_FIRMWARE_OUTPUT": tmp, "MB_BRIDGE_VERSION": version, "MB_BRIDGE_VERSION_NUMBER": str(19900 + number),
+               "MB_BRIDGE_KEEPALIVE_MS": str(edits["keepalive_ms"]), "MB_BRIDGE_LIGHT": str(edits["light_enabled"])}
+        if not run_script("build.sh", "bridge", env=env):
+            return False
+        current = find_proxy(proxy["id"])
+        if not current or current.get("device_id") != proxy.get("device_id"):
+            raise ValueError("The linked ESP32 changed during the build.")
+        info, running = bridge_build_state(current)
+        if running != base:
+            raise ValueError("Firmware changed during the build. Open the editor again.")
+        image = Path(tmp) / f"octo_bridge-{version}.bin"
+        if not info.get("slot") or not 0 < image.stat().st_size <= info["slot"]:
+            raise ValueError("The new firmware does not fit in this ESP32's update slot.")
+        if not update_proxy(current, image):
+            return False
+        _, deployed = bridge_build_state(current)
+        if deployed != {"format": 1, "version": version, "revision": revision, **edits}:
+            raise ValueError("The ESP32 did not report the expected firmware configuration after upload.")
+    log(f"== Verified firmware {version} on {proxy['name']}")
     return True
 
 
@@ -2675,6 +2764,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             proxy = find_proxy(parts[2])
             if not proxy:
                 return self.reply({"error": "unknown proxy"}, 404)
+            if parts[3] == "firmware-config":
+                try:
+                    _, build = bridge_build_state(proxy)
+                except ValueError as err:
+                    return self.reply({"error": str(err)}, 400)
+                return self.reply({"build": build, "toolchain": toolchain_ready()})
             if parts[3] == "status":
                 return self.reply(checked_status(proxy))
             if parts[3] == "logs":
@@ -2841,6 +2936,23 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if parts[3] == "auto":
                 remember(proxy, auto_update=bool(data.get("on")))
                 return self.reply({"ok": True, "auto_update": proxy.get("auto_update")})
+            if parts[3] == "firmware-config":
+                if not toolchain_ready():
+                    return self.reply({"error": "Install the build toolchain in Settings first."}, 400)
+                try:
+                    _, build = bridge_build_state(proxy)
+                except ValueError as err:
+                    return self.reply({"error": str(err)}, 400)
+                if data.get("base") != build:
+                    return self.reply({"error": "Firmware changed. Open the editor again."}, 409)
+                interval, light = data.get("keepalive_ms"), data.get("light_enabled")
+                if type(interval) is not int or not 15000 <= interval <= 25000 or type(light) is not int or light not in (0, 1):
+                    return self.reply({"error": "Choose a keep-alive interval between 15 and 25 seconds and a valid light setting."}, 400)
+                edits = {"keepalive_ms": interval, "light_enabled": light}
+                if all(build.get(k) == v for k, v in edits.items()):
+                    return self.reply({"error": "Change a firmware setting before building."}, 400)
+                started = start_job("update", proxy["name"], lambda: bridge_build_and_upload(proxy, build, edits))
+                return self.reply({"started": started})
             if parts[3] == "update":
                 name = Path(str(data.get("file", ""))).name
                 image = FIRMWARE / name

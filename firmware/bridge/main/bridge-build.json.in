@@ -1,0 +1,7 @@
+{
+  "format": 1,
+  "version": "@PROJECT_VER@",
+  "revision": "@MB_SOURCE_REVISION@",
+  "keepalive_ms": @MB_BRIDGE_KEEPALIVE_MS@,
+  "light_enabled": @MB_BRIDGE_LIGHT@
+}

@@ -17,8 +17,15 @@ set(EXTRA_COMPONENT_DIRS
 # Shown to controllers as the software version. PROJECT_VER_NUMBER goes into
 # the Matter OTA image header and must equal CONFIG_DEVICE_SOFTWARE_VERSION_NUMBER,
 # the version the device reports: an update is only taken when it is higher.
-set(PROJECT_VER "1.0.35")
-set(PROJECT_VER_NUMBER 135)
+set(PROJECT_VER "1.0.36")
+set(PROJECT_VER_NUMBER 136)
+# These settings are embedded alongside the version and source revision.
+set(MB_BRIDGE_KEEPALIVE_MS 25000 CACHE STRING "BLE keep-alive interval")
+set(MB_BRIDGE_LIGHT 1 CACHE STRING "Enable the under-bed light command")
+set(MB_SOURCE_REVISION "$ENV{MB_SOURCE_REVISION}")
+if(NOT MB_SOURCE_REVISION MATCHES "^[0-9a-f]+$")
+    set(MB_SOURCE_REVISION "")
+endif()
 project(octo_bridge)
 
 if(NOT CONFIG_DEVICE_SOFTWARE_VERSION_NUMBER EQUAL PROJECT_VER_NUMBER)

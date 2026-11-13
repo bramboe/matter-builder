@@ -22,6 +22,8 @@ SRC="${MB_SRC:-/opt/octo-matter}"
 WORK="$DATA/work/octo-matter"
 CHIP="${MB_CHIP:-esp32c6}"
 NETWORK="${MB_NETWORK:-}"
+OUTPUT="${MB_FIRMWARE_OUTPUT:-$DATA/firmware}"
+BRIDGE_OPTIONS=()
 BUILD="$DATA/build/$APP-$CHIP${NETWORK:+-$NETWORK}"
 export CCACHE_DIR="$DATA/ccache"
 
@@ -39,7 +41,7 @@ esac
 
 # A copy that keeps the image's timestamps, so unchanged files are not rebuilt
 rm -rf "$WORK"
-mkdir -p "$WORK" "$BUILD" "$DATA/firmware/factory"
+mkdir -p "$WORK" "$BUILD" "$OUTPUT"
 cp -a "$SRC/." "$WORK/"
 if [ -f "$WORK/firmware/$APP/main/secrets.example.h" ]; then
     cp "$WORK/firmware/$APP/main/secrets.example.h" "$WORK/firmware/$APP/main/secrets.h"
@@ -59,6 +61,14 @@ if [ "$APP" = spec ]; then
     BUILD="$DATA/build/spec-$SLUG"
     mkdir -p "$BUILD"
 fi
+if [ "$APP" = bridge ]; then
+    BRIDGE_OPTIONS=(-D "MB_BRIDGE_KEEPALIVE_MS=${MB_BRIDGE_KEEPALIVE_MS:-25000}" -D "MB_BRIDGE_LIGHT=${MB_BRIDGE_LIGHT:-1}")
+    if [ -n "${MB_BRIDGE_VERSION:-}" ]; then
+        [[ "$MB_BRIDGE_VERSION" =~ ^1\.99\.[0-9]{1,2}$ && "${MB_BRIDGE_VERSION_NUMBER:-}" =~ ^199[0-9]{2}$ ]]
+        sed -i -E "s/^set\(PROJECT_VER \"[^\"]*\"\)/set(PROJECT_VER \"$MB_BRIDGE_VERSION\")/; s/^set\(PROJECT_VER_NUMBER [0-9]+\)/set(PROJECT_VER_NUMBER $MB_BRIDGE_VERSION_NUMBER)/" "$PROJECT_DIR/CMakeLists.txt"
+        sed -i -E "s/^CONFIG_DEVICE_SOFTWARE_VERSION_NUMBER=[0-9]+/CONFIG_DEVICE_SOFTWARE_VERSION_NUMBER=$MB_BRIDGE_VERSION_NUMBER/" "$PROJECT_DIR/sdkconfig.defaults"
+    fi
+fi
 VERSION=$(sed -n 's/^set(PROJECT_VER "\(.*\)")/\1/p' "$PROJECT_DIR/CMakeLists.txt")
 echo "== $TITLE $VERSION for the $CHIP${NETWORK:+ on $NETWORK}"
 # A fresh configuration from the defaults every time, so a new version number
@@ -74,7 +84,7 @@ if [ -n "$stale" ]; then
 fi
 rm -f "$BUILD/sdkconfig"
 idf.py -C "$PROJECT_DIR" -B "$BUILD" -D SDKCONFIG="$BUILD/sdkconfig" -D IDF_TARGET="$CHIP" \
-    ${NETWORK:+-D MB_NETWORK=$NETWORK} build
+    ${NETWORK:+-D MB_NETWORK=$NETWORK} "${BRIDGE_OPTIONS[@]}" build
 # The project's name as built: the generic device's depends on chip and network
 PROJECT=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["project_name"])' "$BUILD/project_description.json")
 
@@ -91,8 +101,11 @@ if [ -n "${MB_OTA_REPORT:-}" ]; then
         "$PROJECT" "$VERSION" "$size" "$free" "$((100 * free / slot))" "$slot" | tee "$MB_OTA_REPORT"
 fi
 
-cp "$BUILD/$PROJECT.bin" "$DATA/firmware/$PROJECT-$VERSION.bin"
-# Bootloader, partition table and app in one image, for a new ESP32 over USB
-(cd "$BUILD" && python -m esptool --chip "$CHIP" merge_bin -o "$DATA/firmware/factory/$PROJECT-$VERSION-factory.bin" @flash_args)
-echo "== Factory image: $PROJECT-$VERSION-factory.bin"
-echo "== Ready: $PROJECT-$VERSION.bin ($(stat -c %s "$DATA/firmware/$PROJECT-$VERSION.bin") bytes)"
+cp "$BUILD/$PROJECT.bin" "$OUTPUT/$PROJECT-$VERSION.bin"
+if [ -z "${MB_FIRMWARE_OUTPUT:-}" ]; then
+    mkdir -p "$OUTPUT/factory"
+    # Bootloader, partition table and app in one image, for a new ESP32 over USB
+    (cd "$BUILD" && python -m esptool --chip "$CHIP" merge_bin -o "$OUTPUT/factory/$PROJECT-$VERSION-factory.bin" @flash_args)
+    echo "== Factory image: $PROJECT-$VERSION-factory.bin"
+fi
+echo "== Ready: $PROJECT-$VERSION.bin ($(stat -c %s "$OUTPUT/$PROJECT-$VERSION.bin") bytes)"

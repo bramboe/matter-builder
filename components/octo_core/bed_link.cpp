@@ -31,10 +31,18 @@ const char* TAG = "bed";
 constexpr uint32_t MANAGER_INTERVAL_MS = 500;
 constexpr uint32_t MOTION_INTERVAL_MS = 375;      // bed remote repeats commands every ~375 ms
 constexpr uint32_t HOST_TIMEOUT_MS = 10000;       // run_in_host watchdog
-constexpr uint32_t KEEPALIVE_INTERVAL_MS = 25000;  // bed drops the link after ~30 s without PIN
+#ifndef MB_BRIDGE_KEEPALIVE_MS
+#define MB_BRIDGE_KEEPALIVE_MS 25000
+#endif
+#ifndef MB_BRIDGE_LIGHT
+#define MB_BRIDGE_LIGHT 1
+#endif
+constexpr uint32_t KEEPALIVE_INTERVAL_MS = MB_BRIDGE_KEEPALIVE_MS;
+static_assert(KEEPALIVE_INTERVAL_MS >= 15000 && KEEPALIVE_INTERVAL_MS <= 25000);
+static_assert(MB_BRIDGE_LIGHT == 0 || MB_BRIDGE_LIGHT == 1);
 constexpr uint32_t STATS_INTERVAL_MS = 300000;
 constexpr int64_t SEEN_RECENTLY_US = 10 * 1000000LL;
-constexpr int64_t LIVENESS_TIMEOUT_US = (25 * 3 + 5) * 1000000LL;  // three missed keep-alives
+constexpr int64_t LIVENESS_TIMEOUT_US = (KEEPALIVE_INTERVAL_MS * 3 + 5000) * 1000LL;  // three missed keep-alives
 constexpr int64_t PIN_VERIFY_TIMEOUT_US = 8 * 1000000LL;
 constexpr int64_t PIN_REJECTED_BACKOFF_US = 60 * 1000000LL;
 constexpr int64_t CONNECT_SETTLE_US = 1 * 1000000LL;
@@ -1093,7 +1101,7 @@ bool light(int index, bool on) {
     if (index < 0 || index >= MAX_BEDS || beds[index].state != State::Ready) {
         return false;
     }
-    return write(beds[index], octo::light(on));
+    return MB_BRIDGE_LIGHT && write(beds[index], octo::light(on));
 }
 
 bool set_travel(int index, Part part, float seconds) {

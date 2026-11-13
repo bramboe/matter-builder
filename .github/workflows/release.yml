@@ -175,6 +175,7 @@ jobs:
           MB_CHIP: ${{ matrix.chip }}
           MB_NETWORK: ${{ matrix.network }}
           APP: ${{ matrix.app }}
+          MB_SOURCE_REVISION: ${{ github.sha }}
           IDF_CCACHE_ENABLE: "1"
           CCACHE_COMPRESS: "1"
           CCACHE_MAXSIZE: 700M
@@ -183,7 +184,7 @@ jobs:
         run: |
           docker run --rm -v "$GITHUB_WORKSPACE:/src" -v /mnt/mb:/mb \
             -e MB_DATA=/mb -e MB_SRC=/src -e ESP_MATTER_COMMIT -e APT_PACKAGES \
-            -e MB_CHIP -e MB_NETWORK -e APP -e MB_OTA_REPORT=/mb/ota-space.txt \
+            -e MB_CHIP -e MB_NETWORK -e APP -e MB_SOURCE_REVISION -e MB_OTA_REPORT=/mb/ota-space.txt \
             -e IDF_CCACHE_ENABLE -e CCACHE_COMPRESS -e CCACHE_MAXSIZE -e CCACHE_COMPILERCHECK \
             -e IDF_PYTHON_ENV_PATH=/mb/toolchain/python_env -e HOME=/mb/home \
             --entrypoint bash "$IDF_IMAGE" -c '

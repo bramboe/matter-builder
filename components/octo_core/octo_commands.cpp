@@ -221,7 +221,13 @@ std::string cmd_json(const Args&) { return state_json(); }
 
 // The bridge's settings, with their schema for the add-on's YAML editor (the
 // same as "settings" in firmware/bridge/package.yaml)
+extern const char bridge_build_start[] asm("_binary_bridge_build_json_start");
+extern const char bridge_build_end[] asm("_binary_bridge_build_json_end");
+
 std::string cmd_settings(const Args& args) {
+    if (args.size() == 2 && args[1] == "build") {
+        return std::string(bridge_build_start, bridge_build_end - 1);
+    }
     if (args.size() == 2 && args[1] == "json") {
         return "{\"settings\":{\"beds\":" + std::to_string(bed_link::bed_count()) +
                ",\"group\":" + (bed_link::group_parts() ? "true" : "false") +

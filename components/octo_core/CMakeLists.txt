@@ -5,6 +5,11 @@ idf_component_register(
     INCLUDE_DIRS "include"
     REQUIRES mb_core octo_protocol bt nvs_flash esp_timer
 )
+if(DEFINED MB_BRIDGE_KEEPALIVE_MS AND DEFINED MB_BRIDGE_LIGHT)
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE
+        MB_BRIDGE_KEEPALIVE_MS=${MB_BRIDGE_KEEPALIVE_MS}
+        MB_BRIDGE_LIGHT=${MB_BRIDGE_LIGHT})
+endif()
 
 # The settings page is sent gzip-compressed: over Thread every kilobyte counts
 set(page "${CMAKE_CURRENT_SOURCE_DIR}/web/index.html")

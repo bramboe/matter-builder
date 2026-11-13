@@ -2,6 +2,7 @@
 
 inline constexpr char MB_BRIDGE_BUILD_JSON[] = R"json({
   "format": 1,
+  "packet_profile": "octo-standard-v1",
   "version": "@MB_BRIDGE_VERSION_TEXT@",
   "revision": "@MB_SOURCE_REVISION@",
   "keepalive_ms": @MB_BRIDGE_KEEPALIVE_MS@,

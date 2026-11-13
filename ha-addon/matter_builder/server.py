@@ -1966,6 +1966,10 @@ BRIDGE_DEFAULT_PACKETS = {
 }
 
 
+def bridge_packets_supported(build):
+    return build.get("revision") == BRIDGE_PACKET_REVISION or build.get("packet_profile") == "octo-standard-v1"
+
+
 def bridge_packets(data):
     """Validate and normalize complete Octo frames before inserting byte literals in C++."""
     if not isinstance(data, dict) or data.keys() != BRIDGE_DEFAULT_PACKETS.keys():
@@ -2064,7 +2068,7 @@ def bridge_build_state(proxy):
     if type(interval) is not int or not 15000 <= interval <= 25000 or type(light) is not int or light not in (0, 1):
         raise ValueError("The firmware reported unsupported Bluetooth settings.")
     if "packets" in build:
-        if build["revision"] != BRIDGE_PACKET_REVISION:
+        if not bridge_packets_supported(build):
             raise ValueError("The firmware reported packets for an unsupported source revision.")
         build["packets"] = bridge_packets(build["packets"])
     return info, build
@@ -2132,7 +2136,7 @@ def bridge_build_and_upload(proxy, base, edits):
         if not update_proxy(current, image):
             return False
         _, deployed = bridge_build_state(current)
-        if deployed != {"format": 1, "version": version, "revision": revision, **edits}:
+        if deployed != {**base, "version": version, **edits}:
             raise ValueError("The ESP32 did not report the expected firmware configuration after upload.")
     log(f"== Verified firmware {version} on {proxy['name']}")
     return True
@@ -2868,7 +2872,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     _, build = bridge_build_state(proxy)
                 except ValueError as err:
                     return self.reply({"error": str(err)}, 400)
-                packets = build.get("packets", BRIDGE_DEFAULT_PACKETS) if build["revision"] == BRIDGE_PACKET_REVISION else None
+                packets = build.get("packets", BRIDGE_DEFAULT_PACKETS) if bridge_packets_supported(build) else None
                 return self.reply({"build": build, "packets": packets, "toolchain": toolchain_ready()})
             if parts[3] == "status":
                 return self.reply(checked_status(proxy))
@@ -3049,7 +3053,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if type(interval) is not int or not 15000 <= interval <= 25000 or type(light) is not int or light not in (0, 1):
                     return self.reply({"error": "Choose a keep-alive interval between 15 and 25 seconds and a valid light setting."}, 400)
                 edits = {"keepalive_ms": interval, "light_enabled": light}
-                if build["revision"] == BRIDGE_PACKET_REVISION:
+                if bridge_packets_supported(build):
                     try:
                         edits["packets"] = bridge_packets(data.get("packets"))
                     except ValueError as err:

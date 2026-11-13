@@ -123,6 +123,7 @@ button.spec-name{min-width:0;flex:1 1 160px;justify-content:flex-start;text-alig
 .device-settings-card .switch input{flex:none;accent-color:var(--editor-action,var(--primary))}
 .device-settings-card a:not(.button){color:var(--editor-action,var(--primary))}
 .device-settings-card .actions{justify-content:flex-end}
+.firmware-packets>summary{padding:10px 0;cursor:pointer;font-weight:500}
 .firmware-packets h4{margin:16px 0 4px;font-size:14px;font-weight:600}
 .firmware-packets dl{margin:0}
 .firmware-packets dd{margin:0}
@@ -555,6 +556,7 @@ dialog.side{max-width:100vw}
         <section id="configTarget" class="device-settings-card" hidden></section>
         <div class="sub" id="configLoading" role="status" hidden></div>
         <div id="noIo" hidden style="margin-top:14px"></div>
+        <div id="bridgeFirmwareEditor" hidden></div>
         <div id="ioEditor">
           <div class="notice" id="recipeNotice" hidden></div>
           <div id="devEditor"></div>
@@ -822,12 +824,6 @@ const TEXT = {
   applyConfigTitle: n => `Apply configuration to ${n}?`,
   applyConfigHelp: 'This sends your changes to this device. It may restart. Changes to connections must be kept after restart.',
   applyTrialMissing: 'A configuration trial could not be confirmed. Check the device and its running configuration before trying again.',
-  bridgeActions: 'Built-in Bluetooth actions',
-  bridgeActionsHelp: 'These actions are part of the Octo bed bridge firmware. This overview shows what the bridge can do. Available actions depend on the connected bed.',
-  bridgeMotion: 'Raise or lower the head or legs, separately or together.',
-  bridgeStop: 'Stop movement.',
-  bridgeLight: 'Switch the under-bed light on or off.',
-  bridgePresets: 'Recall or save positions on beds with preset support.',
   configSent: 'Configuration sent to this device.',
   slot: 'Connection', type: 'Type', pin: 'Pin', scl: 'SCL', inverted: 'Inverted', remove: 'Remove', name: 'Name',
   types: {relay: 'Relay', led: 'LED', button: 'Push button', contact: 'Contact', motion: 'Motion sensor', sht4x: 'SHT4x',
@@ -2698,6 +2694,7 @@ async function loadJob() {
   if (j.kind === 'update') Object.keys(updateStarted).forEach(id => { if (j.started * 1000 >= updateStarted[id] - 2000) delete updateStarted[id]; });
   const before = JSON.stringify(jobInfo && [jobInfo.running, jobInfo.progress]);
   jobInfo = j;
+  bridgeEditor?.onJob(j);
   if (before !== JSON.stringify([j.running, j.progress]) && state) renderDevices();
   if (!j.kind || (!j.running && j.started === dismissedJob)) { $('#taskbar').hidden = true; return; }
   $('#taskbar').hidden = false;
@@ -2812,13 +2809,18 @@ class SettingsEditor {
   }
   setMode(m) {
     if (m === this.mode) return;
-    if (m === 'visual') {
-      try { Object.assign(this.values, this.check(this.fromYaml(this.yaml))); this.error = ''; }
-      catch (e) { this.error = e.message; this.render(); return; }
-    } else {
-      this.yaml = this.toYaml();
-      this.dirty = this.changed();
-    }
+    try {
+      if (m === 'visual') {
+        const values = this.check(this.fromYaml(this.yaml));
+        bridgeEditor?.syncVisual();
+        Object.assign(this.values, values);
+      } else {
+        this.yaml = this.toYaml();
+        this.dirty = this.changed();
+        bridgeEditor?.syncYaml();
+      }
+      this.error = '';
+    } catch (e) { this.error = e.message; this.render(); return; }
     this.mode = editorPref = m;
     try { localStorage.setItem('mbEditor', m); } catch (e) {}
     this.render();
@@ -2829,7 +2831,7 @@ class SettingsEditor {
     if (this.dirty) return;
     this.dirty = true;
     this.notice = '';
-    $('#setSave').disabled = this.busy;
+    $('#setSave').disabled = this.busy || !!bridgeEditor?.busy;
     $('#setSave').classList.add('pri');
   }
   changed() {
@@ -2837,11 +2839,13 @@ class SettingsEditor {
     return Object.keys(this.schema).some(k => String(this.values[k] ?? this.schema[k].default) !== String(this.saved[k] ?? this.schema[k].default));
   }
   async save() {
-    if (this.busy || !this.changed() || openId !== this.proxy) return;
+    if (this.busy || bridgeEditor?.busy || !this.changed() || openId !== this.proxy) return;
     this.busy = true;
+    bridgeEditor?.sync();
     if (!await confirmAction(t('applyConfigTitle', this.device.name),
       'This updates the settings of this device and may restart it.', 'Apply to device')) {
       this.busy = false;
+      bridgeEditor?.sync();
       return;
     }
     this.error = this.notice = '';
@@ -2860,6 +2864,7 @@ class SettingsEditor {
       if (changed.length && this.beds) this.refreshBeds(this.proxy, Date.now() + 120000);
     } catch (e) { this.error = e.message; }
     this.busy = false;
+    bridgeEditor?.sync();
     this.render();
   }
   // After a restart: the beds as the device now has them, once it answers
@@ -2892,19 +2897,17 @@ class SettingsEditor {
     const body = this.mode === 'yaml'
       ? `${yamlEditor(this.yaml, 'setEditor.setYaml(this.value)', '160px', this.toYaml(this.saved))}<div class="sub">${t('settingsYamlHelp')}</div>`
       : Object.entries(this.schema).map(([k, f]) => this.field(k, f)).join('');
-    const actions = this.device?.app === 'octo_bridge' ? `<details class="device-settings-card">
-      <summary>${t('bridgeActions')}</summary><p class="sub">${t('bridgeActionsHelp')}</p>
-      <ul class="steps">${['bridgeMotion', 'bridgeStop', 'bridgeLight', 'bridgePresets'].map(key => `<li>${t(key)}</li>`).join('')}</ul>
-    </details>` : '';
     const beds = (this.beds || []).length ? `<section class="device-settings-card"><h3>${t('bedsLabel')}</h3>
       ${this.beds.map(b => `<div class="row"><span class="ico">${icon('bed')}</span><div class="label">${esc(b.name || t('bedN', b.index + 1))}
         <div class="sub">${esc(b.state || '')}${b.rssi ? ` · ${b.rssi} dBm` : ''}</div></div></div>`).join('')}
       <div class="sub" style="margin-top:8px">${t('bedsHelp')} <a href="${esc(this.page || '#')}">${t('openPage')}</a></div></section>` : '';
     this.host.innerHTML = `${head}${beds}<section class="device-settings-card"><h3>${t('settingsLabel')}</h3>${help}${body}${this.error ? `<div class="error">${esc(this.error)}</div>` : ''}${this.notice ? `<div class="notice">${esc(this.notice)}</div>` : ''}
-      <div class="actions"><button id="setSave" class="${this.changed() ? 'pri' : ''}" onclick="setEditor.save()" ${this.busy || !this.changed() ? 'disabled' : ''}>${this.busy ? t('saving') : 'Apply to device'}</button></div></section>${actions}`;
+      <div class="actions"><button id="setSave" class="${this.changed() ? 'pri' : ''}" onclick="setEditor.save()" ${this.busy || bridgeEditor?.busy || !this.changed() ? 'disabled' : ''}>${this.busy ? t('saving') : 'Apply to device'}</button></div></section>`;
+    bridgeEditor?.syncMode(this.mode);
   }
 }
 const setEditor = new SettingsEditor();
+let bridgeEditor = null;
 
 async function proxyCommand(id, line) {
   const r = await api(`api/proxy/${id}/command`, {line});
@@ -2918,6 +2921,7 @@ async function openDevice(id, which, recipe) {
   deviceContext = launchContext();
   openId = id;
   managed = null;
+  resetBridgeEditor();
   const requestId = ++deviceRequest;
   deviceBusy = true;
   $('#mSave').classList.remove('pri');
@@ -3001,9 +3005,9 @@ function openDevicePage() {
   page.className = 'device-config-page';
   page.append(panel);
   openTask({title: state.proxies.find(p => p.id === openId)?.name, content: page,
-    dirty: () => $('#mSave').classList.contains('pri') || setEditor.changed() && !!managed?.settings,
-    blocked: () => deviceBusy || !!setEditor.busy,
-    cleanup: () => { dialog.append(panel); page.remove(); openId = managed = deviceContext = null; }
+    dirty: () => $('#mSave').classList.contains('pri') || setEditor.changed() && !!managed?.settings || bridgeEditor?.dirty(),
+    blocked: () => deviceBusy || !!setEditor.busy || !!bridgeEditor?.submitting,
+    cleanup: () => { resetBridgeEditor(); dialog.append(panel); page.remove(); openId = managed = deviceContext = null; }
   }, context);
   renderDevicePanel();
 }
@@ -3022,6 +3026,7 @@ function closeDevice() {
 $('#deviceDlg').addEventListener('close', () => {
   if (!$('#deviceDlg').contains($('#dConnections'))) return;
   const context = deviceContext;
+  resetBridgeEditor();
   openId = managed = deviceContext = null;
   deviceBusy = false;
   deviceRequest++;
@@ -3036,29 +3041,31 @@ function setDtab(name) {
   $('#dInfo').hidden = name !== 'info';
   $('#dNetwork').hidden = name !== 'network';
   if (name === 'network' && openId) loadHealth(openId);
+  if (name === 'connections') mountBridgeEditor();
 }
-async function openFirmwareEditor() {
+function resetBridgeEditor() {
+  bridgeEditor = null;
+  const host = $('#bridgeFirmwareEditor');
+  host.hidden = true;
+  host.replaceChildren();
+}
+
+function mountBridgeEditor() {
   const proxy = state.proxies.find(p => p.id === openId);
-  if (!proxy || deviceBusy || setEditor.busy) return;
-  if (pageTask) {
-    if (await canLeaveTask()) completeWizard(() => showFirmwareEditor(proxy));
-  } else {
-    closeDevice();
-    showFirmwareEditor(proxy);
-  }
+  const host = $('#bridgeFirmwareEditor');
+  const bridge = proxy && (running(statuses[proxy.id])?.app || proxy.app) === 'octo_bridge';
+  host.hidden = !bridge;
+  if (bridge && !host.firstChild) loadBridgeEditor(proxy, host);
 }
 
 function bridgePacketFields(build, packets) {
-  if (!packets) return `<section class="device-settings-card">
-    <h3>Bluetooth commands</h3>
-    <p class="sub">Packet editing is unavailable for this firmware revision.</p>
-  </section>`;
+  if (!packets) return '<p class="sub">Packet editing is unavailable for this firmware revision.</p>';
   const row = (label, key) => `<div class="row"><dt><label for="packet-${key}">${label}</label></dt>
     <dd><input class="mono" id="packet-${key}" data-packet="${key}" type="text" spellcheck="false"
       autocomplete="off" autocapitalize="off" required maxlength="191" value="${esc(packets[key].match(/../g).join(' '))}"></dd></div>`;
   const sourceUrl = `https://github.com/bramboe/matter-builder/tree/${build.revision}/components`;
-  return `<section class="device-settings-card firmware-packets">
-    <h3>Bluetooth commands</h3>
+  return `<details class="firmware-packets">
+    <summary>Edit Bluetooth commands</summary>
     <p class="sub">Edit the complete hexadecimal packets, including their framing, length and checksum. The ESP32 uses the new bytes after you build and upload.</p>
     <p class="sub">Service <code>FFE0</code> · Command and notification characteristic <code>FFE1</code></p>
     <h4>Movement</h4>
@@ -3085,82 +3092,177 @@ function bridgePacketFields(build, packets) {
     </dl>
     <p class="sub"><a href="${sourceUrl}/octo_protocol/octo_protocol.cpp" target="_blank" rel="noopener">Packet encoders</a>
       · <a href="${sourceUrl}/octo_core/bed_link.cpp" target="_blank" rel="noopener">Bluetooth driver</a></p>
-  </section>`;
+  </details>`;
 }
 
-async function showFirmwareEditor(proxy) {
+async function loadBridgeEditor(proxy, host) {
   const page = document.createElement('section');
-  page.innerHTML = '<section class="device-settings-card"><p role="status">Reading the running firmware configuration…</p></section>';
-  let dirty = false, busy = false;
-  openTask({title: proxy.name, content: page, dirty: () => dirty, blocked: () => busy,
-    after: () => openDevice(proxy.id, 'firmware')});
+  page.className = 'device-settings-card';
+  page.innerHTML = '<h3>Bluetooth firmware</h3><p class="sub" role="status">Reading the running firmware…</p>';
+  bridgeEditor = null;
+  host.replaceChildren(page);
   const endpoint = `api/proxy/${encodeURIComponent(proxy.id)}/firmware-config`;
   try {
     const result = await api(endpoint);
+    if (!page.isConnected) return;
     if (result.error) throw new Error(result.error);
-    if (pageTask?.content !== page) return;
     const {build, packets, toolchain} = result;
-    $('#taskSubtitle').textContent = `Octo bed bridge · ${build.version}`;
-    $('#taskSubtitle').hidden = false;
-    page.innerHTML = `<form><section class="device-settings-card">
-      <h3>Bluetooth firmware settings</h3>
-      <p class="sub">From the running build. A new version is built locally and uploaded to this ESP32.</p>
-      <label class="field"><span>Connection keep-alive (seconds)</span>
-        <input name="interval" type="number" min="15" max="25" step="0.001" required value="${build.keepalive_ms / 1000}"></label>
-      <div class="row"><label class="switch" style="flex:1"><span>Enable under-bed light command</span>
-        <input name="light" type="checkbox" ${build.light_enabled ? 'checked' : ''}></label></div>
-    </section>
-    ${bridgePacketFields(build, packets)}
-    <section class="device-settings-card">
-      <p class="notice" role="status">${toolchain ? '' : 'Install the build toolchain in Settings to build and upload.'}</p>
-      <p class="error" role="alert" hidden></p>
-      <div class="actions"><button class="pri" type="submit" disabled>Build &amp; upload</button></div>
-    </section></form>`;
+    page.innerHTML = `<h3>Bluetooth firmware</h3>
+      <p class="sub">Build &amp; upload creates a new firmware version for this device and restarts it.</p>
+      <form>
+        <div data-firmware-visual>
+          <label class="field"><span>Connection keep-alive (seconds)</span>
+            <input name="interval" type="number" min="15" max="25" step="0.001" required value="${build.keepalive_ms / 1000}"></label>
+          <div class="row"><label class="switch" style="flex:1"><span>Enable under-bed light command</span>
+            <input name="light" type="checkbox" ${build.light_enabled ? 'checked' : ''}></label></div>
+          ${bridgePacketFields(build, packets)}
+        </div>
+        <div data-firmware-yaml hidden></div>
+        <p class="notice" role="status">${toolchain ? '' : 'Install the build toolchain in Settings to build and upload.'}</p>
+        <p class="error" role="alert" hidden></p>
+        <div class="actions"><button class="pri" type="submit" disabled>Build &amp; upload</button></div>
+      </form>`;
     const form = page.querySelector('form'), button = form.querySelector('button');
+    const visual = form.querySelector('[data-firmware-visual]'), yaml = form.querySelector('[data-firmware-yaml]');
     const notice = form.querySelector('.notice'), error = form.querySelector('.error');
     const packetInputs = [...form.querySelectorAll('[data-packet]')];
-    let submitted = false;
-    const values = () => ({keepalive_ms: Math.round(form.elements.interval.valueAsNumber * 1000),
+    const normalize = raw => raw.replace(/\s/g, '').toUpperCase();
+    // Both views edit the same draft. Only the firmware action submits it.
+    const baseline = {keepalive_ms: build.keepalive_ms, light_enabled: build.light_enabled, ...packets};
+    const readVisual = () => ({
+      keepalive_ms: Math.round(form.elements.interval.valueAsNumber * 1000),
       light_enabled: Number(form.elements.light.checked),
-      ...(packets && {packets: Object.fromEntries(packetInputs.map(input =>
-        [input.dataset.packet, input.value.replace(/\s/g, '').toUpperCase()]))})});
-    const changedPackets = next => packetInputs.filter(input =>
-      next.packets[input.dataset.packet] !== packets[input.dataset.packet]);
-    const sync = () => {
-      const next = values();
-      dirty = !submitted && (next.keepalive_ms !== build.keepalive_ms ||
-        next.light_enabled !== build.light_enabled || changedPackets(next).length > 0);
-      button.disabled = busy || !toolchain || !dirty || !form.checkValidity();
+      ...Object.fromEntries(packetInputs.map(input => [input.dataset.packet, normalize(input.value)]))
+    });
+    const toYaml = values => ['bluetooth_firmware:', ...Object.entries(values).map(([key, value]) =>
+      `  ${key}: ${typeof value === 'string' ? JSON.stringify(value) : value}`)].join('\n');
+    let draft = toYaml(baseline);
+    const readYaml = () => {
+      const values = {...baseline}, seen = new Set();
+      const lines = draft.split('\n').map(line => line.replace(/\s*#.*$/, '').trimEnd()).filter(line => line.trim());
+      if (lines.shift() !== 'bluetooth_firmware:') throw new Error('Start with the bluetooth_firmware: block.');
+      for (const line of lines) {
+        const match = /^  ([a-z_]+):\s*(.+)$/.exec(line);
+        if (!match || !Object.hasOwn(baseline, match[1]) || seen.has(match[1])) throw new Error(`Invalid Bluetooth firmware field: ${line.trim()}`);
+        const [, key, value] = match;
+        seen.add(key);
+        values[key] = typeof baseline[key] === 'string' ? normalize(value.replace(/^["']|["']$/g, '')) : Number(value);
+      }
+      if (seen.size !== Object.keys(baseline).length) throw new Error('Keep every Bluetooth firmware field in the YAML block.');
+      if (!Number.isInteger(values.keepalive_ms) || values.keepalive_ms < 15000 || values.keepalive_ms > 25000 ||
+          ![0, 1].includes(values.light_enabled)) throw new Error('Use 15000–25000 for keepalive_ms and 0 or 1 for light_enabled.');
+      return values;
     };
-    form.oninput = sync;
+    const read = () => visual.hidden ? readYaml() : readVisual();
+    const changed = values => Object.keys(baseline).filter(key => values[key] !== baseline[key]);
+    const setError = message => { error.textContent = message; error.hidden = !message; };
+    let pendingSince = null;
+    const editor = {
+      busy: false,
+      submitting: false,
+      dirty() {
+        if (this.busy && !this.submitting) return false;
+        try { return changed(read()).length > 0; }
+        catch (e) { return true; }
+      },
+      sync() {
+        button.disabled = this.busy || setEditor.busy || !toolchain || !this.dirty() ||
+          (!visual.hidden && !form.checkValidity());
+      },
+      syncVisual() {
+        const values = readYaml();
+        form.elements.interval.value = values.keepalive_ms / 1000;
+        form.elements.light.checked = !!values.light_enabled;
+        for (const input of packetInputs) input.value = values[input.dataset.packet].match(/.{1,2}/g)?.join(' ') || '';
+        setError('');
+      },
+      syncYaml() {
+        draft = toYaml(readVisual());
+        this.renderYaml();
+      },
+      renderYaml() {
+        yaml.innerHTML = yamlEditor(draft, 'bridgeEditor.editYaml(this.value)', '280px', toYaml(baseline));
+      },
+      editYaml(value) {
+        if (this.busy) return;
+        draft = value;
+        setError('');
+        this.sync();
+      },
+      onJob(job) {
+        if (pendingSince === null || job.running || job.kind !== 'update' || job.title !== proxy.name ||
+            job.started < pendingSince) return;
+        pendingSince = null;
+        if (job.ok) {
+          loadBridgeEditor(proxy, host);
+          return;
+        }
+        this.busy = false;
+        notice.textContent = '';
+        setError('Build or upload failed. See the task log for details.');
+        this.syncMode(setEditor.mode);
+        if (managed?.settings) setEditor.render();
+      },
+      syncMode(mode) {
+        if (mode === 'yaml' && !yaml.firstChild) this.renderYaml();
+        visual.hidden = mode === 'yaml';
+        yaml.hidden = !visual.hidden;
+        yaml.inert = this.busy;
+        for (const input of visual.querySelectorAll('input')) input.disabled = visual.hidden || this.busy;
+        this.sync();
+      }
+    };
+    bridgeEditor = editor;
+    if (managed?.settings) setEditor.render();
+    editor.syncMode(managed?.settings ? setEditor.mode : 'visual');
+    form.oninput = () => { setError(''); editor.sync(); };
     form.onsubmit = async event => {
       event.preventDefault();
       if (button.disabled) return;
-      const next = values();
-      const changes = [];
-      if (next.keepalive_ms !== build.keepalive_ms) changes.push(`Connection keep-alive: ${build.keepalive_ms / 1000} → ${next.keepalive_ms / 1000} seconds.`);
-      if (next.light_enabled !== build.light_enabled) changes.push(`Under-bed light command: ${next.light_enabled ? 'enabled' : 'disabled'}.`);
-      const changed = changedPackets(next);
-      if (changed.length) changes.push(`Bluetooth packets changed: ${changed.map(input => input.labels[0].textContent).join(', ')}.`);
-      if (!await confirmAction(`Build & upload to ${proxy.name}?`, changes.join(' ') + ' The device restarts after upload.', 'Build & upload')) return;
-      if (pageTask?.content !== page) return;
-      busy = true;
-      sync();
-      error.hidden = true;
+      let next;
+      try { next = read(); }
+      catch (e) { setError(e.message); return; }
+      const {keepalive_ms, light_enabled, ...nextPackets} = next;
+      const changes = changed(next);
+      const names = Object.fromEntries(packetInputs.map(input => [input.dataset.packet, input.labels[0].textContent]));
+      const labels = {keepalive_ms: 'Connection keep-alive', light_enabled: 'Under-bed light enabled', ...names};
+      editor.busy = editor.submitting = true;
+      editor.syncMode(setEditor.mode);
+      setEditor.render();
       try {
-        const response = await api(endpoint, {base: build, ...next});
+        const summary = changes.map(key => labels[key]).join(', ');
+        if (!await confirmAction(`Build & upload to ${proxy.name}?`,
+          `Changes: ${summary}. The device restarts after upload.`, 'Build & upload')) return;
+        if (!page.isConnected) return;
+        const startedAfter = Date.now() / 1000 - 5;
+        const response = await api(endpoint, {base: build, keepalive_ms, light_enabled, ...(packets && {packets: nextPackets})});
         if (!response.started) throw new Error(response.error || 'Another job is running.');
-        dirty = false;
-        submitted = true;
-        for (const input of form.querySelectorAll('input')) input.disabled = true;
+        pendingSince = startedAfter;
+        editor.submitting = false;
+        editor.syncMode(setEditor.mode);
         notice.textContent = 'Build and upload started. Follow progress in the task bar.';
         await refresh();
         await loadJob();
-      } catch (e) { error.textContent = e.message; error.hidden = false; }
-      finally { busy = false; sync(); }
+        return;
+      } catch (e) { setError(e.message); }
+      finally {
+        if (editor.submitting) editor.busy = editor.submitting = false;
+        editor.sync();
+        if (page.isConnected) {
+          editor.syncMode(setEditor.mode);
+          if (managed?.settings) setEditor.render();
+        }
+      }
     };
   } catch (e) {
-    page.querySelector('p').textContent = e.message;
+    if (page.isConnected) {
+      page.querySelector('p').textContent = e.message;
+      const retry = document.createElement('button');
+      retry.textContent = 'Retry';
+      retry.onclick = () => loadBridgeEditor(proxy, host);
+      page.append(retry);
+      if (managed?.settings) setEditor.render();
+    }
   }
 }
 
@@ -3229,6 +3331,7 @@ function renderDevicePanel() {
     $('#taskSubtitle').textContent = firmware;
     $('#taskSubtitle').hidden = !firmware;
   }
+  if (dtab === 'connections') mountBridgeEditor();
   const hasConfiguration = !!(managed?.io || managed?.settings);
   target.hidden = !hasConfiguration;
   if (hasConfiguration) setHtml(target, `<h3>${t('configOnDevice')}</h3>
@@ -3266,8 +3369,6 @@ function renderDevicePanel() {
     ${files.length ? `<div class="row"><label class="field" style="flex:1"><span>${t('installFile')}</span><select id="fwPick">${files.map(f => `<option>${esc(f)}</option>`).join('')}</select></label>
       <button class="pri" onclick="updateProxy('${p.id}', $('#fwPick').value)" ${state.job.running ? 'disabled' : ''}>${t('install')}</button></div>`
       : `<div class="sub" style="margin-top:12px">${t('noFirmware')}</div>`}
-    ${fw === 'octo_bridge' ? `<div class="row"><div class="label">Firmware configuration<div class="sub">Build a new version for this linked ESP32.</div></div>
-      <button onclick="openFirmwareEditor()">Edit firmware</button></div>` : ''}
     <div class="row"><div class="label">${t('nightUpdates')}<div class="sub">${t('nightUpdatesHelp', String(state.settings.night_hour ?? 3).padStart(2, '0'))}</div></div>
       <label class="switch"><input type="checkbox" ${p.auto_update ? 'checked' : ''} onchange="setAutoUpdate('${p.id}', this.checked)"></label></div>`);
   const token = shownTokens[p.id];

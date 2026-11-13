@@ -93,11 +93,20 @@ button.spec-name{min-width:0;flex:1 1 160px;justify-content:flex-start;text-alig
 .spec-build-list{margin-top:4px}
 body.editing-config>header{display:none}
 body.editing-config main{padding-top:0}
-#specEditor{max-width:960px;margin:0 auto}
-.spec-editor-bar{position:sticky;top:0;z-index:3;display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--bg);padding:12px 0;border-bottom:1px solid var(--line)}
+#specEditor{max-width:960px;margin:0 auto;--editor-action:#006985;--editor-edge:#767676;--mute:#555;--line:#b7b7b7}
+@media (prefers-color-scheme:dark){#specEditor{--editor-action:#75d7f1;--editor-edge:#909090;--mute:#bdbdbd;--line:#626262}}
+.spec-editor-bar{position:sticky;top:0;z-index:3;display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--card);padding:12px 16px;border:1px solid var(--line);border-top:0;border-radius:0 0 var(--radius) var(--radius)}
 .spec-editor-bar h2{flex:1 1 140px;min-width:0;overflow-wrap:anywhere}
 #specExampleField{margin-top:14px;max-width:300px}
-#specEditorHost .yaml{min-height:50vh}
+#specEditorHost .yaml{min-height:50vh;background:var(--card);border-color:var(--editor-edge)}
+#specEditor .spec-editor-section{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-top:12px}
+#specEditor .spec-editor-section .ed-section:first-child{margin-top:0}
+#specEditor .field{border-bottom-color:var(--editor-edge)}
+#specEditor .ed-add{background:var(--fill);border-color:var(--editor-edge);color:var(--editor-action)}
+#specEditor .ed-add:hover{border-color:var(--editor-action)}
+#specEditor .seg button.on{color:var(--editor-action)}
+#specEditor button.pri{background:var(--editor-action);color:var(--card)}
+#specEditor :is(button,summary,input,select,textarea):focus-visible{outline:2px solid var(--editor-action);outline-offset:2px}
 
 #catalogView{margin-inline-start:auto}
 @media (max-width:599px){#catalogView{margin-inline-start:0}}
@@ -1793,13 +1802,14 @@ class ConfigEditor {
       return;
     }
     const full = this.rows.length >= 8;
+    const section = content => this.id === 'spec' && content ? `<div class="spec-editor-section">${content}</div>` : content;
     this.host.innerHTML = `${head}
       <div class="ed-item"><div class="ed-item-head" style="cursor:default"><span class="ico">${icon('chip')}</span>
         <label class="field" style="flex:1"><span>${t('deviceName')}</span><input maxlength="32" value="${esc(this.name)}" oninput="${ref}.setName(this.value)"></label></div></div>
-      ${this.components.length ? `<div class="ed-section"><h3>${t('components')}</h3></div>
+      ${section(this.components.length ? `<div class="ed-section"><h3>${t('components')}</h3></div>
         <div class="sub" style="margin:-4px 2px 6px">${t('componentsHelp')}</div>
-        ${this.components.map(c => `<div class="row"><div class="label mono">${esc(c.source)}</div></div>`).join('')}` : ''}
-      <div class="ed-section"><h3>${t('connections')}</h3><span class="sub">${t('ofEight', this.rows.length)}</span><span class="grow"></span>
+        ${this.components.map(c => `<div class="row"><div class="label mono">${esc(c.source)}</div></div>`).join('')}` : '')}
+      ${section(`<div class="ed-section"><h3>${t('connections')}</h3><span class="sub">${t('ofEight', this.rows.length)}</span><span class="grow"></span>
         ${this.rows.length > 1 || this.grouping ? `<label class="switch" title="${esc(t('groupsHelp'))}"><input type="checkbox" ${this.grouping ? 'checked' : ''} onchange="${ref}.setGrouping(this.checked)"><span class="sub">${t('groups')}</span></label>` : ''}</div>
       ${this.grouping ? `<div class="sub" style="margin:-4px 2px 8px">${t('groupsHelp')}</div>` : ''}
       ${!this.rows.length ? `<div class="sub" style="margin:4px 2px 8px">${t('nothingConnected')}</div>`
@@ -1807,13 +1817,13 @@ class ConfigEditor {
       ${this.picking ? `<div class="ed-item open"><div class="ed-item-head" style="cursor:default"><b style="flex:1;font-weight:500">${t('addConnection')}</b>
           <button class="icon" onclick="${ref}.picking = false; ${ref}.render()" aria-label="${t('close')}">${icon('close')}</button></div>
           <div class="ed-item-body"><div class="choices" style="margin:0">${this.types().map(x => { const no = this.noBluetooth() && isBle(x); return `<button class="choice" onclick="${ref}.add('${x}')" ${no ? 'disabled' : ''}><span class="ico">${typeIcon(x, this.driver(x))}</span><span><b>${esc(this.title(x))}</b><span class="sub">${no ? `<span class="warnText">${esc(t('notOnBoard', BOARDS[this.board].name))}</span>` : esc(this.help(x))}</span></span></button>`; }).join('')}</div></div></div>`
-        : `<button class="ed-add" onclick="${ref}.picking = true; ${ref}.render()" ${full ? 'disabled' : ''}>${icon('plus')} ${full ? t('allUsed') : t('addConnection')}</button>`}
-      ${this.bleSection()}
-      ${this.rulesSupported ? `<div class="ed-section"><h3>${t('rules')}</h3><span class="sub">${t('ofTwelve', this.rules.length)}</span></div>
+        : `<button class="ed-add" onclick="${ref}.picking = true; ${ref}.render()" ${full ? 'disabled' : ''}>${icon('plus')} ${full ? t('allUsed') : t('addConnection')}</button>`}`)}
+      ${section(this.bleSection())}
+      ${section(this.rulesSupported ? `<div class="ed-section"><h3>${t('rules')}</h3><span class="sub">${t('ofTwelve', this.rules.length)}</span></div>
         <div class="sub" style="margin:-4px 2px 6px">${t('rulesHelp')}</div>
         ${[...this.rules].sort((a, b) => a.index - b.index).map(r => this.ruleCard(r)).join('')}
         <button class="ed-add" onclick="${ref}.addRule()" ${this.rules.length >= RULES_MAX ? 'disabled' : ''}>${icon('plus')} ${t('addRule')}</button>`
-        : `<div class="sub" style="margin:12px 2px">${t('rulesNeedUpdate')}</div>`}
+        : `<div class="sub" style="margin:12px 2px">${t('rulesNeedUpdate')}</div>`)}
       ${error}`;
   }
 }

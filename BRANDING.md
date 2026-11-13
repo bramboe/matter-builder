@@ -8,6 +8,8 @@ Bram Boersma reserves all rights he holds in the following Matter Builder artwor
 - [Logo with the Matter Builder wordmark](ha-addon/matter_builder/www/matter-builder-logo.svg)
 - [Ivory app icon](ha-addon/matter_builder/www/matter-builder-app-icoon-ivoor.svg) and its [PNG rendition](ha-addon/matter_builder/icon.png)
 
+- [Monochrome sidebar silhouette](ha-addon/matter_builder/www/matter-builder-zijbalk.svg)
+
 These assets are excluded from the repository's MIT software license. Except
 where permitted by applicable law, reproduction, modification, redistribution
 or use of this artwork as branding requires Bram Boersma's prior written

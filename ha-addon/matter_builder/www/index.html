@@ -153,7 +153,8 @@ button.spec-name{min-width:0;flex:1 1 160px;justify-content:flex-start;text-alig
 #specEditor .ed-add:hover{background:var(--chip)}
 #specEditor .seg button.on{color:var(--editor-action)}
 .spec-editor-bar button.pri{background:var(--editor-action);color:var(--on-primary)}
-:is(#specEditor,.spec-editor-bar,.device-config-page) :is(button,summary,input,select,textarea):focus-visible{outline:2px solid var(--editor-action);outline-offset:2px}
+/* Labelled inputs and selects already show focus on the enclosing field. */
+:is(#specEditor,.spec-editor-bar,.device-config-page) :is(button,summary,input,select,textarea):not(:where(.field input,.field select)):focus-visible{outline:2px solid var(--editor-action);outline-offset:2px}
 
 #catalogView{margin-inline-start:auto}
 @media (max-width:599px){#catalogView{margin-inline-start:0}}

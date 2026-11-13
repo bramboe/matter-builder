@@ -10,8 +10,6 @@ idf_component_register(
 )
 target_compile_options(${COMPONENT_LIB} PRIVATE "-DCHIP_HAVE_CONFIG_H")
 
-configure_file(bridge-build.json.in "${CMAKE_CURRENT_BINARY_DIR}/bridge_build.json" @ONLY)
-target_add_binary_data(${COMPONENT_LIB} "${CMAKE_CURRENT_BINARY_DIR}/bridge_build.json" TEXT)
 # A project generated from a spec (tools/mb_generate.py) carries the spec
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/spec.yaml")
     target_add_binary_data(${COMPONENT_LIB} "${CMAKE_CURRENT_SOURCE_DIR}/spec.yaml" TEXT)

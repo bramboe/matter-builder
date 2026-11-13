@@ -6,7 +6,10 @@ idf_component_register(
     REQUIRES mb_core octo_protocol bt nvs_flash esp_timer
 )
 if(DEFINED MB_BRIDGE_KEEPALIVE_MS AND DEFINED MB_BRIDGE_LIGHT)
+    configure_file(bridge_build.h.in "${CMAKE_CURRENT_BINARY_DIR}/bridge_build.h" @ONLY)
+    target_include_directories(${COMPONENT_LIB} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
     target_compile_definitions(${COMPONENT_LIB} PRIVATE
+        MB_BRIDGE_BUILD_METADATA=1
         MB_BRIDGE_KEEPALIVE_MS=${MB_BRIDGE_KEEPALIVE_MS}
         MB_BRIDGE_LIGHT=${MB_BRIDGE_LIGHT})
 endif()

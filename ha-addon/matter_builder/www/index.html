@@ -287,6 +287,16 @@ a.button.pri{background:var(--primary);color:#fff}
 .auth .actions{margin-top:16px}
 .auth .error{margin-top:10px}
 .taskbar .bar>div:nth-child(2){flex:1 1 180px}
+.ble-setup-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;align-items:flex-start}
+.ble-presets{flex:1 0 100%;min-width:0}
+.ble-presets>summary{display:inline-flex;align-items:center;gap:8px;min-height:36px;padding:0 14px;border-radius:18px;background:var(--fill);font-weight:500;list-style:none;cursor:pointer}
+.ble-presets>summary::-webkit-details-marker{display:none}
+.ble-presets[open]>summary .chev{transform:rotate(-135deg);margin-bottom:0}
+.ble-preset-list{display:grid;gap:8px;margin-top:10px}
+.ble-preset{display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:12px;background:var(--fill);border-radius:var(--radius)}
+.ble-preset .info{flex:1 1 200px;min-width:0}
+.ble-preset .sub{margin:4px 0 0}
+.ble-preset button{background:var(--card);color:var(--primary)}
 .ble-cmd{grid-template-columns:minmax(0,1fr) minmax(0,2fr)}
 .ble-panel>summary{list-style:none;display:flex;align-items:center;gap:10px;padding:10px 12px;min-height:50px;cursor:pointer}
 .ble-panel>summary::-webkit-details-marker{display:none}
@@ -605,7 +615,11 @@ const TEXT = {
   ignoredTitle: 'Ignored devices', ignoredHelp: 'Found on your network, but not offered for linking.',
   bleTitle: 'Bluetooth device', ofEightCommands: n => `${n} of 8 commands`,
   bleHelp: 'Send Bluetooth commands to a device such as a bed or a fan. Add a command as a connection to make it available in Matter.',
-  bleOther: 'Set up another device', bleAddress: 'Bluetooth address', bleAddressHint: 'AA:BB:CC:DD:EE:FF', bleAddressType: 'Address type', blePublic: 'Public', bleRandom: 'Random',
+  bleSetupHelp: 'Set up a Bluetooth device so this ESP32 can send commands to it. Start with a preset or enter your own connection settings and commands.',
+  bleBrowse: 'Browse presets', bleManual: 'Set up manually', bleUsePreset: 'Use preset',
+  bleUseNamedPreset: name => `Use preset: ${name}`,
+  bleOctoPreset: 'Fills in the connection settings and eight remote commands for an Octo bed, including head and leg controls, stop and light. Add your bed’s Bluetooth address to connect.',
+  bleAddress: 'Bluetooth address', bleAddressHint: 'AA:BB:CC:DD:EE:FF', bleAddressType: 'Address type', blePublic: 'Public', bleRandom: 'Random',
   bleService: 'Service UUID', bleCharacteristic: 'Characteristic UUID', bleWrite: 'Write mode', bleWriteResp: 'With response', bleWriteNoResp: 'Without response',
   bleIdle: 'Disconnect after inactivity (s)', bleIdleHelp: '0 disconnects after each command. 3600 keeps the connection open.',
   bleSettings: 'Bluetooth connection settings', bleSettingsHelp: 'Use the service, characteristic and write mode specified for your device.',
@@ -1368,10 +1382,11 @@ class ConfigEditor {
   }
   bleStart(template) {
     const tpl = BLE_TEMPLATES[template];
-    this.bleOpen.clear(); this.bleSettingsOpen = !tpl;
+    this.bleOpen.clear(); this.bleSettingsOpen = true;
     this.ble = tpl ? {...bleEmpty(), service: tpl.service, characteristic: tpl.characteristic, write: tpl.write, idle: tpl.idle,
       commands: tpl.commands.map(([label, bytes, times, gap]) => ({label, bytes, times, gap}))} : bleEmpty();
     this.changed();
+    this.host.querySelector('[data-ble-settings] > summary')?.focus();
   }
   bleRemove() {
     if (!confirm(t('bleRemoveConfirm'))) return;
@@ -1408,10 +1423,21 @@ class ConfigEditor {
     if (this.noBluetooth() && !this.ble) return `<div class="ed-section"><h3>${t('bleTitle')}</h3></div><div class="sub warnText" style="margin:-4px 2px 8px">${esc(t('notOnBoard', BOARDS[this.board].name))}</div>`;
     const ref = this.ref, b = this.ble;
     const head = `<div class="ed-section"><h3>${t('bleTitle')}</h3>${b ? `<span class="sub">${t('ofEightCommands', b.commands.length)}</span>` : ''}</div>
-      <div class="sub" style="margin:-4px 2px 8px">${t('bleHelp')}</div>`;
-    if (!b) return `${head}<div class="actions" style="margin:0 0 8px;justify-content:flex-start">
-        ${Object.entries(BLE_TEMPLATES).map(([k, v]) => `<button onclick="${ref}.bleStart('${k}')">${icon('plus')} ${esc(v.title)}</button>`).join('')}
-        <button class="plain" onclick="${ref}.bleStart('')">${t('bleOther')}</button></div>`;
+      <div class="sub" style="margin:-4px 2px 8px">${t(b ? 'bleHelp' : 'bleSetupHelp')}</div>`;
+    if (!b) return `${head}<div class="ble-setup-actions">
+      <details class="ble-presets">
+        <summary>${t('bleBrowse')}<span class="chev" aria-hidden="true"></span></summary>
+        <div class="ble-preset-list">
+          ${Object.entries(BLE_TEMPLATES).map(([key, preset]) => `
+            <div class="ble-preset">
+              <span class="ico" aria-hidden="true">${icon(preset.icon)}</span>
+              <div class="info"><b>${esc(preset.title)}</b><p class="sub">${esc(t(preset.description))}</p></div>
+              <button aria-label="${esc(t('bleUseNamedPreset', preset.title))}" onclick="${ref}.bleStart('${key}')">${t('bleUsePreset')}</button>
+            </div>`).join('')}
+        </div>
+      </details>
+      <button class="plain" onclick="${ref}.bleStart('')">${t('bleManual')}</button>
+    </div>`;
     const full = this.rows.length >= 8;
     const field = (label, key, value, extra = '') => `<label class="field"><span>${label}</span><input value="${esc(value)}" spellcheck="false" ${extra} oninput="${ref}.bleSet('${key}', this.value)"></label>`;
     const commands = b.commands.map((c, i) => {
@@ -1435,7 +1461,7 @@ class ConfigEditor {
           ${linked ? '' : `<button onclick="${ref}.bleAsConnection(${i})" ${full ? 'disabled' : ''}>${t('bleAsConnection')}</button>`}
           <span class="grow"></span>${i === b.commands.length - 1 ? `<button class="warn" onclick="${ref}.bleDropCommand(${i})">${t('remove')}</button>` : ''}</div></div></details>`;
     }).join('');
-    return `${head}<details class="ed-item ble-panel" ${this.bleSettingsOpen ? 'open' : ''}
+    return `${head}<details class="ed-item ble-panel" data-ble-settings ${this.bleSettingsOpen ? 'open' : ''}
       ontoggle="if (this.isConnected) ${ref}.bleSettingsOpen = this.open">
       <summary><span class="info"><b>${t('bleSettings')}</b></span><span class="chev"></span></summary>
       <div class="ed-item-body"><div class="ed-fields">
@@ -3018,7 +3044,7 @@ function octoPacket(c0, c1, data = []) {
   return out.map(b => b.toString(16).padStart(2, '0').toUpperCase()).join('');
 }
 const BLE_TEMPLATES = {
-  octo: {title: 'Octo bed', service: 'FFE0', characteristic: 'FFE1', write: 'no-response', idle: 25,
+  octo: {title: 'Octo bed', icon: 'bed', description: 'bleOctoPreset', service: 'FFE0', characteristic: 'FFE1', write: 'no-response', idle: 25,
     commands: [['Head up', octoPacket(2, 0x70, [2]), 8, 375], ['Head down', octoPacket(2, 0x71, [2]), 8, 375],
       ['Legs up', octoPacket(2, 0x70, [4]), 8, 375], ['Legs down', octoPacket(2, 0x71, [4]), 8, 375],
       ['Both up', octoPacket(2, 0x70, [6]), 8, 375], ['Both down', octoPacket(2, 0x71, [6]), 8, 375],

@@ -538,6 +538,8 @@ dialog.side{max-width:100vw}
     <div class="dlg-body">
       <div id="dNetwork" hidden></div>
       <div id="dConnections">
+        <section id="configTarget" class="device-settings-card" hidden></section>
+        <div class="sub" id="configLoading" role="status" hidden></div>
         <div id="noIo" hidden style="margin-top:14px"></div>
         <div id="ioEditor">
           <div class="notice" id="recipeNotice" hidden></div>
@@ -546,6 +548,7 @@ dialog.side{max-width:100vw}
           <div class="error" id="mError" role="alert" hidden></div>
           <div class="notice" id="mNotice" hidden></div>
           <div class="actions end"><button class="plain" id="mSaveConfig" data-t="saveConfig"></button><span class="grow"></span><button id="mSave" data-t="saveDraft"></button>
+            <button class="pri" id="mDeploy" hidden>Apply to device</button>
             <button class="pri" id="mApply" data-t="applyRestart" hidden></button>
             <button class="pri" id="mConfirm" data-t="keep" hidden></button></div>
         </div>
@@ -796,7 +799,22 @@ const TEXT = {
     ir_receive: 'An IR receiver sees this code. Appears as a button: a press each time. Codes of the same receiver share its pin.',
     ble_sensor: 'A thermometer that broadcasts its readings (BTHome, or Xiaomi with pvvx/ATC firmware). No wires.',
     ble_presence: 'A Bluetooth tag with a fixed address: present while it was seen in the last minute. Phones change their address, so they do not work.'}, deviceName: 'Device name', addConnection: 'Add connection', saveDraft: 'Save draft', applyRestart: 'Apply & restart', keep: 'Keep',
-  manageHelp: 'Saving keeps the changes as a draft on the device. Applying restarts it with them on trial: keep them within 2 minutes, or it goes back by itself.',
+  manageHelp: 'Apply to device validates and sends your changes to this ESP32. Changes to connections run on trial after a restart. Choose Keep within 2 minutes to keep those connections.',
+  editConfiguration: 'Edit configuration',
+  configOnDevice: 'Configuration on this device',
+  configDraftOnDevice: 'A saved connections draft is loaded. It can differ from the running connections.',
+  configRunning: 'Loaded from the linked device.',
+  configUnavailable: 'The device configuration could not be loaded. Check that the device is online and open Configuration again.',
+  applyConfigTitle: n => `Apply configuration to ${n}?`,
+  applyConfigHelp: 'This sends your changes to this device. It may restart. Changes to connections must be kept after restart.',
+  applyTrialMissing: 'A configuration trial could not be confirmed. Check the device and its running configuration before trying again.',
+  bridgeActions: 'Built-in Bluetooth actions',
+  bridgeActionsHelp: 'These actions are part of the Octo bed bridge firmware. This overview shows what the bridge can do. Available actions depend on the connected bed.',
+  bridgeMotion: 'Raise or lower the head or legs, separately or together.',
+  bridgeStop: 'Stop movement.',
+  bridgeLight: 'Switch the under-bed light on or off.',
+  bridgePresets: 'Recall or save positions on beds with preset support.',
+  configSent: 'Configuration sent to this device.',
   slot: 'Connection', type: 'Type', pin: 'Pin', scl: 'SCL', inverted: 'Inverted', remove: 'Remove', name: 'Name',
   types: {relay: 'Relay', led: 'LED', button: 'Push button', contact: 'Contact', motion: 'Motion sensor', sht4x: 'SHT4x',
     ir_send: 'IR code to send', ir_receive: 'IR code to receive', ble_sensor: 'Bluetooth thermometer', ble_presence: 'Bluetooth presence'},
@@ -809,7 +827,7 @@ const TEXT = {
   needCode: n => `${n}: an IR code like nec:00FF:A25D`, needMac: n => `${n}: a Bluetooth address like AA:BB:CC:DD:EE:FF`, liveSend: 'Send', liveHere: 'here', liveAway: 'away', liveSeen: s => `seen ${s} s ago`,
   saved: 'Saved as draft.', unchanged: 'Nothing changed.', applying: 'Restarting with the new connections…',
   trialLeft: s => `On trial: keep within ${s} s.`, kept: 'Kept.', yamlError: e => `YAML: ${e}`,
-  fromRecipe: n => `Filled in from “${n}”. Nothing changes on the device until you save and apply.`, saveApply: 'Save and apply',
+  fromRecipe: n => `Filled in from “${n}”. Review the configuration before applying it to this device.`, saveApply: 'Save and apply',
   running: 'Running', install: 'Install', installFile: 'Install this firmware',
   confirmUpdate: 'Update this device? The device and its connected accessories may be unavailable during the update.',
   noFirmware: 'No firmware of this kind is available yet.', address: 'Address', network: 'Network', key: 'Key of the add-on',
@@ -1197,7 +1215,7 @@ function deviceCard(p) {
     <div class="acts">
       ${up ? `<button class="text" onclick="updateProxy('${p.id}', '${esc(up)}')" ${state.job.running ? 'disabled' : ''}>${t('updateTo', fileVersion(up))}</button>` : ''}
       ${s && s.auth ? `<button class="text" onclick="openWizard('link', '${esc(p.host)}')">${t('linkAgain')}</button>` : ''}
-      <button class="plain" onclick="openDevice('${p.id}', 'connections')" ${updating ? 'disabled' : ''}>${t('edit')}</button>
+      <button class="plain" onclick="openDevice('${p.id}', 'connections')" ${updating ? 'disabled' : ''}>${t('editConfiguration')}</button>
       <button class="plain" onclick="openLogs('${p.id}')">${t('logs')}</button>
       ${updating ? '' : `<a class="button plain" href="${esc(portalUrl(p))}">${t('openPage')}</a>`}
       <span class="grow"></span>
@@ -2731,7 +2749,10 @@ const normalCode = code => { const m = /^nec:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i.
   return m ? `nec:${m[1].toUpperCase().padStart(4, '0')}:${m[2].toUpperCase().padStart(4, '0')}` : (code || '').trim(); };
 let openId = null, dtab = 'connections', managed = null, deviceContext = null, deviceBusy = false, deviceRequest = 0;
 const devEditor = new ConfigEditor('dev');
-devEditor.onChange = () => $('#mSave').classList.add('pri');
+devEditor.onChange = () => {
+  $('#mSave').classList.add('pri');
+  if (managed?.io) showManageState();
+};
 
 // The settings a firmware without connections declares ('settings json':
 // values and a schema), edited as a form or as the settings: block in YAML
@@ -2775,8 +2796,13 @@ class SettingsEditor {
   }
   setMode(m) {
     if (m === this.mode) return;
-    if (m === 'visual') { try { Object.assign(this.values, this.check(this.fromYaml(this.yaml))); this.error = ''; } catch (e) { this.error = e.message; } }
-    else this.yaml = this.toYaml();
+    if (m === 'visual') {
+      try { Object.assign(this.values, this.check(this.fromYaml(this.yaml))); this.error = ''; }
+      catch (e) { this.error = e.message; this.render(); return; }
+    } else {
+      this.yaml = this.toYaml();
+      this.dirty = this.changed();
+    }
     this.mode = editorPref = m;
     try { localStorage.setItem('mbEditor', m); } catch (e) {}
     this.render();
@@ -2795,9 +2821,14 @@ class SettingsEditor {
     return Object.keys(this.schema).some(k => String(this.values[k] ?? this.schema[k].default) !== String(this.saved[k] ?? this.schema[k].default));
   }
   async save() {
-    if (this.busy) return;
-    this.error = this.notice = '';
+    if (this.busy || !this.changed() || openId !== this.proxy) return;
     this.busy = true;
+    if (!await confirmAction(t('applyConfigTitle', this.device.name),
+      'This updates the settings of this device and may restart it.', 'Apply to device')) {
+      this.busy = false;
+      return;
+    }
+    this.error = this.notice = '';
     this.render();
     try {
       const values = this.mode === 'yaml' ? this.check(this.fromYaml(this.yaml)) : this.check(this.values);
@@ -2805,6 +2836,7 @@ class SettingsEditor {
       for (const k of changed) {
         const reply = (await proxyCommand(this.proxy, `settings set ${k} ${values[k]}`)).trim();
         if (/^error/i.test(reply)) throw new Error(reply.replace(/^error:\s*/i, ''));
+        this.saved[k] = values[k];
       }
       Object.assign(this.saved, values); Object.assign(this.values, values);
       this.notice = changed.length ? t('settingsSaved') : t('settingsSame');
@@ -2844,12 +2876,16 @@ class SettingsEditor {
     const body = this.mode === 'yaml'
       ? `${yamlEditor(this.yaml, 'setEditor.setYaml(this.value)', '160px', this.toYaml(this.saved))}<div class="sub">${t('settingsYamlHelp')}</div>`
       : Object.entries(this.schema).map(([k, f]) => this.field(k, f)).join('');
+    const actions = this.device?.app === 'octo_bridge' ? `<details class="device-settings-card">
+      <summary>${t('bridgeActions')}</summary><p class="sub">${t('bridgeActionsHelp')}</p>
+      <ul class="steps">${['bridgeMotion', 'bridgeStop', 'bridgeLight', 'bridgePresets'].map(key => `<li>${t(key)}</li>`).join('')}</ul>
+    </details>` : '';
     const beds = (this.beds || []).length ? `<section class="device-settings-card"><h3>${t('bedsLabel')}</h3>
       ${this.beds.map(b => `<div class="row"><span class="ico">${icon('bed')}</span><div class="label">${esc(b.name || t('bedN', b.index + 1))}
         <div class="sub">${esc(b.state || '')}${b.rssi ? ` · ${b.rssi} dBm` : ''}</div></div></div>`).join('')}
       <div class="sub" style="margin-top:8px">${t('bedsHelp')} <a href="${esc(this.page || '#')}">${t('openPage')}</a></div></section>` : '';
     this.host.innerHTML = `${head}${beds}<section class="device-settings-card"><h3>${t('settingsLabel')}</h3>${help}${body}${this.error ? `<div class="error">${esc(this.error)}</div>` : ''}${this.notice ? `<div class="notice">${esc(this.notice)}</div>` : ''}
-      <div class="actions"><button id="setSave" class="${this.changed() ? 'pri' : ''}" onclick="setEditor.save()" ${this.busy || !this.changed() ? 'disabled' : ''}>${this.busy ? t('saving') : t('save')}</button></div></section>`;
+      <div class="actions"><button id="setSave" class="${this.changed() ? 'pri' : ''}" onclick="setEditor.save()" ${this.busy || !this.changed() ? 'disabled' : ''}>${this.busy ? t('saving') : 'Apply to device'}</button></div></section>${actions}`;
   }
 }
 const setEditor = new SettingsEditor();
@@ -2869,6 +2905,8 @@ async function openDevice(id, which, recipe) {
   const requestId = ++deviceRequest;
   deviceBusy = true;
   $('#mSave').classList.remove('pri');
+  $('#mDeploy').hidden = true;
+  $('#mApply').hidden = $('#mConfirm').hidden = true;
   devEditor.liveKey = null;
   $('#mError').hidden = $('#mNotice').hidden = $('#recipeNotice').hidden = true;
   setDtab(which || 'firmware');
@@ -2887,6 +2925,7 @@ async function openDevice(id, which, recipe) {
     if (requestId === deviceRequest) {
       deviceBusy = false;
       if (pageTask?.content?.contains($('#dConnections'))) $('#taskBack').disabled = false;
+      renderDevicePanel();
     }
   }
 }
@@ -2981,9 +3020,14 @@ function setDtab(name) {
   $('#dNetwork').hidden = name !== 'network';
   if (name === 'network' && openId) loadHealth(openId);
 }
+function showDeviceConfiguration() {
+  setDtab('connections');
+  if ($('#deviceDlg').open) openDevicePage();
+  renderDevicePanel();
+}
 $$('[data-dtab]').forEach(b => { b.onclick = () => {
+  if (b.dataset.dtab === 'connections') return showDeviceConfiguration();
   setDtab(b.dataset.dtab);
-  if (b.dataset.dtab === 'connections' && $('#deviceDlg').open) openDevicePage();
   renderDevicePanel();
 }; });
 
@@ -3033,7 +3077,17 @@ function renderDevicePanel() {
   $('#dHost').classList.toggle('mono', !r);
   setHtml($('#dIcon'), appIcon(r ? r.app : p.app));
   setHtml($('#dChip'), statusChip(s));
-  $('#noIo').hidden = !(managed && !managed.io);
+  const target = $('#configTarget');
+  const fw = r?.app || p.app;
+  const hasConfiguration = !!(managed?.io || managed?.settings);
+  target.hidden = !hasConfiguration;
+  if (hasConfiguration) setHtml(target, `<h3>${t('configOnDevice')}</h3>
+    <div class="row"><div class="label"><strong>${esc(p.name)}</strong><div class="sub">${esc(appTitle(fw))}${r?.version ? ' · ' + esc(r.version) : ''}</div></div>${statusChip(s)}</div>
+    <p class="sub" style="margin:8px 0 0">${t(managed.io?.changed ? 'configDraftOnDevice' : 'configRunning')}</p>`);
+  const loading = $('#configLoading');
+  loading.hidden = hasConfiguration || !!(managed && r && !deviceBusy);
+  loading.textContent = t(deviceBusy ? 'checking' : 'configUnavailable');
+  $('#noIo').hidden = !(managed && !managed.io && (managed.settings || r));
   if (managed && managed.io) {
     const live = s && s.io ? s.io.slots : null;
     const irLast = s && s.io ? s.io.ir_last : undefined;
@@ -3045,7 +3099,7 @@ function renderDevicePanel() {
   }
   if (managed && !managed.io && managed.settings) {
     if (!setEditor.host || !$('#noIo').contains(setEditor.host)) { $('#noIo').innerHTML = '<div></div>'; setEditor.host = $('#noIo').firstChild; }
-    setEditor.device = {name: p.name, app: r ? r.app : p.app || '', version: r ? r.version : ''};
+    setEditor.device = {name: p.name, app: fw || '', version: r?.version || ''};
     setEditor.proxy = p.id;
     setEditor.page = portalUrl(p);
     if (!setEditor.dirty) setEditor.yaml = setEditor.toYaml();
@@ -3063,6 +3117,8 @@ function renderDevicePanel() {
     ${files.length ? `<div class="row"><label class="field" style="flex:1"><span>${t('installFile')}</span><select id="fwPick">${files.map(f => `<option>${esc(f)}</option>`).join('')}</select></label>
       <button class="pri" onclick="updateProxy('${p.id}', $('#fwPick').value)" ${state.job.running ? 'disabled' : ''}>${t('install')}</button></div>`
       : `<div class="sub" style="margin-top:12px">${t('noFirmware')}</div>`}
+    <div class="row"><div class="label">${t('editConfiguration')}<div class="sub">Open the configuration reported by this device.</div></div>
+      <button onclick="showDeviceConfiguration()">${t('editConfiguration')}</button></div>
     <div class="row"><div class="label">${t('nightUpdates')}<div class="sub">${t('nightUpdatesHelp', String(state.settings.night_hour ?? 3).padStart(2, '0'))}</div></div>
       <label class="switch"><input type="checkbox" ${p.auto_update ? 'checked' : ''} onchange="setAutoUpdate('${p.id}', this.checked)"></label></div>`);
   const token = shownTokens[p.id];
@@ -3403,7 +3459,10 @@ async function sendLines(id, lines) {
 
 function showManageState() {
   const io = managed.io;
-  $('#mApply').hidden = !io.changed || io.trial > 0;
+  const editing = $('#mSave').classList.contains('pri');
+  $('#mSave').disabled = io.trial > 0;
+  $('#mDeploy').hidden = !editing || io.trial > 0;
+  $('#mApply').hidden = editing || !io.changed || io.trial > 0;
   $('#mConfirm').hidden = !(io.trial > 0);
   if (io.trial > 0) note(t('trialLeft', io.trial));
   else if (io.problem) note(io.problem);  // what the device could not use at start
@@ -3411,9 +3470,9 @@ function showManageState() {
 function note(text) { $('#mNotice').textContent = text; $('#mNotice').hidden = false; }
 
 async function saveManage() {
-  if (deviceBusy || !managed?.io) return;
+  if (deviceBusy || !managed?.io || managed.io.trial > 0) return;
   deviceBusy = true;
-  try { await saveManageNow(); }
+  try { return await saveManageNow(); }
   catch (e) { $('#mError').textContent = e.message; $('#mError').hidden = false; }
   finally { deviceBusy = false; }
 }
@@ -3432,12 +3491,18 @@ async function saveManageNow() {
     $('#mError').textContent = t('groupsTooOld', MIN_GROUPS); $('#mError').hidden = false; return;
   }
   if (spec.ble && managed.ble === undefined) { $('#mError').textContent = t('bleNotHere'); $('#mError').hidden = false; return; }
+  // Refresh persisted values so a retry after a partially completed write only sends the remaining changes.
+  managed.io = JSON.parse(await proxyCommand(managed.id, 'io json')).io;
+  if (managed.io.trial > 0) { showManageState(); return; }
+  if (managed.ble !== undefined) managed.ble = bleFromDevice(JSON.parse(await proxyCommand(managed.id, 'bledev json')).bledev);
+  if (managed.rules) managed.rules = JSON.parse(await proxyCommand(managed.id, 'rule json'));
   // The Bluetooth device first: its commands must be there for the connections that use them
   const lines = bleLines(managed.ble, spec.ble).concat(diffLines(managed.io, spec.rows, spec.name, devEditor.drivers))
     .concat(managed.rules ? ruleLines(managed.rules.rules, spec.rules || []) : []);
   try { await sendLines(managed.id, lines); }
   catch (e) { $('#mError').textContent = e.message; $('#mError').hidden = false; return; }
   managed.io = JSON.parse(await proxyCommand(managed.id, 'io json')).io;
+  if (managed.ble !== undefined) managed.ble = bleFromDevice(JSON.parse(await proxyCommand(managed.id, 'bledev json')).bledev);
   if (managed.rules) try { managed.rules = JSON.parse(await proxyCommand(managed.id, 'rule json')); } catch (e) {}
   devEditor.clock = managed.rules ? managed.rules.clock : null;
   devEditor.load(managed.io.name, rowsFromIo(managed.io), managed.io.pins, managed.rules ? managed.rules.rules : [], managed.ble);
@@ -3445,6 +3510,8 @@ async function saveManageNow() {
   $('#recipeNotice').hidden = true;
   showManageState();
   note(lines.length ? t('saved') : t('unchanged'));
+  renderDevicePanel();
+  return true;
 }
 
 async function saveAsConfig() {
@@ -3460,8 +3527,13 @@ async function saveAsConfig() {
 
 // A recipe in one go: into the draft, then a restart with it on trial
 async function saveAndApply() {
-  await saveManage();
-  if ($('#mError').hidden && managed && managed.io.changed) applyManage();
+  if (deviceBusy || !managed?.io || managed.io.trial > 0) return;
+  const device = managed;
+  const name = state.proxies.find(p => p.id === device.id)?.name || '';
+  if (!await confirmAction(t('applyConfigTitle', name), t('applyConfigHelp'), 'Apply to device')) return;
+  if (managed !== device || !await saveManage()) return;
+  if (device.io.changed) await applyManage();
+  else note(t('configSent'));
 }
 
 // After "apply" the device restarts: wait until it answers, then show the trial
@@ -3472,26 +3544,43 @@ async function applyManage() {
   finally { deviceBusy = false; }
 }
 async function applyManageNow() {
-  try { await proxyCommand(managed.id, 'io apply'); } catch (e) {}
+  $('#mError').hidden = true;
+  try {
+    const reply = await proxyCommand(managed.id, 'io apply');
+    if (/^error/i.test(reply.trim())) {
+      $('#mError').textContent = reply.trim();
+      $('#mError').hidden = false;
+      return;
+    }
+  } catch (e) { /* The device can restart before its reply reaches the add-on. */ }
   note(t('applying'));
   $('#mApply').hidden = true;
   for (let i = 0; i < 40 && managed; i++) {
     await new Promise(r => setTimeout(r, 3000));
-    try { managed.io = JSON.parse(await proxyCommand(managed.id, 'io json')).io; if (managed.io.trial > 0) break; } catch (e) {}
+    try {
+      managed.io = JSON.parse(await proxyCommand(managed.id, 'io json')).io;
+      if (managed.io.trial > 0) { showManageState(); return; }
+    } catch (e) {}
   }
-  if (managed) showManageState();
+  showManageState();
+  $('#mNotice').hidden = true;
+  $('#mError').textContent = t('applyTrialMissing');
+  $('#mError').hidden = false;
 }
 
 $('#mSave').onclick = saveManage;
+$('#mDeploy').onclick = saveAndApply;
 $('#mSaveConfig').onclick = saveAsConfig;
 $('#mApply').onclick = applyManage;
 $('#mConfirm').onclick = async () => {
   if (deviceBusy || !managed?.io) return;
   deviceBusy = true;
   try {
-    await proxyCommand(managed.id, 'io confirm');
+    const reply = await proxyCommand(managed.id, 'io confirm');
+    if (!reply.startsWith('ok')) throw new Error(reply.trim());
     managed.io = JSON.parse(await proxyCommand(managed.id, 'io json')).io;
     showManageState();
+    renderDevicePanel();
     note(t('kept'));
   } catch (e) {
     $('#mError').textContent = e.message;

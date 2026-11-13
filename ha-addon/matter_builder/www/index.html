@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Matter Builder</title>
-<script defer src="yaml-editor.js?v=1"></script>
+<script defer src="yaml-editor.js?v=2"></script>
 <style>
 /* Colours, radii and spacing follow the Home Assistant frontend */
 :root{--primary:#009ac7;--bg:#f0f0f0;--card:#fff;--fg:#141414;--mute:#6f6f6f;--line:#e0e0e0;--fill:#f5f5f5;
@@ -221,7 +221,17 @@ dialog.side{margin:0 0 0 auto;height:100vh;max-height:100vh;border-radius:16px 0
 mb-yaml-editor{--yaml-height:280px;--yaml-key:#005b79;--yaml-string:#176443;--yaml-value:#8e3e00;display:block;min-width:0;margin-bottom:8px;background:var(--card);border-radius:var(--radius);overflow:hidden}
 @media(prefers-color-scheme:dark){mb-yaml-editor{--yaml-key:#80d4f4;--yaml-string:#8bdab1;--yaml-value:#ffbd80}}
 mb-yaml-editor textarea.yaml{display:block;width:100%;min-height:var(--yaml-height);font:13px/1.55 ui-monospace,Menlo,monospace;background:var(--card);color:var(--fg);border:0;padding:10px}
-.yaml-tools{display:flex;flex-wrap:wrap;gap:4px;padding:4px 8px;background:var(--fill);border-bottom:1px solid var(--line)}
+.yaml-tools,.yaml-modes,.yaml-actions{display:flex;flex-wrap:wrap;align-items:center;gap:4px}
+.yaml-tools{justify-content:space-between;padding:6px 8px;background:var(--fill);border-bottom:1px solid var(--line)}
+.yaml-modes button{padding:0 12px}
+.yaml-modes button[aria-pressed="true"]{background:var(--card);color:var(--yaml-key);font-weight:600}
+.yaml-preview{min-height:var(--yaml-height);max-height:65vh;overflow:auto;padding:12px;color:var(--mute)}
+.yaml-preview:focus-visible{outline:2px solid var(--editor-action,var(--primary));outline-offset:-2px}
+.yaml-preview pre{margin:0;min-width:max-content;color:var(--fg);font:13px/1.55 ui-monospace,Menlo,monospace;tab-size:2}
+.yaml-preview pre span{display:block;padding:0 8px;white-space:pre}
+.yaml-preview .yaml-diff-range{color:var(--yaml-key);background:var(--fill)}
+.yaml-diff-add{background:var(--okchip)}
+.yaml-diff-remove{background:var(--badchip)}
 .yaml-code .cm-editor{min-height:var(--yaml-height);max-height:65vh;font-size:13px}
 .yaml-code .cm-editor.cm-focused{outline:2px solid var(--editor-action,var(--primary));outline-offset:-2px}
 .yaml-code .cm-scroller{overflow:auto;font:inherit;font-family:ui-monospace,Menlo,monospace;line-height:1.55}
@@ -600,8 +610,9 @@ function setHtml(el, html) {
   if (el.dataset.html !== html) { el.innerHTML = html; el.dataset.html = html; }
 }
 
-function yamlEditor(text, oninput = '', height = '') {
-  return `<mb-yaml-editor${height ? ` style="--yaml-height:${height}"` : ''}><textarea class="yaml"
+function yamlEditor(text, oninput = '', height = '', original = text) {
+  return `<mb-yaml-editor${height ? ` style="--yaml-height:${height}"` : ''}
+    ${oninput ? `data-original="${esc(original)}"` : ''}><textarea class="yaml"
     aria-label="YAML" spellcheck="false" autocapitalize="off" autocomplete="off"
     ${oninput ? `oninput="${esc(oninput)}"` : 'readonly'}>
 ${esc(text)}</textarea></mb-yaml-editor>`;
@@ -1303,12 +1314,13 @@ class ConfigEditor {
     this.name = name; this.rows = rows.map(r => ({...r})); if (pins) this.pins = pins;
     this.rules = JSON.parse(JSON.stringify(rules || [])); this.ruleOpen.clear();
     this.yaml = specYaml(name, this.rows, this.components, this.drivers, this.rules, this.ble, this.specDevice); this.error = ''; this.open.clear(); this.cardYaml = {}; this.picking = false;
+    this.originalYaml = this.yaml;
     this.grouping = this.rows.some(r => r.group);
     this.render();
   }
   // A YAML text (a config or recipe): shown as it is in the YAML mode
   async loadText(text) {
-    this.yaml = text; this.cardYaml = {}; this.open.clear(); this.ruleOpen.clear(); this.bleOpen.clear(); this.bleSettingsOpen = false;
+    this.originalYaml = this.yaml = text; this.cardYaml = {}; this.open.clear(); this.ruleOpen.clear(); this.bleOpen.clear(); this.bleSettingsOpen = false;
     try { const s = await parseSpec(text); this.name = s.name; this.rows = s.rows; this.components = s.components; this.drivers = s.drivers; this.rules = s.rules; this.ble = s.ble; this.loadSpecDevice(s.device); this.error = ''; this.grouping = this.grouping || this.rows.some(r => r.group); }
     catch (e) { this.error = t('yamlError', e.message); this.mode = 'yaml'; }
     this.changed();
@@ -1741,9 +1753,12 @@ class ConfigEditor {
   }
 
   // One card in YAML, like "Edit in YAML" on a Home Assistant trigger
+  connectionYaml(row) {
+    const lines = specYaml('x', [row]).split('\n');
+    return lines.slice(lines.indexOf('connections:') + 1).map(l => l.slice(2)).join('\n').trim() + '\n';
+  }
   editCardYaml(slot) {
-    const lines = specYaml('x', [this.row(slot)]).split('\n');
-    this.cardYaml[slot] = lines.slice(lines.indexOf('connections:') + 1).map(l => l.slice(2)).join('\n').trim() + '\n';
+    this.cardYaml[slot] = this.connectionYaml(this.row(slot));
     this.open.add(slot);
     this.render();
   }
@@ -1787,7 +1802,7 @@ class ConfigEditor {
     const l = this.live && this.live[r.slot];
     const canTest = this.tester && (isOutputType(r.type) || r.type === 'ir_send') && l && l.type === r.type && l.pin === r.pin;
     const body = this.cardYaml[r.slot] !== undefined
-      ? `${yamlEditor(this.cardYaml[r.slot], `${ref}.cardYaml[${r.slot}] = this.value`, '130px')}
+      ? `${yamlEditor(this.cardYaml[r.slot], `${ref}.cardYaml[${r.slot}] = this.value`, '130px', this.connectionYaml(r))}
          <div class="actions end"><button class="plain" onclick="delete ${ref}.cardYaml[${r.slot}]; ${ref}.render()">${t('cancel')}</button>
            <button class="pri" onclick="${ref}.doneCardYaml(${r.slot})">${t('done')}</button></div>`
       : `<div class="ed-fields">
@@ -1843,7 +1858,7 @@ class ConfigEditor {
         <button class="${this.mode === 'yaml' ? 'on' : ''}" onclick="${ref}.setMode('yaml')">YAML</button></div></div>`;
     const error = this.error ? `<div class="error">${esc(this.error)}</div>` : '';
     if (this.mode === 'yaml') {
-      this.host.innerHTML = `${head}${yamlEditor(this.yaml, `${ref}.setYaml(this.value)`)}
+      this.host.innerHTML = `${head}${yamlEditor(this.yaml, `${ref}.setYaml(this.value)`, '', this.originalYaml)}
         <div class="sub">${t('yamlHelp')}</div>${error}`;
       return;
     }
@@ -2347,6 +2362,9 @@ async function postSpec(checkOnly) {
     if (r.error) { specMessage(r.error); return; }
     specMessage(null, checkOnly ? t('specOk', r.spec) : t('specSaved'));
     if (!checkOnly) {
+      specEditor.originalYaml = text;
+      const editor = $('#specEditorHost > mb-yaml-editor');
+      editor?.setOriginal?.(text);
       if (text === specEditor.text()) specDirty = false;
       $('#specExampleField').hidden = true;
       invalidateSpecs();
@@ -2557,10 +2575,10 @@ devEditor.onChange = () => $('#mSave').classList.add('pri');
 class SettingsEditor {
   constructor() { this.mode = editorPref; this.values = {}; this.saved = {}; this.schema = {}; this.yaml = ''; this.error = ''; this.notice = ''; }
   load(j) { this.schema = j.schema; this.saved = {...j.settings}; this.values = {...j.settings}; this.error = this.notice = ''; this.dirty = false; }
-  toYaml() {
+  toYaml(values = this.values) {
     const d = this.device || {};
     return ['device:', `  name: ${d.name || ''}`, `  app: ${d.app || ''}`, `  version: ${d.version || ''}`, 'settings:',
-      ...Object.keys(this.schema).map(k => `  ${k}: ${this.values[k] ?? this.schema[k].default}`)].join('\n');
+      ...Object.keys(this.schema).map(k => `  ${k}: ${values[k] ?? this.schema[k].default}`)].join('\n');
   }
   // Only the settings: block is read; the rest is what the device reports
   fromYaml(text) {
@@ -2660,7 +2678,7 @@ class SettingsEditor {
         <button class="${this.mode === 'yaml' ? 'on' : ''}" onclick="setEditor.setMode('yaml')">YAML</button></div></div>`;
     const help = `<div class="sub" style="margin:2px 2px 10px">${t('settingsHelp')}</div>`;
     const body = this.mode === 'yaml'
-      ? `${yamlEditor(this.yaml, 'setEditor.setYaml(this.value)', '160px')}<div class="sub">${t('settingsYamlHelp')}</div>`
+      ? `${yamlEditor(this.yaml, 'setEditor.setYaml(this.value)', '160px', this.toYaml(this.saved))}<div class="sub">${t('settingsYamlHelp')}</div>`
       : Object.entries(this.schema).map(([k, f]) => this.field(k, f)).join('');
     const beds = (this.beds || []).length ? `<div class="ed-section"><h3>${t('bedsLabel')}</h3></div>
       ${this.beds.map(b => `<div class="row"><span class="ico">${icon('bed')}</span><div class="label">${esc(b.name || t('bedN', b.index + 1))}

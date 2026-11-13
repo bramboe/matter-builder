@@ -702,7 +702,8 @@ const TEXT = {
   settingsSaved: 'Saved: the device restarts with the new settings.', settingsSame: 'Nothing changed: the device keeps these settings.', saving: 'Saving…', settingsUnknown: k => `Unknown setting: ${k}`,
   settingsRange: (k, a, b) => `${k}: a whole number from ${a} to ${b}`, settingsChoice: (k, c) => `${k}: one of ${c.join(', ')}`,
   wConfigure: 'Configure the device', configureHelp: 'Its name and what is connected. Wi-Fi, Thread and passwords are set on the device itself.',
-  startEmpty: 'Empty', fromConfigs: 'My configs', fromRecipes: 'Recipes', skip: 'Skip', saveToConfigs: 'Also save to My configs',
+  startEmpty: 'Empty', fromConfigs: 'My configs', fromRecipes: 'Recipes', skipConfiguration: 'Continue without a configuration', saveToConfigs: 'Save a reusable copy',
+  saveToConfigsHelp: 'Find it later under Configs → My configs to use the same connections and rules on another ESP32.',
   configOk: (n, c) => `${n}: ${c} connection${c === 1 ? '' : 's'}.`, applyTo: 'Apply to a device', noGeneric: 'No linked generic device yet.',
   applyingConfig: 'Applying the configuration…', configOnTrial: s => `The new connections run on trial: keep them within ${s} s, or the device goes back.`,
   configKept: 'Kept. The device is ready.', configFailed: e => `The configuration was not applied: ${e}`,
@@ -723,8 +724,8 @@ const TEXT = {
   ignoredTitle: 'Ignored devices', ignoredHelp: 'Found on your network, but not offered for linking.',
   bleTitle: 'Bluetooth device', ofEightCommands: n => `${n} of 8 commands`,
   bleHelp: 'Send Bluetooth commands to a device such as a bed or a fan. Add a command as a connection to make it available in Matter.',
-  bleSetupHelp: 'Set up a Bluetooth device so this ESP32 can send commands to it. Start with a preset or enter your own connection settings and commands.',
-  bleBrowse: 'Browse presets', bleManual: 'Set up manually', bleUsePreset: 'Use preset',
+  bleSetupHelp: 'Optional. Set up a device this ESP32 should send Bluetooth commands to.',
+  bleBrowse: 'Browse presets', bleUsePreset: 'Use preset',
   bleUseNamedPreset: name => `Use preset: ${name}`,
   bleOctoPreset: 'Fills in the connection settings and eight remote commands for an Octo bed, including head and leg controls, stop and light. Add your bed’s Bluetooth address to connect.',
   bleSwitchBotStripPreset: 'Fills in the settings for the SwitchBot LED Strip Light (W1701100) and six commands for power, red, green, blue and 50% brightness. Add your strip’s Bluetooth address to connect.',
@@ -850,7 +851,7 @@ const TEXT = {
   confirmForget: 'Forget this device? Also revoke its key on the device’s page (Programs with access).',
   stepOf: (a, b) => `Step ${a} of ${b}`,
   wStart: 'New device', wNewEsp: 'Install on a new ESP32', wNewEspHelp: 'Over USB, with ready-made firmware',
-  wExisting: 'Link a device on the network', wExistingHelp: 'Already installed, here or elsewhere',
+  wExisting: 'Link a device on the network', wExistingHelp: 'Add an ESP32 that already runs Matter Builder firmware and is on your network.',
   wCatalog: 'Start from the catalog', wCatalogHelp: 'Firmware and ready-made recipes',
   wPickFirmware: 'Choose the firmware', noFactory: 'No firmware for a new ESP32 yet. It appears here when a release has it, or in developer mode after a build.',
   wMethod: 'How do you want to install it?', mBrowser: 'Plug into this computer', mBrowserHelp: 'With Chrome or Edge, and Home Assistant opened over HTTPS',
@@ -859,7 +860,7 @@ const TEXT = {
   noPorts: 'No USB device found on the Home Assistant machine. Plug in the ESP32, then refresh.', refresh: 'Refresh', usbPort: 'USB port',
   choosePort: 'Choose the ESP32’s port', portWarning: 'Check that this is the ESP32: everything on the chosen device is replaced.',
   confirmPort: n => `Install on “${n}”? Everything on that device is replaced.`, mDownloadHelp: 'Flash it yourself, for example with esptool, at address 0',
-  backupFirst: 'First save a backup of the whole flash', next: 'Next', back: 'Back', close: 'Close', done: 'Done',
+  backupFirst: 'Back up the ESP32 before installing', next: 'Next', back: 'Back', close: 'Close', done: 'Done',
   wInstalling: 'Installing', usbPick: 'Choose the ESP32’s USB port in the browser window.', usbConnecting: 'Connecting…', usbChip: c => `Found: ${c}`,
   wrongChip: (c, want) => `This board is an ${c}; this firmware is for the ${want}. Go back and choose the firmware for the ${c}.`,
   smallFlash: (mb, need) => `This board has ${mb} MB of flash; the firmware needs ${need} MB (room for an update next to it). Look for a module with ${need} MB or more.`,
@@ -871,7 +872,7 @@ const TEXT = {
   boardNoRelease: 'No firmware for it in this release yet', boardOthers: 'Boards that do not work',
   wHow: 'How do you want to start?', howScratch: 'From scratch', howScratchHelp: 'Add what is connected, one thing at a time',
   howTemplate: 'From a template', howTemplateHelp: 'A ready-made recipe from the catalog; change it as you like',
-  howConfig: 'From one of my configs', howConfigHelp: 'A configuration you saved earlier',
+  howConfig: 'Reuse a saved configuration', howConfigHelp: 'Use connections and rules you saved under Configs.',
   howReady: 'Ready-made firmware, nothing to build here', howOwn: 'Own build', howPickTemplate: 'Choose a template', howPickConfig: 'Choose a config',
   howNeedsBluetooth: b => `Needs Bluetooth, which does not work on the ${b}`, howNone: 'Nothing here yet.',
   boardLimits: (b, list) => `Not on the ${b}: ${list}`, notOnBoard: b => `Does not work on the ${b}`,
@@ -883,11 +884,11 @@ const TEXT = {
   boardExperimentalHelp: 'Built from Espressif’s documentation: the project has no such board to test on. Keep the backup, and please report how it goes.',
   boardNoFirmware: 'There is no firmware for it in this release yet.',
   boardWorks: 'Works', boardNot: 'Does not work', boardFlashShort: (mb, need) => `It has ${mb} MB of flash; the firmware needs ${need} MB. Look for a module with ${need} MB or more.`, usbBackup: p => `Saving backup: ${p} %`, usbWriting: p => `Installing: ${p} %`,
-  wSetup: 'Set it up on its own page', wSetupSteps: ['The ESP32 restarts and opens a Wi-Fi network named “Matter-Builder-…”. Join it with your phone or computer.',
+  wSetup: 'Connect the ESP32 to your network', wSetupSteps: ['The ESP32 restarts and opens a Wi-Fi network named “Matter-Builder-…”. Join it with your phone or computer.',
     'The device’s page opens: choose a password, then set your Wi-Fi and, for Thread, the Thread network. (On Wi-Fi you can also pair it over Bluetooth with the Home Assistant app, which brings the Wi-Fi network along.)', 'Once it is on your network it shows up here under Discovered. Then link it.'],
   downloaded: 'Downloaded. Flash it at address 0, then continue.', linkNow: 'Link it now', retry: 'Try again',
-  wLink: 'Link a device', linkHelp: 'The address of the device’s page and its password. The add-on gets a key of its own; the password is not stored.',
-  pagePassword: 'Password of the page', link: 'Link', wrongPassword: 'Wrong password.',
+  wLink: 'Link a device', linkHelp: 'Choose a discovered device or enter its device page address. Use the password you set on that page. You’ll confirm the link on the ESP32.',
+  pagePassword: 'Device page password', link: 'Link', wrongPassword: 'Wrong password.',
   pressBoot: s => `Now press the device’s BOOT button briefly (${s} s left). Button out of reach? Switch its power off and on three times.`,
   notLinked: 'Not linked: the BOOT button was not pressed in time.', wLinked: 'Linked', linkedText: n => `${n} is linked. Set up what is connected to it next.`, linkedName: n => `${n} is linked.`,
   blePairing: 'Pair over Bluetooth', blePairingOn: 'pairing on',
@@ -1392,7 +1393,7 @@ class ConfigEditor {
   pinCount(type) { const d = this.driver(type); return d ? d.pins : isBle(type) ? 0 : type === 'sht4x' ? 2 : 1; }
   mount(host) { this.host = host; this.render(); }
   noBluetooth() { return !!(this.board && BOARDS[this.board] && !BOARDS[this.board].bluetooth); }
-  usesBluetooth() { return !!this.ble || this.rows.some(r => isBle(r.type)); }
+  usesBluetooth() { return !!this.cleanBle() || this.rows.some(r => isBle(r.type)); }
   load(name, rows, pins, rules, ble) {
     this.ble = ble ? JSON.parse(JSON.stringify(ble)) : null;
     this.bleOpen.clear(); this.bleSettingsOpen = false;
@@ -1465,8 +1466,9 @@ class ConfigEditor {
 
   // ---- Bluetooth device
   cleanBle() {
-    if (!this.ble) return null;
     const b = this.ble;
+    if (!b || (!(b.address || '').trim() && !(b.service || '').trim() && !(b.characteristic || '').trim() && !b.commands.length &&
+        b.address_type === 'public' && b.write === 'response' && b.idle === 30)) return null;
     return {address: (b.address || '').trim().toUpperCase(), address_type: b.address_type || 'public', service: (b.service || '').trim().toUpperCase(),
       characteristic: (b.characteristic || '').trim().toUpperCase(), write: b.write, idle: Math.max(0, Math.min(3600, Math.round(+b.idle || 0))),
       commands: b.commands.map((c, i) => ({label: (c.label || '').trim() || `Command ${i + 1}`, bytes: bleHex(c.bytes),
@@ -1482,7 +1484,12 @@ class ConfigEditor {
     for (const r of used) if (!(r.number >= 1 && r.number <= b.commands.length)) throw new Error(t('bleNoCommand', r.name || this.title(r.type)));
     return b;
   }
-  bleSet(key, value) { this.ble[key] = value; this.changed(false); }
+  bleSet(key, value) {
+    this.ble ??= bleEmpty();
+    this.ble[key] = value;
+    this.host.querySelector('[data-ble-remove]').hidden = !this.cleanBle();
+    this.changed(false);
+  }
   bleTiming(command) {
     return command.times > 1 ? t('bleSendRepeatedly', command.times, command.gap) : t('bleSendOnce');
   }
@@ -1499,11 +1506,15 @@ class ConfigEditor {
     if (open) this.bleOpen.add(i);
     else this.bleOpen.delete(i);
   }
-  bleStart(template) {
+  async bleStart(template) {
     const tpl = BLE_TEMPLATES[template];
+    if (!tpl) return;
+    if (this.ble && !await confirmAction('Use a Bluetooth preset?',
+      'This replaces the Bluetooth connection settings and commands. Connections linked to those commands will be removed.', 'Use preset')) return;
+    this.rows = this.rows.filter(row => row.type !== 'ble_command');
     this.bleOpen.clear(); this.bleSettingsOpen = true;
-    this.ble = tpl ? {...bleEmpty(), service: tpl.service, characteristic: tpl.characteristic, write: tpl.write, idle: tpl.idle,
-      commands: tpl.commands.map(([label, bytes, times, gap]) => ({label, bytes, times, gap}))} : bleEmpty();
+    this.ble = {...bleEmpty(), service: tpl.service, characteristic: tpl.characteristic, write: tpl.write, idle: tpl.idle,
+      commands: tpl.commands.map(([label, bytes, times, gap]) => ({label, bytes, times, gap}))};
     this.changed();
     this.host.querySelector('[data-ble-settings] > summary')?.focus();
   }
@@ -1514,6 +1525,7 @@ class ConfigEditor {
     this.changed();
   }
   bleAddCommand() {
+    this.ble ??= bleEmpty();
     if (this.ble.commands.length >= BLE_COMMANDS_MAX) return;
     this.bleOpen.add(this.ble.commands.length);
     this.ble.commands.push({label: '', bytes: '', times: 1, gap: 0});
@@ -1540,10 +1552,10 @@ class ConfigEditor {
   bleSection() {
     if (!this.bleSupported) return '';
     if (this.noBluetooth() && !this.ble) return `<div class="ed-section"><h3>${t('bleTitle')}</h3></div><div class="sub warnText" style="margin:-4px 2px 8px">${esc(t('notOnBoard', BOARDS[this.board].name))}</div>`;
-    const ref = this.ref, b = this.ble;
-    const head = `<div class="ed-section"><h3>${t('bleTitle')}</h3>${b ? `<span class="sub">${t('ofEightCommands', b.commands.length)}</span>` : ''}</div>
-      <div class="sub" style="margin:-4px 2px 8px">${t(b ? 'bleHelp' : 'bleSetupHelp')}</div>`;
-    if (!b) return `${head}<div class="ble-setup-actions">
+    const ref = this.ref, b = this.ble || bleEmpty();
+    const head = `<div class="ed-section"><h3>${t('bleTitle')}</h3>${this.ble ? `<span class="sub">${t('ofEightCommands', b.commands.length)}</span>` : ''}</div>
+      <div class="sub" style="margin:-4px 2px 8px">${t(this.ble ? 'bleHelp' : 'bleSetupHelp')}</div>`;
+    const presets = `<div class="ble-setup-actions">
       <details class="ble-presets">
         <summary>${t('bleBrowse')}<span class="chev" aria-hidden="true"></span></summary>
         <div class="ble-preset-list">
@@ -1555,7 +1567,6 @@ class ConfigEditor {
             </div>`).join('')}
         </div>
       </details>
-      <button class="plain" onclick="${ref}.bleStart('')">${t('bleManual')}</button>
     </div>`;
     const full = this.rows.length >= 8;
     const field = (label, key, value, extra = '') => `<label class="field"><span>${label}</span><input value="${esc(value)}" spellcheck="false" ${extra} oninput="${ref}.bleSet('${key}', this.value)"></label>`;
@@ -1593,7 +1604,8 @@ class ConfigEditor {
         <label class="field"><span>${t('bleIdle')}</span><input type="number" min="0" max="3600" value="${b.idle}" oninput="${ref}.bleSet('idle', +this.value)"></label></div>
       <p class="sub ble-settings-help">${t('bleSettingsHelp')} ${t('bleIdleHelp')}</p>
       <p class="sub ble-settings-help">${t('blePinNote')}</p>
-      <div class="actions"><span class="grow"></span><button class="warn" onclick="${ref}.bleRemove()">${t('bleRemove')}</button></div></div></details>
+      <div class="actions"><span class="grow"></span><button class="warn" data-ble-remove ${this.cleanBle() ? '' : 'hidden'} onclick="${ref}.bleRemove()">${t('bleRemove')}</button></div></div></details>
+      ${presets}
       ${commands}
       <button class="ed-add" onclick="${ref}.bleAddCommand()" ${b.commands.length >= BLE_COMMANDS_MAX ? 'disabled' : ''}>${icon('plus')} ${t('bleAddCommand')}</button>`;
   }
@@ -4134,21 +4146,22 @@ function renderWizard() {
       <div class="actions end"><button class="plain" onclick="wizPrev()">${t('back')}</button><button class="pri" onclick="wizNext()">${t('next')}</button></div>`;
   } else if (wiz.step === 'configure') {
     title = t('wConfigure');
-    const recipeList = catalogItems().filter(i => i.kind === 'recipe');
     const cb = BOARDS[wiz.chip];
     body = `<div class="sub">${t('configureHelp')}</div>
       ${cb && cb.not.length ? `<div class="sub warnText" style="margin-top:4px">${esc(t('boardLimits', cb.name, cb.not.join(' · ')))}</div>` : ''}
       <div id="wizEditor"></div>
-      <label class="check sub"><input type="checkbox" ${wiz.saveConfig ? 'checked' : ''} onchange="wiz.saveConfig = this.checked">${t('saveToConfigs')}</label>
+      <label class="check"><input type="checkbox" ${wiz.saveConfig ? 'checked' : ''} onchange="wiz.saveConfig = this.checked" aria-describedby="wSaveConfigHelp">${t('saveToConfigs')}</label>
+      <p class="sub" id="wSaveConfigHelp" style="margin:4px 0 12px">${t('saveToConfigsHelp')}</p>
       ${wiz.configOk ? `<div class="notice">${esc(wiz.configOk)}</div>` : ''}
       ${wiz.error ? `<div class="error">${esc(wiz.error)}</div>` : ''}
       <div class="actions end"><button class="plain" onclick="wizPrev()">${t('back')}</button><span class="grow"></span>
-        <button class="plain" onclick="wiz.configSpec = null; go('method')">${t('skip')}</button>
+        <button class="plain" onclick="wiz.configSpec = null; go('method')">${t('skipConfiguration')}</button>
         <button class="pri" onclick="configureNext()">${t('next')}</button></div>`;
   } else if (wiz.step === 'method') {
     title = t('wMethod');
     if (!serialOk() && wiz.method === 'browser') { wiz.method = 'host'; if (!wiz.ports) loadPorts(); }
-    body = `<div class="sub mono">${esc(wiz.file)}</div><div class="choices">
+    body = `<p class="sub">${esc(wiz.choice?.title || (isGenericFile(wiz.file) ? appTitle('mb_generic') : 'Selected firmware'))}</p>
+      <details><summary class="sub">Firmware file</summary><p class="sub mono">${esc(wiz.file)}</p></details><div class="choices">
       ${choice(wiz.method === 'browser', 'usb', t('mBrowser'), serialOk() ? t('mBrowserHelp') : t('mBrowserNo'), "wiz.method = 'browser'; renderWizard()", serialOk() ? '' : 'disabled')}
       ${choice(wiz.method === 'host', 'chip', t('mHost'), t('mHostHelp'), "wiz.method = 'host'; loadPorts()")}
       ${choice(wiz.method === 'download', 'download', t('mDownload'), t('mDownloadHelp'), "wiz.method = 'download'; renderWizard()")}</div>
@@ -4159,7 +4172,7 @@ function renderWizard() {
           <div class="sub warnText">${t('portWarning')}</div>`
         : `<div class="row"><div class="label sub">${wiz.ports ? t('noPorts') : t('checking')}</div><button class="plain" onclick="loadPorts()">${t('refresh')}</button></div>`) : ''}
       ${wiz.method !== 'download' ? `<label class="check sub"><input type="checkbox" ${wiz.backup ? 'checked' : ''} onchange="wiz.backup = this.checked">${t('backupFirst')}</label>` : ''}
-      <div class="actions end"><button class="plain" onclick="wizPrev()">${t('back')}</button><button class="pri" onclick="startInstall()" ${wiz.method === 'host' && !wiz.port ? 'disabled' : ''}>${t('install')}</button></div>`;
+      <div class="actions end"><button class="plain" onclick="wizPrev()">${t('back')}</button><button class="pri" onclick="startInstall()" ${wiz.method === 'host' && !wiz.port ? 'disabled' : ''}>${wiz.method === 'download' ? t('download') : t('install')}</button></div>`;
   } else if (wiz.step === 'install') {
     title = t('wInstalling');
     body = `<p id="wStatus">${esc(wiz.status)}</p>${wiz.progress !== undefined ? `<div class="progress"><i style="width:${wiz.progress}%"></i></div>` : ''}

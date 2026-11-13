@@ -97,6 +97,15 @@ button.spec-name{min-width:0;flex:1 1 160px;justify-content:flex-start;text-alig
 @media (prefers-color-scheme:dark){#specEditor,.spec-editor-bar{--editor-action:#75d7f1;--mute:#bdbdbd}}
 .spec-editor-bar h1{display:block;flex:1 1 120px;min-width:0;overflow-wrap:anywhere}
 @media (max-width:640px){header .spec-editor-bar>button{margin-bottom:0}}
+.task-page{width:min(100%,1080px);margin:0 auto}
+.task-page > section > .dlg{max-height:none}
+.task-page > section > .dlg > .dlg-body{overflow:visible}
+.task-page > section > .dlg > .dlg-head{display:none}
+.task-page .dlg-body{padding:16px 0}
+#settingsPage .dlg-body{display:grid;gap:12px}
+#settingsPage .settings-section{background:var(--card);padding:16px;border-radius:var(--radius)}
+#settingsPage h3{margin-top:0}
+#logDlg[open]{position:fixed;inset:0 0 0 auto;z-index:12;pointer-events:auto}
 #specExampleField{margin-top:14px;max-width:300px}
 #specEditorHost > mb-yaml-editor{--yaml-height:50vh}
 #specEditor .spec-editor-section{background:var(--card);border-radius:var(--radius);padding:16px;margin-top:12px}
@@ -389,6 +398,7 @@ dialog.side{max-width:100vw}
     <label class="search" id="searchBox"><svg viewBox="0 0 24 24"><path d="M9.5,3A6.5,6.5 0 0,1 16,9.5C16,11.11 15.41,12.59 14.44,13.73L14.71,14H15.5L20.5,19L19,20.5L14,15.5V14.71L13.73,14.44C12.59,15.41 11.11,16 9.5,16A6.5,6.5 0 0,1 3,9.5A6.5,6.5 0 0,1 9.5,3M9.5,5C7,5 5,7 5,9.5C5,12 7,14 9.5,14C12,14 14,12 14,9.5C14,7 12,5 9.5,5Z"/></svg>
       <input id="search" autocomplete="off" spellcheck="false"></label>
     <button class="text" id="updateAllBtn" hidden></button>
+    <button class="text" id="checkReleases" hidden>Check for updates</button>
     <button class="icon" id="settingsBtn" aria-label="Settings"><svg viewBox="0 0 24 24"><path d="M3,17V19H9V17H3M3,5V7H13V5H3M13,21V19H21V17H13V15H11V21H13M7,9V11H3V13H7V15H9V9H7M21,13V11H11V13H21M15,9H17V7H21V5H17V3H15V9Z"/></svg></button>
   </div>
   <div class="bar spec-editor-bar" id="specEditorBar" hidden>
@@ -396,6 +406,10 @@ dialog.side{max-width:100vw}
     <h1 id="specTitle" tabindex="-1"></h1>
     <button id="specCheck" data-t="specValidate"></button>
     <button class="pri" id="specSave" data-t="save"></button>
+  </div>
+  <div class="bar spec-editor-bar" id="taskBar" hidden>
+    <button class="icon" id="taskBack" type="button" aria-label="Back"></button>
+    <h1 id="taskTitle" tabindex="-1"></h1>
   </div>
 </header>
 <section class="auth" id="authView" hidden>
@@ -472,6 +486,7 @@ dialog.side{max-width:100vw}
   <label class="field" id="specExampleField" hidden><span data-t="startFrom"></span><select id="specExample"></select></label>
   <div id="specEditorHost"></div>
 </section>
+  <section class="task-page" id="taskPage" hidden></section>
 </main>
 
 <div class="taskbar" id="taskbar" hidden>
@@ -487,7 +502,7 @@ dialog.side{max-width:100vw}
 </div>
 
 <!-- Device panel -->
-<dialog class="side" id="deviceDlg">
+<dialog class="side" id="deviceDlg" aria-labelledby="dName">
   <div class="dlg">
     <div class="dlg-head"><span class="ico" id="dIcon"></span><div class="info"><h2 id="dName"></h2><div class="sub mono" id="dHost"></div></div>
       <span id="dChip"></span><button class="icon" onclick="closeDevice()" aria-label="Close" id="dClose"></button></div>
@@ -514,22 +529,22 @@ dialog.side{max-width:100vw}
 </dialog>
 
 <!-- New device -->
-<dialog id="wizardDlg">
+<section id="wizardPage" hidden>
   <div class="dlg">
     <div class="dlg-head"><div class="info"><div class="stepno" id="wStep"></div><h2 id="wTitle"></h2></div>
       <button class="icon" onclick="closeWizard()" aria-label="Close" id="wClose"></button></div>
     <div class="dlg-body" id="wBody"></div>
   </div>
-</dialog>
+</section>
 
 <!-- Catalog item -->
-<dialog id="shareDlg">
+<dialog id="shareDlg" aria-labelledby="shareTitle">
   <div class="dlg">
     <div class="dlg-head"><div class="info"><h2 id="shareTitle"></h2></div><button class="icon" onclick="closeShare()" aria-label="Close" id="shClose"></button></div>
     <div class="dlg-body" id="shareBody"></div>
   </div>
 </dialog>
-<dialog id="itemDlg">
+<dialog class="side" id="itemDlg" aria-label="Catalog item">
   <div class="dlg">
     <div class="dlg-head"><div class="info"></div><button class="icon" onclick="$('#itemDlg').close()" aria-label="Close" id="iClose"></button></div>
     <div class="dlg-body" id="itemBody"></div>
@@ -537,7 +552,7 @@ dialog.side{max-width:100vw}
 </dialog>
 
 <!-- Settings -->
-<dialog class="side" id="logDlg">
+<dialog class="side" id="logDlg" aria-labelledby="logTitle">
   <div class="dlg">
     <div class="dlg-head"><div class="info"><h2 id="logTitle"></h2><div class="sub" id="logState"></div></div>
       <button class="text" id="logPause"></button>
@@ -546,12 +561,12 @@ dialog.side{max-width:100vw}
     <div class="dlg-body" style="display:flex;flex-direction:column"><pre id="logText" class="logview"></pre></div>
   </div>
 </dialog>
-<dialog id="settingsDlg">
+<section id="settingsPage" hidden>
   <div class="dlg">
     <div class="dlg-head"><div class="info"><h2 data-t="settings"></h2></div>
-      <button class="icon" onclick="$('#settingsDlg').close()" aria-label="Close" id="sClose"></button></div>
+      <button class="icon" onclick="leaveTask()" aria-label="Close" id="sClose"></button></div>
     <div class="dlg-body">
-      <div id="accountSection" hidden>
+      <div class="settings-section" id="accountSection" hidden>
         <h3 data-t="accountTitle"></h3>
         <div class="sub" data-t="accountHelp"></div>
         <form id="passwordForm" class="form">
@@ -562,15 +577,15 @@ dialog.side{max-width:100vw}
         <div class="sub" id="passwordResult"></div>
         <div style="height:12px"></div>
       </div>
-      <h3 data-t="allWifi"></h3>
+      <section class="settings-section"><h3 data-t="allWifi"></h3>
       <div class="sub" data-t="bulkWifiHelp"></div>
       <form id="bulkWifi" class="form">
         <label class="field"><span data-t="wifiName"></span><input id="bSsid" maxlength="32" autocomplete="off" data-1p-ignore data-lpignore="true"></label>
         <label class="field"><span data-t="wifiPassword"></span><input id="bPass" type="password" maxlength="64" autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other"></label>
         <div class="actions" style="margin-top:0"><button class="pri" type="submit" data-t="sendAll"></button></div>
       </form>
-      <div id="bulkRows"></div>
-      <h3 style="margin-top:20px" data-t="sourcesTitle"></h3>
+      <div id="bulkRows" aria-live="polite"></div></section>
+      <section class="settings-section"><h3 data-t="sourcesTitle"></h3>
       <div class="sub" data-t="sourcesHelp"></div>
       <div id="sourceList" style="margin-top:8px"></div>
       <form id="sourceForm" class="form" style="grid-template-columns:1fr auto;align-items:end">
@@ -578,25 +593,35 @@ dialog.side{max-width:100vw}
         <button type="submit" data-t="check"></button>
       </form>
       <div id="sourceResult"></div>
-      <div class="actions"><button id="checkReleases" data-t="checkReleases"></button></div>
-      <div id="ignoredSection" hidden>
+      </section>
+      <div class="settings-section" id="ignoredSection" hidden>
         <h3 style="margin-top:20px" data-t="ignoredTitle"></h3>
         <div class="sub" data-t="ignoredHelp"></div>
         <div id="ignoredList" style="margin-top:8px"></div>
       </div>
-      <h3 style="margin-top:20px" data-t="nightTitle"></h3>
+      <section class="settings-section"><h3 data-t="nightTitle"></h3>
       <div class="sub" data-t="nightHelp"></div>
       <label class="field" style="max-width:220px;margin-top:8px"><span data-t="nightHour"></span><select id="nightHour"></select></label>
-      <h3 style="margin-top:20px" data-t="devTitle"></h3>
+      </section><section class="settings-section"><h3 data-t="devTitle"></h3>
       <label class="switch" style="margin-top:8px"><input type="checkbox" id="devMode"><span class="sub" data-t="devHelp"></span></label>
       <div id="devSettings" hidden>
         <div class="row" style="margin-top:8px"><div class="label"><span data-t="host"></span><div class="sub" id="system">–</div></div></div>
         <div class="sub warnText" id="systemAdvice" hidden></div>
         <div class="row"><div class="label">Toolchain<div class="sub" id="toolchainText"></div></div>
           <button id="toolchainBtn" data-t="install"></button></div>
-      </div>
+      </div></section>
     </div>
   </div>
+</section>
+
+<dialog id="actionDlg" aria-labelledby="actionTitle" aria-describedby="actionText">
+  <form method="dialog" class="dlg">
+    <div class="dlg-head"><h2 id="actionTitle"></h2></div>
+    <div class="dlg-body">
+      <p id="actionText"></p><label class="field" id="actionField" hidden><span>Device name</span><input id="actionValue" maxlength="32"></label>
+      <div class="actions end"><button type="submit" value="cancel" autofocus>Cancel</button><button class="pri" id="actionConfirm" type="submit" value="confirm"></button></div>
+    </div>
+  </form>
 </dialog>
 
 <script>
@@ -1128,7 +1153,7 @@ function deviceCard(p) {
   const what = connectedText(s);
   const chip = work && !work.queued ? `<span class="chip accent"><span class="spin"></span>${work.pct != null ? t('updatingPct', work.pct) : t('updating')}</span>`
     : work ? `<span class="chip">${t('updateQueued')}</span>` : statusChip(s);
-  return `<div class="card"${work && !work.queued ? ' aria-busy="true"' : ''}>
+  return `<div class="card" data-device="${esc(p.id)}"${work && !work.queued ? ' aria-busy="true"' : ''}>
     <div class="head"><span class="ico">${appIcon(r ? r.app : p.app)}</span><div class="info"><h3>${esc(p.name)}</h3>
       ${r ? `<div class="sub">${esc(appTitle(r.app))} ${esc(r.version)}</div>`
         : s ? `<div class="sub mono" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(p.host)}">${esc(p.host)}</div>`
@@ -1144,7 +1169,7 @@ function deviceCard(p) {
     <div class="acts">
       ${up ? `<button class="text" onclick="updateProxy('${p.id}', '${esc(up)}')" ${state.job.running ? 'disabled' : ''}>${t('updateTo', fileVersion(up))}</button>` : ''}
       ${s && s.auth ? `<button class="text" onclick="openWizard('link', '${esc(p.host)}')">${t('linkAgain')}</button>` : ''}
-      <button class="plain" onclick="openDevice('${p.id}')" ${updating ? 'disabled' : ''}>${t('edit')}</button>
+      <button class="plain" onclick="openDevice('${p.id}', 'connections')" ${updating ? 'disabled' : ''}>${t('edit')}</button>
       <button class="plain" onclick="openLogs('${p.id}')">${t('logs')}</button>
       ${updating ? '' : `<a class="button plain" href="${esc(portalUrl(p))}">${t('openPage')}</a>`}
       <span class="grow"></span>
@@ -1422,8 +1447,8 @@ class ConfigEditor {
     this.changed();
     this.host.querySelector('[data-ble-settings] > summary')?.focus();
   }
-  bleRemove() {
-    if (!confirm(t('bleRemoveConfirm'))) return;
+  async bleRemove() {
+    if (!await confirmAction('Remove Bluetooth device?', t('bleRemoveConfirm'), 'Remove device')) return;
     this.ble = null;
     this.rows = this.rows.filter(r => r.type !== 'ble_command');
     this.changed();
@@ -1670,8 +1695,8 @@ class ConfigEditor {
   setQuiet(slot, key, value) { this.row(slot)[key] = value; this.changed(false); }
   // Groups: connections in one group are one device in Matter (Apple Home: one
   // accessory with its parts; Home Assistant: one device)
-  setGrouping(on) {
-    if (!on && this.rows.some(r => r.group) && !confirm(t('groupsOffConfirm'))) { this.render(); return; }
+  async setGrouping(on) {
+    if (!on && this.rows.some(r => r.group) && !await confirmAction('Turn off groups?', t('groupsOffConfirm'), 'Turn off groups')) { this.render(); return; }
     this.grouping = on;
     if (!on) this.rows.forEach(r => { r.group = ''; });
     this.changed();
@@ -1689,7 +1714,7 @@ class ConfigEditor {
   renameGroup(from, to) {
     to = to.trim().replace(/["\\]/g, '').slice(0, 23);
     if (!to || to === from) { this.render(); return; }
-    if (groupNames(this.rows).includes(to)) { alert(t('groupExists', to)); this.render(); return; }
+    if (groupNames(this.rows).includes(to)) { toast(t('groupExists', to)); this.render(); return; }
     this.rows.forEach(r => { if (r.group === from) r.group = to; });
     this.changed();
   }
@@ -2024,7 +2049,8 @@ const badge = it => it.official ? `<span class="chip accent">${t('official')}</s
 function catalogCard(it, i) {
   const {labels, boards, experimental} = catalogCompatibility(it, catalogVariants(it));
   const supported = boards.concat(experimental);
-  return `<div class="card" onclick="openItem(${i})">
+  return `<div class="card" data-item="${esc(it.id || it.source + '/' + it.title)}" tabindex="0"
+    onclick="openItem(${i}, this)" onkeydown="if (event.target === this && ['Enter', ' '].includes(event.key)) { event.preventDefault(); openItem(${i}, this); }">
     <div class="head"><span class="ico">${it.kind === 'firmware' ? appIcon(it.app) : icon('recipe')}</span>
       <div class="info"><h3>${esc(it.title)}</h3><div class="sub">${it.kind === 'firmware' ? esc(it.version || '') : t('recipe')} · ${esc(it.maker || (it.source || '').split('/')[0])}</div></div></div>
     <div class="meta"><div class="sub">${esc(catalogDescription(it))}</div>
@@ -2070,9 +2096,11 @@ async function loadRecipes() {
 }
 
 // The details of a catalog item, like the Marketplace's project page
-let item = null;
-function openItem(i) {
+let item = null, itemVariant;
+function openItem(i, trigger) {
+  catalogContext = launchContext(trigger);
   item = shownItems[i];
+  itemVariant = undefined;
   renderItem();
   if (!$('#itemDlg').open) $('#itemDlg').showModal();
 }
@@ -2115,40 +2143,46 @@ function renderItem() {
 // Community items need the user's consent once, like the Marketplace
 function communityGate(then) {
   if (item.official || state.settings.community_ok) { then(); return; }
+  const selected = item, variant = $('#catalogVariant')?.value;
+  itemVariant = variant;
   setHtml($('#itemBody'), `<h2>${t('gateTitle')}</h2><ul class="steps">${TEXT.gateTips.map(x => `<li class="sub">${esc(x)}</li>`).join('')}</ul>
     <label class="check" style="margin-top:12px"><input type="checkbox" id="gateOk">${t('gateCheck')}</label>
-    <div class="actions end"><button class="plain" onclick="renderItem()">${t('back')}</button>
-      <button class="pri" id="gateGo">${t('next')}</button></div>`);
+    <div class="actions end"><button class="plain" id="gateBack">${t('back')}</button>
+      <button class="pri" id="gateGo" disabled>${t('next')}</button></div>`);
+  $('#gateBack').onclick = () => restoreCatalogItem(selected, variant);
+  $('#gateOk').onchange = () => { $('#gateGo').disabled = !$('#gateOk').checked; };
   $('#gateGo').onclick = async () => {
     if (!$('#gateOk').checked) return;
+    $('#gateGo').disabled = true;
     await api('api/settings', {community_ok: true});
     await refresh();
-    then();
+    if ($('#itemDlg').open && item === selected) then();
   };
 }
 
 function useItem() {
   communityGate(() => {
     const recipe = {id: item.id, title: item.title, rows: rowsOf(item.connections), text: item.text || ''};
-    $('#itemDlg').close();
-    openWizard('recipeTarget', null, {recipe});
+    startCatalogWizard('recipeTarget', {recipe});
   });
 }
 
 function installItem(file = $('#catalogVariant')?.value || catalogVariants(item).find(v => v.factory)?.factory || item.factory) {
   communityGate(() => {
     if (!sourceAdded(item.source)) { addSourceFlow(item.source, item.key_sha256, () => installItem(file)); return; }
-    $('#itemDlg').close();
-    openWizard('method', null, {file});
+    startCatalogWizard('method', {file});
   });
 }
 
 // Adding a source pins its key: the user sees the fingerprint first
 async function addSourceFlow(repo, expected, then) {
   const dlgOpen = $('#itemDlg').open;
+  const selected = item;
+  const variant = $('#catalogVariant')?.value || itemVariant;
   const target = dlgOpen ? $('#itemBody') : $('#sourceResult');
   setHtml(target, `<p class="sub">${t('checking')}</p>`);
   const p = await api('api/sources/preview', {repo});
+  if (dlgOpen && (!$('#itemDlg').open || item !== selected)) return;
   if (p.error) {
     setHtml(target, `<div class="error">${esc(p.error)}</div>${dlgOpen ? `<div class="actions end"><button class="plain" onclick="renderItem()">${t('back')}</button></div>` : ''}`);
     return;
@@ -2162,17 +2196,17 @@ async function addSourceFlow(repo, expected, then) {
     ${mismatch ? `<div class="error">${t('keyMismatch')}</div>` : `<p class="sub">${t('addSourceHelp')}</p>`}
     <div class="actions end"><button class="plain" id="srcCancel">${t('back')}</button>
       ${mismatch ? '' : `<button class="pri" id="srcAdd">${t('addSource')}</button>`}</div>`);
-  $('#srcCancel').onclick = () => { if (dlgOpen) renderItem(); else setHtml(target, ''); };
+  $('#srcCancel').onclick = () => { if (dlgOpen) restoreCatalogItem(selected, variant); else setHtml(target, ''); };
   if (!mismatch) $('#srcAdd').onclick = async () => {
     setHtml(target, `<p class="sub">${t('checking')}</p>`);
     const r = await api('api/sources/add', {repo: p.repo, fingerprint: p.fingerprint});
     if (r.error) { setHtml(target, `<div class="error">${esc(r.error)}</div>`); return; }
     await refresh();
-    if (dlgOpen) then && then(); else setHtml(target, '');
+    if (dlgOpen) { if ($('#itemDlg').open && item === selected) then?.(); } else setHtml(target, '');
   };
 }
 async function removeSource(repo) {
-  if (!confirm(t('confirmRemoveSource', repo))) return;
+  if (!await confirmAction('Remove package source?', t('confirmRemoveSource', repo), 'Remove source')) return;
   await api('api/sources/remove', {repo});
   refresh();
 }
@@ -2273,7 +2307,7 @@ function specRow(sp) {
   const summary = sp.error ? esc(sp.error) : esc(t('specSummary', sp.connections, sp.rules)
     .concat((sp.requires || []).includes('bluetooth') ? [t('bleTitle')] : []).join(' · '));
   return `<div class="spec-row">
-    <button class="spec-name" onclick="editSpec('${sp.slug}')">
+    <button class="spec-name" data-config="${esc(sp.slug)}" onclick="editSpec('${sp.slug}')">
       <span class="ico">${icon('recipe')}</span><span class="info">${esc(sp.name)}<span class="sub ${sp.error ? 'warnText' : ''}">${summary}</span></span>
     </button>
     <div class="spec-actions">
@@ -2294,7 +2328,7 @@ async function useConfig(slug, where = 'choose') {
   const spec = await parseSpec(text).catch(() => null);
   if (!spec) return;
   const sp = (specs || []).find(x => x.slug === slug);
-  if (spec.components.length && where === 'new' && !(sp && sp.factory.length)) { alert(t('needsBuild')); return; }
+  if (spec.components.length && where === 'new' && !(sp && sp.factory.length)) { toast(t('needsBuild')); return; }
   if (where === 'new') openWizard('board', null, {configText: text, file: sp && sp.factory.length ? sp.factory[sp.factory.length - 1] : null});
   else openWizard('recipeTarget', null, {recipe: {title: spec.name, rows: spec.rows, text}, configText: text, configSlug: slug});
 }
@@ -2343,11 +2377,11 @@ function openSpecEditor(isNew, title = specEditor.name) {
   $('#specTitle').textContent = isNew ? t('newSpec') : title;
   specMessage();
   specDirty = false;
-  showTab('config-editor');
-  window.scrollTo(0, 0);
+  openTask({blocked: () => $('#specSave').disabled, dirty: () => specDirty});
   $('#specTitle').focus();
 }
 function newSpec() {
+  if (pageTask) return;
   specEditor.specDevice = null;
   specEditor.board = null;
   specEditor.components = []; specEditor.drivers = [];
@@ -2385,7 +2419,7 @@ async function editSpec(slug) {
 }
 async function buildSpec(slug) { await api(`api/specs/${slug}/build`, {}); refresh(); }
 async function deleteSpec(slug) {
-  if (!confirm(t('confirmDelete', specs?.find(sp => sp.slug === slug)?.name || slug))) return;
+  if (!await confirmAction('Delete configuration?', t('confirmDelete', specs?.find(sp => sp.slug === slug)?.name || slug), 'Delete config')) return;
   await api(`api/specs/${slug}/delete`, {});
   invalidateSpecs();
   loadSpecs();
@@ -2396,11 +2430,7 @@ specEditor.onChange = () => {
   $('#specTitle').textContent = specEditor.name.trim() || t('newSpec');
 };
 $('#specBack').innerHTML = icon('back');
-$('#specBack').onclick = () => {
-  if ($('#specSave').disabled || (specDirty && !confirm(t('specDiscard')))) return;
-  showTab('developer');
-  window.scrollTo(0, 0);
-};
+$('#specBack').onclick = leaveTask;
 $('#specExample').onchange = async () => {
   const example = $('#specExample').value;
   if (!example) return;
@@ -2413,6 +2443,101 @@ $('#specSave').onclick = () => postSpec(false);
 $('#buildGenericBtn').onclick = async () => { await api('api/build', {app: 'generic'}); refresh(); };
 
 // ---------------------------------------------------------------- page
+let pageTask = null, leavingTask = false, afterTaskBack = null;
+const launchContext = (target = document.activeElement) => {
+  const id = target?.id;
+  const card = target?.closest('[data-device], [data-item], [data-config]');
+  return {tab, scroll: window.scrollY, target, id, card: card && [...card.attributes]
+    .filter(a => ['data-device', 'data-item', 'data-config'].includes(a.name))
+    .map(a => `[${a.name}="${CSS.escape(a.value)}"]`).join('')};
+};
+function restoreContext(context) {
+  showTab(context.tab);
+  requestAnimationFrame(() => {
+    window.scrollTo(0, context.scroll);
+    const card = context.card && $(context.card);
+    const target = context.target?.isConnected ? context.target :
+      (context.id && document.getElementById(context.id)) ||
+      (card?.matches('button,[tabindex]') ? card : card?.querySelector('button')) ||
+      $('nav button.on');
+    if (!$('dialog[open]')) target?.focus({preventScroll: true});
+  });
+}
+function openTask({title, content, cleanup, blocked, dirty, after}, context = launchContext()) {
+  if (pageTask) return;
+  pageTask = {context, content, cleanup, blocked, dirty, after};
+  history.pushState({mbTask: true}, '');
+  if (content) {
+    $('#taskPage').append(content);
+    content.hidden = false;
+    $('#taskTitle').textContent = title;
+    $('#taskBack').disabled = false;
+    showTab('task');
+    $('#taskTitle').focus();
+  } else showTab('config-editor');
+  window.scrollTo(0, 0);
+}
+async function canLeaveTask() {
+  if (pageTask.blocked?.()) return false;
+  return !pageTask.dirty?.() || await confirmAction('Discard changes?', 'Unsaved changes will be lost.', 'Discard changes');
+}
+function finishTask(restore = true) {
+  const task = pageTask;
+  pageTask = null;
+  if (task.content) { task.content.hidden = true; document.body.append(task.content); }
+  task.cleanup?.();
+  restoreContext(task.context);
+  if (restore) task.after?.();
+}
+async function leaveTask() {
+  if (!pageTask || leavingTask) return;
+  leavingTask = true;
+  try {
+    if (await canLeaveTask()) { finishTask(); history.back(); }
+  } finally { leavingTask = false; }
+}
+window.addEventListener('popstate', async () => {
+  if (afterTaskBack) {
+    const next = afterTaskBack;
+    afterTaskBack = null;
+    next();
+    return;
+  }
+  if (!pageTask || history.state?.mbTask || leavingTask) return;
+  leavingTask = true;
+  try {
+    if (await canLeaveTask()) finishTask();
+    else history.pushState({mbTask: true}, '');
+  } finally { leavingTask = false; }
+});
+$('#taskBack').innerHTML = icon('back');
+$('#taskBack').onclick = leaveTask;
+document.addEventListener('keydown', event => {
+  if (event.key !== 'Escape' || event.defaultPrevented || !pageTask || $('dialog[open]')) return;
+  if (event.target.closest('mb-yaml-editor')) return;
+  event.preventDefault();
+  leaveTask();
+});
+
+function actionDialog(title, message, action, initial = null) {
+  const dialog = $('#actionDlg');
+  if (dialog.open) return Promise.resolve(null);
+  $('#actionTitle').textContent = title;
+  $('#actionText').textContent = message;
+  $('#actionText').hidden = !message;
+  $('#actionField').hidden = initial === null;
+  $('#actionValue').value = initial ?? '';
+  $('#actionConfirm').textContent = action;
+  dialog.returnValue = '';
+  return new Promise(resolve => {
+    dialog.addEventListener('close', () => resolve(dialog.returnValue === 'confirm'
+      ? (initial === null ? true : $('#actionValue').value.trim()) : null), {once: true});
+    dialog.showModal();
+    if (initial !== null) { $('#actionValue').focus(); $('#actionValue').select(); }
+  });
+}
+const confirmAction = (title, message, action) => actionDialog(title, message, action);
+
 function setCatalogView(view) {
   $('#catalogBody').dataset.view = view;
   $$('#catalogView button').forEach(button => {
@@ -2441,8 +2566,10 @@ function showTab(name) {
   $('#developerTab').hidden = name !== 'developer';
   const editingConfig = name === 'config-editor';
   $('#specEditor').hidden = $('#specEditorBar').hidden = !editingConfig;
-  $('#mainBar').hidden = editingConfig;
-  $('#searchBox').hidden = name === 'developer' || name === 'config-editor';
+  $('#taskPage').hidden = $('#taskBar').hidden = name !== 'task';
+  $('#mainBar').hidden = editingConfig || name === 'task';
+  $('#checkReleases').hidden = name !== 'devices';
+  $('#searchBox').hidden = name === 'developer' || editingConfig;
   $('#search').placeholder = name === 'catalog' ? t('searchCatalog') : t('searchDevices');
   $('#search').value = name === 'catalog' ? catalogQuery : query;
   if (name === 'catalog' && !catalogData) loadCatalog();
@@ -2530,7 +2657,8 @@ $('#jobLogBtn').onclick = () => { logOpen = !logOpen; loadJob(); };
 
 // ---------------------------------------------------------------- device actions
 async function updateProxy(id, file) {
-  if (!confirm(t('confirmUpdate'))) return;
+  const name = state.proxies.find(p => p.id === id)?.name || '';
+  if (!await confirmAction(`Update ${name}?`, 'The device and its accessories may be unavailable while it restarts.', 'Update device')) return;
   updateStarted[id] = Date.now();
   renderDevices();  // the card says so right away
   const r = await api(`api/proxy/${id}/update`, {file});
@@ -2540,18 +2668,18 @@ async function updateProxy(id, file) {
 }
 async function renameProxy(id) {
   const p = state.proxies.find(x => x.id === id);
-  const name = prompt(t('name'), p.name);
+  const name = await actionDialog('Rename device', '', 'Rename', p.name);
   if (name) { await api(`api/proxy/${id}/rename`, {name}); refresh(); }
 }
 async function forgetProxy(id) {
-  if (!confirm(t('confirmForget'))) return;
+  if (!await confirmAction('Forget device?', t('confirmForget'), 'Forget device')) return;
   await api(`api/proxy/${id}/forget`, {});
   delete statuses[id];
   if (openId === id) closeDevice();
   refresh();
 }
 $('#updateAllBtn').onclick = async () => {
-  if (!confirm(t('confirmUpdateAll'))) return;
+  if (!await confirmAction('Update all devices?', t('confirmUpdateAll'), 'Update all')) return;
   await api('api/bulk/update', {});
   await refresh();
   loadJob();
@@ -2567,7 +2695,7 @@ const isBle = type => type === 'ble_sensor' || type === 'ble_presence';
 // "nec:ff:a25d" as the device writes it: "nec:00FF:A25D"
 const normalCode = code => { const m = /^nec:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i.exec((code || '').trim());
   return m ? `nec:${m[1].toUpperCase().padStart(4, '0')}:${m[2].toUpperCase().padStart(4, '0')}` : (code || '').trim(); };
-let openId = null, dtab = 'connections', managed = null;
+let openId = null, dtab = 'connections', managed = null, deviceContext = null, deviceBusy = false, deviceRequest = 0;
 const devEditor = new ConfigEditor('dev');
 devEditor.onChange = () => $('#mSave').classList.add('pri');
 
@@ -2698,54 +2826,112 @@ async function proxyCommand(id, line) {
 }
 
 async function openDevice(id, which, recipe) {
+  if (pageTask || deviceBusy || $('#deviceDlg').open) return;
   $$('details.more').forEach(d => { d.open = false; });
+  deviceContext = launchContext();
   openId = id;
   managed = null;
+  const requestId = ++deviceRequest;
+  deviceBusy = true;
+  $('#mSave').classList.remove('pri');
+  devEditor.liveKey = null;
   $('#mError').hidden = $('#mNotice').hidden = $('#recipeNotice').hidden = true;
-  setDtab(which || 'connections');
+  setDtab(which || 'firmware');
+  $('#ioEditor').hidden = $('#noIo').hidden = true;
   renderDevicePanel();
-  if (!$('#deviceDlg').open) $('#deviceDlg').showModal();
-  try {
-    managed = {id, io: JSON.parse(await proxyCommand(id, 'io json')).io};
-  } catch (e) { managed = {id, io: null}; }
-  if (managed.io) {
-    // Rules: firmware from before generic 0.1.7 has none (its answer is not JSON)
-    try { managed.rules = JSON.parse(await proxyCommand(id, 'rule json')); } catch (e) { managed.rules = null; }
+  if (which === 'connections') openDevicePage();
+  else if (!$('#deviceDlg').open) $('#deviceDlg').showModal();
+  let io = null;
+  try { io = JSON.parse(await proxyCommand(id, 'io json')).io; } catch (e) {}
+  if (requestId !== deviceRequest) return;
+  managed = {id, io};
+  try { await loadDeviceConfiguration(id, requestId, which, recipe); }
+  catch (e) {
+    if (requestId === deviceRequest) toast(e.message);
+  } finally {
+    if (requestId === deviceRequest) deviceBusy = false;
   }
-  if (!managed.io) {
+}
+async function loadDeviceConfiguration(id, requestId, which, recipe) {
+  const device = managed;
+  if (device.io) {
+    // Rules: firmware from before generic 0.1.7 has none (its answer is not JSON)
+    try { device.rules = JSON.parse(await proxyCommand(id, 'rule json')); } catch (e) { device.rules = null; }
+  }
+  if (!device.io) {
     try {
       const j = JSON.parse(await proxyCommand(id, 'settings json'));
-      if (j.schema && Object.keys(j.schema).length) { managed.settings = j; setEditor.load(j); }
+      if (requestId !== deviceRequest) return;
+      if (j.schema && Object.keys(j.schema).length) { device.settings = j; setEditor.load(j); }
     } catch (e) {}
-    try { setEditor.beds = (JSON.parse(await proxyCommand(id, 'json')).beds || []).filter(b => b.configured); } catch (e) { setEditor.beds = []; }
+    let beds = [];
+    try { beds = (JSON.parse(await proxyCommand(id, 'json')).beds || []).filter(b => b.configured); } catch (e) {}
+    if (requestId !== deviceRequest) return;
+    setEditor.beds = beds;
   }
-  if (managed.io) {
+  if (requestId !== deviceRequest) return;
+  if (device.io) {
     // The Bluetooth device it sends commands to: only firmware that has it (ESP32-C6)
-    try { managed.ble = bleFromDevice(JSON.parse(await proxyCommand(id, 'bledev json')).bledev); } catch (e) { managed.ble = undefined; }
-    devEditor.bleSupported = managed.ble !== undefined;
+    try { device.ble = bleFromDevice(JSON.parse(await proxyCommand(id, 'bledev json')).bledev); } catch (e) { device.ble = undefined; }
+    if (requestId !== deviceRequest) return;
+    devEditor.bleSupported = device.ble !== undefined;
     devEditor.mount($('#devEditor'));
-    devEditor.drivers = managed.io.drivers || [];
+    devEditor.drivers = device.io.drivers || [];
     devEditor.components = [];
-    devEditor.rulesSupported = !!managed.rules;
-    devEditor.clock = managed.rules ? managed.rules.clock : null;
-    devEditor.runner = managed.rules ? index => proxyCommand(id, `rule run ${index}`).then(reply => note(reply.trim() === 'ok' ? t('ruleRan') : reply)) : null;
-    devEditor.load(managed.io.name, rowsFromIo(managed.io), managed.io.pins, managed.rules ? managed.rules.rules : [], managed.ble);
+    devEditor.rulesSupported = !!device.rules;
+    devEditor.clock = device.rules ? device.rules.clock : null;
+    devEditor.runner = device.rules ? index => proxyCommand(id, `rule run ${index}`).then(reply => note(reply.trim() === 'ok' ? t('ruleRan') : reply)) : null;
+    devEditor.load(device.io.name, rowsFromIo(device.io), device.io.pins, device.rules ? device.rules.rules : [], device.ble);
     $('#mSave').classList.remove('pri');
     if (recipe) {
       // The whole recipe when it has its text: rules and a Bluetooth device too
       let full = null;
       if (recipe.text) { try { full = await parseSpec(recipe.text); } catch (e) {} }
-      devEditor.load(managed.io.name, (full ? full.rows : recipe.rows).map(r => ({...r})), managed.io.pins, full ? full.rules : recipe.rules || [], full ? full.ble : null);
+      if (requestId !== deviceRequest) return;
+      devEditor.load(device.io.name, (full ? full.rows : recipe.rows).map(r => ({...r})), device.io.pins, full ? full.rules : recipe.rules || [], full ? full.ble : null);
       devEditor.onChange();
       $('#recipeNotice').innerHTML = `${esc(t('fromRecipe', recipe.title))} <button class="text" onclick="saveAndApply()">${t('saveApply')}</button>`;
       $('#recipeNotice').hidden = false;
     }
     showManageState();
-  } else if (!which && !managed.settings) setDtab('firmware');
+  } else if (!which && !device.settings) setDtab('firmware');
   renderDevicePanel();
 }
-function closeDevice() { openId = null; managed = null; $('#deviceDlg').close(); }
-$('#deviceDlg').addEventListener('close', () => { openId = null; managed = null; });
+function openDevicePage() {
+  const dialog = $('#deviceDlg');
+  const panel = dialog.querySelector('.dlg');
+  if (!panel) return;
+  if (pageTask) return;
+  const context = deviceContext || launchContext();
+  if (dialog.open) dialog.close();
+  const page = document.createElement('section');
+  page.append(panel);
+  openTask({title: state.proxies.find(p => p.id === openId)?.name, content: page,
+    dirty: () => $('#mSave').classList.contains('pri') || setEditor.changed() && !!managed?.settings,
+    blocked: () => deviceBusy || !!setEditor.busy,
+    cleanup: () => { dialog.append(panel); page.remove(); openId = managed = deviceContext = null; }
+  }, context);
+}
+async function relinkDevice(host) {
+  if (pageTask) {
+    if (await canLeaveTask()) completeWizard(() => openWizard('link', host));
+  } else {
+    closeDevice();
+    openWizard('link', host);
+  }
+}
+function closeDevice() {
+  if ($('#deviceDlg').open) $('#deviceDlg').close();
+  else if (pageTask?.content?.contains($('#dConnections'))) return leaveTask();
+}
+$('#deviceDlg').addEventListener('close', () => {
+  if (!$('#deviceDlg').contains($('#dConnections'))) return;
+  const context = deviceContext;
+  openId = managed = deviceContext = null;
+  deviceBusy = false;
+  deviceRequest++;
+  if (context && !pageTask && context.tab === tab) restoreContext(context);
+});
 
 function setDtab(name) {
   dtab = name;
@@ -2754,9 +2940,13 @@ function setDtab(name) {
   $('#dFirmware').hidden = name !== 'firmware';
   $('#dInfo').hidden = name !== 'info';
   $('#dNetwork').hidden = name !== 'network';
-  if (name === 'network') loadHealth(openId);
+  if (name === 'network' && openId) loadHealth(openId);
 }
-$$('[data-dtab]').forEach(b => { b.onclick = () => { setDtab(b.dataset.dtab); renderDevicePanel(); }; });
+$$('[data-dtab]').forEach(b => { b.onclick = () => {
+  setDtab(b.dataset.dtab);
+  if (b.dataset.dtab === 'connections' && $('#deviceDlg').open) openDevicePage();
+  renderDevicePanel();
+}; });
 
 // ---------------------------------------------------------------- network health
 // The add-on asks every device how its network is doing every 5 minutes
@@ -2838,7 +3028,7 @@ function renderDevicePanel() {
       <a class="button text" href="${esc(portalUrl(p))}">${t('openPage')} ${icon('open')}</a></div>
     ${r ? `<div class="row"><div class="label">${t('network')}<div class="sub">${esc(r.net)}</div></div></div>` : ''}
     ${s && !s.ok && !s.auth ? `<div class="row"><div class="label">${t('notReachable')}<div class="sub mono">${esc(s.error || '')}</div></div></div>` : ''}
-    ${s && s.auth ? `<div class="row"><div class="label warnText">${t('keyRefusedText')}</div><button class="pri" onclick="closeDevice();openWizard('link', '${esc(p.host)}')">${t('linkAgain')}</button></div>` : ''}
+    ${s && s.auth ? `<div class="row"><div class="label warnText">${t('keyRefusedText')}</div><button class="pri" onclick="relinkDevice('${esc(p.host)}')">${t('linkAgain')}</button></div>` : ''}
     <div class="row"><div class="label">${t('key')}<div class="sub mono">${token ? esc(token) : '••••••••••••••••'}</div></div>
       <button class="text" onclick="toggleToken('${p.id}')">${token ? t('hide') : t('show')}</button>
       ${token ? `<button class="text" onclick="copyToken('${p.id}')">${t('copy')}</button>` : ''}</div>
@@ -2855,7 +3045,7 @@ function renderDevicePanel() {
 
 // Pairing over Bluetooth on the device; it restarts to use it
 async function setBlePairing(id, on) {
-  if (!confirm(t('confirmBlePairing', on))) { render(); return; }
+  if (!await confirmAction('Change Bluetooth pairing?', t('confirmBlePairing', on), on ? 'Enable pairing' : 'Disable pairing')) { render(); return; }
   try { await proxyCommand(id, `pairing ble ${on ? 'on' : 'off'}`); await proxyCommand(id, 'reboot'); } catch (e) {}
   setTimeout(loadStatuses, 15000);
 }
@@ -2991,10 +3181,11 @@ function closeShare() {
   shareId = null;
   $('#shareDlg').close();
 }
+$('#shareDlg').addEventListener('close', () => { clearInterval(shareTimer); shareId = null; });
 
 // Into Home Assistant's Matter fabric, next to Apple Home or another controller
 async function addToHa(id) {
-  if (!confirm(t('confirmAddToHa'))) return;
+  if (!await confirmAction('Add to Home Assistant?', t('confirmAddToHa'), 'Add device')) return;
   await api(`api/proxy/${id}/add_to_ha`, {});
   logOpen = true;
   refresh();
@@ -3178,6 +3369,12 @@ function showManageState() {
 function note(text) { $('#mNotice').textContent = text; $('#mNotice').hidden = false; }
 
 async function saveManage() {
+  if (deviceBusy || !managed?.io) return;
+  deviceBusy = true;
+  try { await saveManageNow(); }
+  finally { deviceBusy = false; }
+}
+async function saveManageNow() {
   $('#mError').hidden = true;
   let spec;
   try { spec = await devEditor.get(); }
@@ -3226,6 +3423,12 @@ async function saveAndApply() {
 
 // After "apply" the device restarts: wait until it answers, then show the trial
 async function applyManage() {
+  if (deviceBusy || !managed?.io) return;
+  deviceBusy = true;
+  try { await applyManageNow(); }
+  finally { deviceBusy = false; }
+}
+async function applyManageNow() {
   try { await proxyCommand(managed.id, 'io apply'); } catch (e) {}
   note(t('applying'));
   $('#mApply').hidden = true;
@@ -3240,10 +3443,17 @@ $('#mSave').onclick = saveManage;
 $('#mSaveConfig').onclick = saveAsConfig;
 $('#mApply').onclick = applyManage;
 $('#mConfirm').onclick = async () => {
-  await proxyCommand(managed.id, 'io confirm');
-  managed.io = JSON.parse(await proxyCommand(managed.id, 'io json')).io;
-  showManageState();
-  note(t('kept'));
+  if (deviceBusy || !managed?.io) return;
+  deviceBusy = true;
+  try {
+    await proxyCommand(managed.id, 'io confirm');
+    managed.io = JSON.parse(await proxyCommand(managed.id, 'io json')).io;
+    showManageState();
+    note(t('kept'));
+  } catch (e) {
+    $('#mError').textContent = e.message;
+    $('#mError').hidden = false;
+  } finally { deviceBusy = false; }
 };
 
 // ---------------------------------------------------------------- new device
@@ -3266,19 +3476,53 @@ function factoryChoices() {
   return out;
 }
 
+let catalogContext;
+function restoreCatalogItem(selected, variant) {
+  item = selected;
+  renderItem();
+  if (variant && $('#catalogVariant')) $('#catalogVariant').value = variant;
+}
+function startCatalogWizard(step, extra) {
+  const selected = item, variant = $('#catalogVariant')?.value || extra.file || itemVariant;
+  $('#itemDlg').close();
+  openWizard(step, null, {...extra, catalogEntry: step,
+    context: catalogContext,
+    returnToItem: () => {
+      restoreCatalogItem(selected, variant);
+      $('#itemDlg').showModal();
+      $('#catalogVariant')?.focus();
+    }
+  });
+}
 function openWizard(step, host, extra) {
+  if (pageTask) return;
   $$('details.more').forEach(d => { d.open = false; });
   wiz = {step: step || 'start', host: host || '', file: null, method: 'browser', backup: true, status: '', configSpec: null, ...(extra || {})};
   if (wiz.step === 'method' && !wiz.file) wiz.step = 'board';
   wiz.keepFile = !!wiz.file;  // an own build or a catalog firmware: not replaced by the board's default
   renderWizard();
-  if (!$('#wizardDlg').open) $('#wizardDlg').showModal();
+  openTask({title: $('#taskTitle').textContent, content: $('#wizardPage'),
+    cleanup: () => { clearTimeout(wiz?.linkTimer); wiz = null; },
+    blocked: () => wiz?.step === 'install' && !wiz.error || wiz?.apply?.state === 'applying',
+    dirty: () => !!wiz?.editorDirty,
+    after: () => { if (wizReturn) wizReturn(); }
+  }, extra?.context);
+  const wizReturn = extra?.returnToItem;
   if (!specs) loadSpecs().then(renderWizard);
   if (!catalogData && !recipes) loadCatalog().then(renderWizard);
 }
-function closeWizard() { wiz = null; $('#wizardDlg').close(); }
-$('#wizardDlg').addEventListener('close', () => { if (wiz && wiz.linkTimer) clearTimeout(wiz.linkTimer); wiz = null; });
-function go(step) { wiz.step = step; wiz.error = ''; renderWizard(); }
+function closeWizard() { return leaveTask(); }
+function completeWizard(next) {
+  if (!pageTask) return;
+  finishTask(false);
+  afterTaskBack = next || null;
+  history.back();
+}
+function go(step) {
+  wiz.step = step; wiz.error = ''; renderWizard();
+  window.scrollTo(0, 0);
+  if (step !== 'link') $('#taskTitle').focus();
+}
 
 const serialOk = () => 'serial' in navigator && window.isSecureContext;
 
@@ -3382,7 +3626,7 @@ function wizFlow() {
     ...(generic ? ['configure'] : []), 'method', 'install', 'setup', 'link', 'done'];
 }
 function wizNext() { const f = wizFlow(); go(f[f.indexOf(wiz.step) + 1]); }
-function wizPrev() { const f = wizFlow(), i = f.indexOf(wiz.step); go(i > 0 ? f[i - 1] : 'start'); }
+function wizPrev() { const f = wizFlow(), i = f.indexOf(wiz.step); if (wiz.step === wiz.catalogEntry) return closeWizard(); go(i > 0 ? f[i - 1] : 'start'); }
 
 // The board is chosen: its firmware (the newest generic one for the chip, on
 // Thread where it can; the network step may change that)
@@ -3419,14 +3663,17 @@ const choice = (on, ic, title, sub, click, attrs = '') =>
 function renderWizard() {
   if (!wiz) return;
   const flow = wizFlow();
+  const first = wiz.catalogEntry === 'method' ? flow.indexOf('method') : 0;
   const n = flow.indexOf(wiz.step);
-  $('#wStep').textContent = n >= 0 && !wiz.linkOnly ? t('stepOf', n + 1, flow.length) : '';
+  const progress = n >= first && !wiz.linkOnly ? t('stepOf', n - first + 1, flow.length - first) : '';
+  $('#wStep').textContent = progress;
+  $('#taskBack').disabled = wiz.step === 'install' && !wiz.error || wiz.apply?.state === 'applying';
   let title = '', body = '';
   if (wiz.step === 'start') {
     title = t('wStart');
     body = `<div class="choices">${choice(false, 'usb', t('wNewEsp'), t('wNewEspHelp'), "go('board')")}
       ${choice(false, 'link', t('wExisting'), t('wExistingHelp'), "wiz.linkOnly = true; go('link')")}
-      ${choice(false, 'store', t('wCatalog'), t('wCatalogHelp'), "closeWizard(); showTab('catalog')")}</div>`;
+      ${choice(false, 'store', t('wCatalog'), t('wCatalogHelp'), "completeWizard(() => showTab('catalog'))")}</div>`;
   } else if (wiz.step === 'recipeTarget') {
     title = t('wRecipeTarget');
     const generic = state.proxies.filter(p => { const r = running(statuses[p.id]); return r && isGenericApp(r.app); });
@@ -3434,7 +3681,7 @@ function renderWizard() {
     body = `<div class="sub">${esc(wiz.recipe.title)}</div><div class="choices">
       ${wiz.deviceOnly ? '' : choice(false, 'usb', t('recipeNew'), t('recipeNewHelp'),
         wiz.configSlug ? `useConfig('${wiz.configSlug}', 'new')` : "go('board')")}
-      ${generic.map(p => choice(false, 'chip', t('recipeOn', esc(p.name)), t('recipeOnHelp'), `const r = wiz.recipe; closeWizard(); openDevice('${p.id}', 'connections', r)`)).join('')}</div>
+      ${generic.map(p => choice(false, 'chip', t('recipeOn', esc(p.name)), t('recipeOnHelp'), `const r = wiz.recipe; completeWizard(() => openDevice('${p.id}', 'connections', r))`)).join('')}</div>
       ${(wiz.deviceOnly || wiz.configSlug) && !generic.length ? `<p class="sub">${t('noGeneric')}</p>` : ''}`;
   } else if (wiz.step === 'board') {
     title = t('wBoard');
@@ -3545,10 +3792,11 @@ function renderWizard() {
       ${a.state === 'trial' ? `<p class="notice">${t('configOnTrial', a.trial)}</p>` : ''}
       ${a.state === 'kept' ? `<p class="notice">${t('configKept')}</p>` : ''}
       ${a.state === 'error' ? `<div class="error">${esc(t('configFailed', a.error))}</div>` : ''}
-      <div class="actions end">${a.state === 'trial' ? `<button class="pri" onclick="keepConfig()">${t('keep')}</button>` : `<button class="plain" onclick="closeWizard()">${t('done')}</button>`}
-        ${wiz.linkedId && a.state !== 'trial' && a.state !== 'applying' ? `<button class="${a.state === 'kept' ? 'plain' : 'pri'}" onclick="const w = wiz; closeWizard(); openDevice(w.linkedId, 'connections')">${a.state === 'kept' ? t('openDevice') : t('setUpConnections')}</button>` : ''}</div>`;
+      <div class="actions end">${a.state === 'trial' ? `<button class="pri" onclick="keepConfig()">${t('keep')}</button>` : `<button class="plain" onclick="completeWizard()">${t('done')}</button>`}
+        ${wiz.linkedId && a.state !== 'trial' && a.state !== 'applying' ? `<button class="${a.state === 'kept' ? 'plain' : 'pri'}" onclick="const w = wiz; completeWizard(() => openDevice(w.linkedId, 'connections'))">${a.state === 'kept' ? t('openDevice') : t('setUpConnections')}</button>` : ''}</div>`;
   }
   $('#wTitle').textContent = title;
+  $('#taskTitle').textContent = progress ? `${title} · ${progress}` : title;
   $('#wBody').innerHTML = body;
   if (wiz.step === 'configure') {
     if (!wiz.editorReady) {
@@ -3578,6 +3826,7 @@ function isGenericFile(file) {
 }
 
 const wizEditor = new ConfigEditor('wiz');
+wizEditor.onChange = () => { if (wiz) wiz.editorDirty = true; };
 
 async function configureNext() {
   try { wiz.configSpec = await wizEditor.get(); }
@@ -3592,6 +3841,7 @@ async function configureNext() {
     if (r.error) { wiz.error = r.error; renderWizard(); return; }
     invalidateSpecs();
   }
+  if (wiz.saveConfig) wiz.editorDirty = false;
   go('method');
 }
 
@@ -3657,7 +3907,7 @@ async function loadPorts() {
 // On the Home Assistant machine: the add-on runs esptool as a job; follow it here
 async function installOnHost() {
   const port = wiz.ports.find(p => p.path === wiz.port);
-  if (!port || !confirm(t('confirmPort', port.name))) return;
+  if (!port || !await confirmAction('Install firmware?', t('confirmPort', port.name), 'Install firmware')) return;
   wiz.step = 'install'; wiz.error = ''; wiz.progress = 0; wiz.status = t('usbConnecting');
   renderWizard();
   const r = await api('api/flash', {port: wiz.port, file: wiz.file, backup: wiz.backup});
@@ -3783,19 +4033,34 @@ function renderSettings() {
   $('#toolchainBtn').hidden = state.toolchain;
   $('#toolchainBtn').disabled = state.job.running;
 }
-$('#settingsBtn').onclick = () => $('#settingsDlg').showModal();
+$('#settingsBtn').onclick = () => openTask({title: t('settings'), content: $('#settingsPage'),
+  cleanup: () => { $('#bPass').value = ''; $('#pOld').value = ''; $('#pNew').value = ''; }});
 $('#bulkWifi').onsubmit = async e => {
   e.preventDefault();
   const ssid = $('#bSsid').value.trim(), pass = $('#bPass').value;
   if (!ssid) return;
+  const targets = [...state.proxies];
+  if (!targets.length) { $('#bulkRows').textContent = 'No linked devices.'; return; }
+  if (!await confirmAction('Send Wi-Fi settings?', `This updates configuration Wi-Fi for ${targets.length} devices: ${targets.map(p => p.name).join(', ')}.`, 'Send to all')) return;
   // As hex, so spaces arrive as typed; an empty password field keeps each device's password
   const hex = text => Array.from(new TextEncoder().encode(text), b => b.toString(16).padStart(2, '0')).join('');
-  const r = await api('api/bulk', {lines: [`wifi ssid-hex ${hex(ssid)}`].concat(pass ? [`wifi password-hex ${hex(pass)}`] : [])});
+  const r = await api('api/bulk', {ids: targets.map(p => p.id), lines: [`wifi ssid-hex ${hex(ssid)}`].concat(pass ? [`wifi password-hex ${hex(pass)}`] : [])});
   $('#bPass').value = '';
+  if (r.error) { $('#bulkRows').textContent = r.error; return; }
   $('#bulkRows').innerHTML = (r.results || []).map(x => `<div class="row"><div class="label">${esc(x.name)}<div class="sub">${esc(x.text)}</div></div>
     <span class="chip ${x.ok ? 'ok' : 'bad'}">${x.ok ? 'OK' : '!'}</span></div>`).join('');
 };
-$('#checkReleases').onclick = async () => { await api('api/releases/check', {}); catalogData = null; refresh(); };
+$('#checkReleases').onclick = async () => {
+  const button = $('#checkReleases');
+  button.disabled = true;
+  try {
+    await api('api/releases/check', {});
+    catalogData = null;
+    await refresh();
+    toast(state.release_error || 'Checked for firmware updates.');
+  } catch (e) { toast(e.message); }
+  finally { button.disabled = false; }
+};
 $('#sourceForm').onsubmit = e => { e.preventDefault(); const repo = $('#sourceRepo').value.trim().replace(/^https:\/\/github\.com\//, '').replace(/\/$/, ''); if (repo) addSourceFlow(repo); };
 $('#nightHour').innerHTML = [...Array(24).keys()].map(h => `<option value="${h}">${String(h).padStart(2, '0')}:00</option>`).join('');
 $('#nightHour').onchange = async () => { await api('api/settings', {night_hour: +$('#nightHour').value}); refresh(); };
@@ -3812,7 +4077,10 @@ function openLogs(id) {
   $('#logText').textContent = t('logWaiting');
   $('#logPause').hidden = $('#logSave').hidden = false;
   renderLogHead();
-  $('#logDlg').showModal();
+  if (!$('#logDlg').open) {
+    if (matchMedia('(max-width: 640px)').matches) $('#logDlg').showModal();
+    else $('#logDlg').show();
+  }
   pollLog();
 }
 function renderLogHead(error) {

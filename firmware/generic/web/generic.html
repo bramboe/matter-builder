@@ -178,6 +178,10 @@ dialog > .card{border:0;padding:16px 20px}
 #toast.show{transform:translate(-50%,0)}
 /* Phones: 16 px inputs, so iOS does not zoom in on them */
 @media (max-width:640px){input,select,textarea{font-size:16px !important}}
+#actionDlg{border:0;border-radius:14px;padding:18px;width:min(440px,calc(100% - 24px));color:var(--fg);background:var(--card)}
+#actionDlg::backdrop{background:#0006}
+#actionTitle{font-size:16px;margin:0 0 12px}
+#actionDlg .actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
 </style>
 </head>
 <body>
@@ -484,7 +488,37 @@ dialog > .card{border:0;padding:16px 20px}
 </main>
 <div id="toast"></div>
 
+<dialog id="actionDlg" aria-labelledby="actionTitle">
+  <form method="dialog">
+    <h2 id="actionTitle"></h2>
+    <label id="actionField" class="field" hidden><span id="actionLabel"></span><input id="actionValue"></label>
+    <div class="actions">
+      <button type="submit" id="actionCancel" value="cancel" autofocus></button>
+      <button type="submit" id="actionConfirm" value="confirm"></button>
+    </div>
+  </form>
+</dialog>
 <script>
+function deviceDecision(message, action, initial = null) {
+  const dialog = document.querySelector('#actionDlg');
+  if (dialog.open) return Promise.resolve(null);
+  const field = document.querySelector('#actionField');
+  const value = document.querySelector('#actionValue');
+  document.querySelector('#actionTitle').textContent = message;
+  document.querySelector('#actionCancel').textContent = t('cancel');
+  document.querySelector('#actionConfirm').textContent = action;
+  document.querySelector('#actionLabel').textContent = message;
+  field.hidden = initial === null;
+  value.value = initial ?? '';
+  dialog.returnValue = '';
+  return new Promise(resolve => {
+    dialog.addEventListener('close', () => resolve(dialog.returnValue === 'confirm'
+      ? (initial === null ? true : value.value.trim()) : null), {once: true});
+    dialog.showModal();
+    if (initial !== null) { value.focus(); value.select(); }
+  });
+}
+
 // The page's texts
 const TEXT = {
   title: 'Matter Builder',
@@ -1007,7 +1041,7 @@ async function ruleToggle(index, on) { await run(`rule enable ${index} ${on ? 'o
 async function ruleRun(index) { const reply = await cmd(`rule run ${index}`); toast(reply.trim() === 'ok' ? t('ruleRan') : reply.trim()); }
 async function ruleRemove(index) {
   const r = rulesState.rules.find(x => x.index === index);
-  if (!confirm(t('confirmRuleRemove', r.name))) return;
+  if (!await deviceDecision(t('confirmRuleRemove', r.name), t('remove'))) return;
   await run(`rule clear ${index}`);
   loadRules();
 }
@@ -1227,7 +1261,7 @@ function ioEdit(index) {
 }
 
 async function ioRemove(index, name) {
-  if (!confirm(t('confirmRemove', name))) return;
+  if (!await deviceDecision(t('confirmRemove', name), t('remove'))) return;
   await run(`io clear ${index}`);
   refresh();
 }
@@ -1243,7 +1277,7 @@ function pickType(type) { $('#ioType').value = type; fillPins(true); updateIoFor
 $('#ioUseLast').onclick = () => { $('#ioCode').value = state.io.ir_last; };
 $('#blePairing').onchange = async () => {
   const on = $('#blePairing').checked;
-  if (!confirm(t('confirmBlePairing', on))) { $('#blePairing').checked = !on; return; }
+  if (!await deviceDecision(t('confirmBlePairing', on), t('restart'))) { $('#blePairing').checked = !on; return; }
   await run(`pairing ble ${on ? 'on' : 'off'}`);
   await run('reboot');
 };
@@ -1422,7 +1456,7 @@ $('#shareApple').onclick = () => shareToApp(matter.share, (state && state.io ? s
 
 // A factory reset from the page (the BOOT button only does it on a board with a status LED)
 $('#factoryReset').onclick = async () => {
-  if (!confirm(t('factoryConfirm'))) return;
+  if (!await deviceDecision(t('factoryConfirm'), t('factoryReset'))) return;
   try { toast((await cmd('factory reset confirm')).trim()); } catch (e) { toast(t('error') + ': ' + e.message); }
 };
 
@@ -1528,13 +1562,13 @@ async function loadAccess() {
   $('#accessCard .val').textContent = access.clients.length ? t('valPrograms', access.clients.length) : t('valNoPrograms');
 }
 async function revokeAccess(index, name) {
-  if (!confirm(t('confirmRevoke', name))) return;
+  if (!await deviceDecision(t('confirmRevoke', name), t('remove'))) return;
   await run(`access revoke ${index}`);
   loadAccess();
 }
 
 async function removeFabric(index, vendor) {
-  if (!confirm(t('confirmDisconnect', vendor))) return;
+  if (!await deviceDecision(t('confirmDisconnect', vendor), t('remove'))) return;
   await run(`matter remove ${index}`);
   loadMatter();
 }
@@ -1542,7 +1576,7 @@ async function removeFabric(index, vendor) {
 $('#menuBtn').onclick = e => { e.stopPropagation(); $('#menu').classList.toggle('open'); };
 $('#menu').onclick = e => e.stopPropagation();
 document.addEventListener('click', closeMenus);
-$('#reboot').onclick = () => { if (confirm(t('confirmRestart'))) run('reboot'); };
+$('#reboot').onclick = async () => { if (await deviceDecision(t('confirmRestart'), $('#reboot').textContent)) run('reboot'); };
 $('#token').onclick = () => { closeMenus(); showLogin(false, 'change'); };
 $('#loginCancel').onclick = () => { $('#login').hidden = true; $('#app').hidden = false; };
 $('#loginSwitch').onclick = () => showLogin(false, loginMode === 'pin' ? 'login' : 'pin');
@@ -1732,7 +1766,7 @@ $('#cfgStart').onclick = async () => {
       $('#cfgBack').textContent = t(wifiDevice ? 'configApDoneWifi' : 'configApMoved', wifiHost);
       return;
     }
-    if (!await saveWifi() || !confirm(t('configConfirm', wifiHost))) return;
+    if (!await deviceDecision(t('configConfirm', wifiHost), $('#cfgStart').textContent) || !await saveWifi()) return;
     await startConfigMode(15, $('#sys'));
   } catch (err) { toast(t('error') + ': ' + err.message); }
 };

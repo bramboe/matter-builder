@@ -2727,8 +2727,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
             lines = [str(line) for line in data.get("lines", []) if allowed(str(line))]
             if not lines:
                 return self.reply({"error": "nothing allowed to send"}, 400)
+            ids = data.get("ids")
+            if ids is not None and (not isinstance(ids, list) or any(not isinstance(i, str) for i in ids)):
+                return self.reply({"error": "invalid device list"}, 400)
             results = []
             for proxy in load_proxies():
+                if ids is not None and proxy["id"] not in ids:
+                    continue
                 answers = [send_line(proxy, line) for line in lines]
                 ok = all(status == 200 and not text.startswith("error") for status, text in answers)
                 results.append({"id": proxy["id"], "name": proxy["name"], "ok": ok,

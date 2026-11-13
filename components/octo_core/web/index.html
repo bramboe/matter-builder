@@ -155,6 +155,10 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
 #toast.show{transform:translate(-50%,0)}
 /* Phones: 16 px inputs, so iOS does not zoom in on them */
 @media (max-width:640px){input,select,textarea{font-size:16px !important}}
+#actionDlg{border:0;border-radius:14px;padding:18px;width:min(440px,calc(100% - 24px));color:var(--fg);background:var(--card)}
+#actionDlg::backdrop{background:#0006}
+#actionTitle{font-size:16px;margin:0 0 12px}
+#actionDlg .actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
 </style>
 </head>
 <body>
@@ -345,7 +349,37 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
 </main>
 <div id="toast"></div>
 
+<dialog id="actionDlg" aria-labelledby="actionTitle">
+  <form method="dialog">
+    <h2 id="actionTitle"></h2>
+    <label id="actionField" class="field" hidden><span id="actionLabel"></span><input id="actionValue"></label>
+    <div class="actions">
+      <button type="submit" id="actionCancel" value="cancel" autofocus></button>
+      <button type="submit" id="actionConfirm" value="confirm"></button>
+    </div>
+  </form>
+</dialog>
 <script>
+function deviceDecision(message, action, initial = null) {
+  const dialog = document.querySelector('#actionDlg');
+  if (dialog.open) return Promise.resolve(null);
+  const field = document.querySelector('#actionField');
+  const value = document.querySelector('#actionValue');
+  document.querySelector('#actionTitle').textContent = message;
+  document.querySelector('#actionCancel').textContent = t('cancel');
+  document.querySelector('#actionConfirm').textContent = action;
+  document.querySelector('#actionLabel').textContent = message;
+  field.hidden = initial === null;
+  value.value = initial ?? '';
+  dialog.returnValue = '';
+  return new Promise(resolve => {
+    dialog.addEventListener('close', () => resolve(dialog.returnValue === 'confirm'
+      ? (initial === null ? true : value.value.trim()) : null), {once: true});
+    dialog.showModal();
+    if (initial !== null) { value.focus(); value.select(); }
+  });
+}
+
 // Texts per language. The language is stored on the bridge ("language"), so
 // the page and the preset names in Home Assistant use the same one.
 const TEXT = {
@@ -928,13 +962,13 @@ function toggleBedMenu(e, i) {
 }
 const closeMenus = () => document.querySelectorAll('.menu.open').forEach(m => m.classList.remove('open'));
 
-function renameBed(i, old) {
-  const name = prompt(t('newName'), old);
+async function renameBed(i, old) {
+  const name = await deviceDecision(t('newName'), t('rename'), old);
   if (name && name.trim() && name.trim() !== old) run(`bed name ${i} ${name.trim()}`);
 }
 
-function removeBed(i, name) {
-  if (confirm(t('confirmRemove', name))) run(`bed clear ${i}`);
+async function removeBed(i, name) {
+  if (await deviceDecision(t('confirmRemove', name), t('remove'))) run(`bed clear ${i}`);
 }
 
 // One request at a time: over Thread an answer can take longer than the
@@ -1069,7 +1103,7 @@ $('#shareApple').onclick = () => shareToApp(matter.share, (document.title || 'Oc
 
 // A factory reset from the page (the BOOT button only does it on a board with a status LED)
 $('#factoryReset').onclick = async () => {
-  if (!confirm(t('factoryConfirm'))) return;
+  if (!await deviceDecision(t('factoryConfirm'), t('factoryReset'))) return;
   try { toast((await cmd('factory reset confirm')).trim()); } catch (e) { toast(t('error') + ': ' + e.message); }
 };
 
@@ -1174,13 +1208,13 @@ async function loadAccess() {
   $('#accessCard .val').textContent = String(access.clients.length);
 }
 async function revokeAccess(index, name) {
-  if (!confirm(t('confirmRevoke', name))) return;
+  if (!await deviceDecision(t('confirmRevoke', name), t('remove'))) return;
   await run(`access revoke ${index}`);
   loadAccess();
 }
 
 async function removeFabric(index, vendor) {
-  if (!confirm(t('confirmDisconnect', vendor))) return;
+  if (!await deviceDecision(t('confirmDisconnect', vendor), t('remove'))) return;
   await run(`matter remove ${index}`);
   loadMatter();
 }
@@ -1196,7 +1230,7 @@ async function loadLanguage() {
 $('#menuBtn').onclick = e => { e.stopPropagation(); $('#menu').classList.toggle('open'); };
 $('#menu').onclick = e => e.stopPropagation();
 document.addEventListener('click', closeMenus);
-$('#reboot').onclick = () => { if (confirm(t('confirmRestart'))) run('reboot'); };
+$('#reboot').onclick = async () => { if (await deviceDecision(t('confirmRestart'), $('#reboot').textContent)) run('reboot'); };
 $('#token').onclick = () => { closeMenus(); showLogin(false, 'change'); };
 $('#loginCancel').onclick = () => { $('#login').hidden = true; $('#app').hidden = false; };
 $('#loginSwitch').onclick = () => showLogin(false, loginMode === 'pin' ? 'login' : 'pin');
@@ -1388,7 +1422,7 @@ $('#cfgStart').onclick = async () => {
       $('#cfgBack').textContent = t('configApMoved', wifiHost);
       return;
     }
-    if (!await saveWifi() || !confirm(t('configConfirm', wifiHost))) return;
+    if (!await deviceDecision(t('configConfirm', wifiHost), $('#cfgStart').textContent) || !await saveWifi()) return;
     await startConfigMode(15, $('#sys'));
   } catch (err) { toast(t('error') + ': ' + err.message); }
 };

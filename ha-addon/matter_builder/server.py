@@ -2452,7 +2452,7 @@ def password_problem(password):
 # ---------------------------------------------------------------- HTTP
 
 # Without a session: the page itself (it shows the login) and the login API
-PUBLIC_PATHS = {"/", "/index.html", "/esptool.js", "/api/auth", "/api/auth/login", "/api/auth/setup"}
+PUBLIC_PATHS = {"/", "/index.html", "/esptool.js", "/yaml-editor.js", "/api/auth", "/api/auth/login", "/api/auth/setup"}
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -2611,6 +2611,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         path = self.path.split("?")[0]
         if path in ("/", "/index.html"):
             return self.reply((HERE / "www" / "index.html").read_bytes(), ctype="text/html; charset=utf-8")
+        if path == "/yaml-editor.js":
+            return self.reply((HERE / "www" / "yaml-editor.js").read_bytes(), ctype="text/javascript; charset=utf-8")
         if path == "/esptool.js":
             # esptool-js 0.7.0 (Apache-2.0, www/esptool-js.LICENSE): USB flashing in the browser
             return self.reply((HERE / "www" / "esptool.js").read_bytes(), ctype="text/javascript; charset=utf-8")

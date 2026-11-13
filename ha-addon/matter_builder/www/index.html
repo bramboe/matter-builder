@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Matter Builder</title>
+<script defer src="yaml-editor.js?v=1"></script>
 <style>
 /* Colours, radii and spacing follow the Home Assistant frontend */
 :root{--primary:#009ac7;--bg:#f0f0f0;--card:#fff;--fg:#141414;--mute:#6f6f6f;--line:#e0e0e0;--fill:#f5f5f5;
@@ -97,7 +98,7 @@ button.spec-name{min-width:0;flex:1 1 160px;justify-content:flex-start;text-alig
 .spec-editor-bar h1{display:block;flex:1 1 120px;min-width:0;overflow-wrap:anywhere}
 @media (max-width:640px){header .spec-editor-bar>button{margin-bottom:0}}
 #specExampleField{margin-top:14px;max-width:300px}
-#specEditorHost .yaml{min-height:50vh;background:var(--card)}
+#specEditorHost > mb-yaml-editor{--yaml-height:50vh}
 #specEditor .spec-editor-section{background:var(--card);border-radius:var(--radius);padding:16px;margin-top:12px}
 #specEditor .spec-editor-section .ed-section:first-child{margin-top:0}
 #specEditor .ed-add{background:var(--fill);border:0;color:var(--editor-action)}
@@ -217,7 +218,20 @@ dialog.side{margin:0 0 0 auto;height:100vh;max-height:100vh;border-radius:16px 0
 .choice b{font-weight:500;display:block}
 .choices{display:grid;gap:8px;margin:12px 0}
 .conn{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;align-items:end;padding:10px 0;border-top:1px solid var(--line)}
-textarea.yaml{width:100%;min-height:280px;font:12px/1.5 ui-monospace,Menlo,monospace;background:var(--fill);color:var(--fg);border:0;border-radius:8px;padding:10px}
+mb-yaml-editor{--yaml-height:280px;--yaml-key:#005b79;--yaml-string:#176443;--yaml-value:#8e3e00;display:block;min-width:0;margin-bottom:8px;background:var(--card);border-radius:var(--radius);overflow:hidden}
+@media(prefers-color-scheme:dark){mb-yaml-editor{--yaml-key:#80d4f4;--yaml-string:#8bdab1;--yaml-value:#ffbd80}}
+mb-yaml-editor textarea.yaml{display:block;width:100%;min-height:var(--yaml-height);font:13px/1.55 ui-monospace,Menlo,monospace;background:var(--card);color:var(--fg);border:0;padding:10px}
+.yaml-tools{display:flex;flex-wrap:wrap;gap:4px;padding:4px 8px;background:var(--fill);border-bottom:1px solid var(--line)}
+.yaml-code .cm-editor{min-height:var(--yaml-height);max-height:65vh;font-size:13px}
+.yaml-code .cm-editor.cm-focused{outline:2px solid var(--editor-action,var(--primary));outline-offset:-2px}
+.yaml-code .cm-scroller{overflow:auto;font:inherit;font-family:ui-monospace,Menlo,monospace;line-height:1.55}
+.yaml-code .cm-gutters{background:var(--fill);color:var(--mute);border-color:var(--line)}
+.yaml-code .cm-activeLine,.yaml-code .cm-activeLineGutter{background:var(--chip)}
+.yaml-code .cm-panels{background:var(--fill);color:var(--fg);border-color:var(--line)}
+.yaml-code .cm-panel.cm-search{padding:8px}
+.yaml-code .cm-search .cm-button{min-height:30px;background:var(--card);color:var(--fg);border:0;border-radius:15px}
+.yaml-code .cm-search .cm-textfield{width:min(180px,100%);padding:4px 6px;background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:4px}
+@media(max-width:640px){.yaml-code .cm-editor{font-size:16px}.yaml-code .cm-search{padding-right:36px}}
 .seg{display:inline-flex;background:var(--fill);border-radius:18px;padding:2px;margin:8px 0}
 .seg button{min-height:30px;background:none;font-size:13px}
 .seg button.on{background:var(--card);color:var(--primary)}
@@ -584,6 +598,13 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;',
 // a USB install's progress and checkboxes must survive that
 function setHtml(el, html) {
   if (el.dataset.html !== html) { el.innerHTML = html; el.dataset.html = html; }
+}
+
+function yamlEditor(text, oninput = '', height = '') {
+  return `<mb-yaml-editor${height ? ` style="--yaml-height:${height}"` : ''}><textarea class="yaml"
+    aria-label="YAML" spellcheck="false" autocapitalize="off" autocomplete="off"
+    ${oninput ? `oninput="${esc(oninput)}"` : 'readonly'}>
+${esc(text)}</textarea></mb-yaml-editor>`;
 }
 
 const TEXT = {
@@ -1766,7 +1787,7 @@ class ConfigEditor {
     const l = this.live && this.live[r.slot];
     const canTest = this.tester && (isOutputType(r.type) || r.type === 'ir_send') && l && l.type === r.type && l.pin === r.pin;
     const body = this.cardYaml[r.slot] !== undefined
-      ? `<textarea class="yaml" style="min-height:130px" spellcheck="false" oninput="${ref}.cardYaml[${r.slot}] = this.value">${esc(this.cardYaml[r.slot])}</textarea>
+      ? `${yamlEditor(this.cardYaml[r.slot], `${ref}.cardYaml[${r.slot}] = this.value`, '130px')}
          <div class="actions end"><button class="plain" onclick="delete ${ref}.cardYaml[${r.slot}]; ${ref}.render()">${t('cancel')}</button>
            <button class="pri" onclick="${ref}.doneCardYaml(${r.slot})">${t('done')}</button></div>`
       : `<div class="ed-fields">
@@ -1822,7 +1843,7 @@ class ConfigEditor {
         <button class="${this.mode === 'yaml' ? 'on' : ''}" onclick="${ref}.setMode('yaml')">YAML</button></div></div>`;
     const error = this.error ? `<div class="error">${esc(this.error)}</div>` : '';
     if (this.mode === 'yaml') {
-      this.host.innerHTML = `${head}<textarea class="yaml" spellcheck="false" oninput="${ref}.setYaml(this.value)">${esc(this.yaml)}</textarea>
+      this.host.innerHTML = `${head}${yamlEditor(this.yaml, `${ref}.setYaml(this.value)`)}
         <div class="sub">${t('yamlHelp')}</div>${error}`;
       return;
     }
@@ -2580,6 +2601,14 @@ class SettingsEditor {
     this.render();
   }
   set(k, v) { this.values[k] = v; this.error = this.notice = ''; this.render(); }
+  setYaml(text) {
+    this.yaml = text;
+    if (this.dirty) return;
+    this.dirty = true;
+    this.notice = '';
+    $('#setSave').disabled = this.busy;
+    $('#setSave').classList.add('pri');
+  }
   changed() {
     if (this.mode === 'yaml') return !!this.dirty;
     return Object.keys(this.schema).some(k => String(this.values[k] ?? this.schema[k].default) !== String(this.saved[k] ?? this.schema[k].default));
@@ -2631,7 +2660,7 @@ class SettingsEditor {
         <button class="${this.mode === 'yaml' ? 'on' : ''}" onclick="setEditor.setMode('yaml')">YAML</button></div></div>`;
     const help = `<div class="sub" style="margin:2px 2px 10px">${t('settingsHelp')}</div>`;
     const body = this.mode === 'yaml'
-      ? `<textarea class="yaml" spellcheck="false" style="min-height:160px" oninput="setEditor.yaml = this.value; if (!setEditor.dirty) { setEditor.dirty = true; setEditor.notice = ''; $('#setSave').disabled = false; $('#setSave').classList.add('pri'); }">${esc(this.yaml)}</textarea><div class="sub">${t('settingsYamlHelp')}</div>`
+      ? `${yamlEditor(this.yaml, 'setEditor.setYaml(this.value)', '160px')}<div class="sub">${t('settingsYamlHelp')}</div>`
       : Object.entries(this.schema).map(([k, f]) => this.field(k, f)).join('');
     const beds = (this.beds || []).length ? `<div class="ed-section"><h3>${t('bedsLabel')}</h3></div>
       ${this.beds.map(b => `<div class="row"><span class="ico">${icon('bed')}</span><div class="label">${esc(b.name || t('bedN', b.index + 1))}
@@ -2769,12 +2798,12 @@ function renderDevicePanel() {
     setEditor.proxy = p.id;
     setEditor.page = portalUrl(p);
     if (!setEditor.dirty) setEditor.yaml = setEditor.toYaml();
-    if (!setEditor.host.contains(document.activeElement)) setEditor.render();
+    if (!setEditor.host.contains(document.activeElement) && (!setEditor.dirty || !setEditor.host.firstChild)) setEditor.render();
   } else if (managed && !managed.io) {
     const yaml = ['device:', `  name: ${p.name}`, `  app: ${r ? r.app : p.app || ''}`, `  version: ${r ? r.version : ''}`];
     const lines = connectedText(s);
     if (lines) yaml.push('# connected: ' + lines);
-    setHtml($('#noIo'), `<p class="sub">${t('readOnlyYaml')}</p><textarea class="yaml" readonly style="min-height:120px">${esc(yaml.join('\n'))}</textarea>
+    setHtml($('#noIo'), `<p class="sub">${t('readOnlyYaml')}</p>${yamlEditor(yaml.join('\n'), '', '120px')}
       <div class="actions"><a class="button text" href="${esc(portalUrl(p))}">${t('openPage')} ${icon('open')}</a></div>`);
   }
   $('#ioEditor').hidden = !(managed && managed.io);

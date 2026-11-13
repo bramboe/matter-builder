@@ -7,10 +7,11 @@
 <script defer src="yaml-editor.js?v=2"></script>
 <style>
 /* Colours, radii and spacing follow the Home Assistant frontend */
-:root{--primary:#009ac7;--bg:#f0f0f0;--card:#fff;--fg:#141414;--mute:#6f6f6f;--line:#e0e0e0;--fill:#f5f5f5;
---ok:#43a047;--bad:#db4437;--warn:#e68a00;--chip:rgba(0,154,199,.12);--okchip:rgba(67,160,71,.14);--badchip:rgba(219,68,55,.12);
+:root{color-scheme:light;--primary:#006985;--on-primary:#fff;--bg:#edf0f2;--card:#fff;--fg:#141414;--mute:#505b64;--line:#d7dfe4;--fill:#eef2f5;--control:#677680;
+--ok:#237038;--bad:#a52229;--warn:#815000;--chip:rgba(0,154,199,.12);--okchip:rgba(67,160,71,.14);--badchip:rgba(219,68,55,.12);
 --warnchip:rgba(255,152,0,.16);--radius:12px;--shadow:0 2px 12px rgba(0,0,0,.18)}
-@media (prefers-color-scheme:dark){:root{--bg:#111;--card:#1c1c1c;--fg:#e1e1e1;--mute:#9b9b9b;--line:#2f2f2f;--fill:#2a2a2a;
+@media (prefers-color-scheme:dark){:root{color-scheme:dark;--primary:#82d8ef;--on-primary:#10262e;--bg:#14181c;--card:#20262c;--fg:#f1f3f5;--mute:#bfc9d0;--line:#414c54;--fill:#2b343b;--control:#9baab4;
+--ok:#8dd6a1;--bad:#ff9a9e;--warn:#ffca79;
 --chip:rgba(0,154,199,.22);--okchip:rgba(67,160,71,.22);--badchip:rgba(219,68,55,.22);--warnchip:rgba(255,152,0,.22);--shadow:0 2px 16px rgba(0,0,0,.6)}}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
@@ -21,8 +22,7 @@ h3{margin:0;font-size:15px;font-weight:500;overflow-wrap:anywhere}
 .sub{color:var(--mute);font-size:13px}
 .mono{font:12px ui-monospace,Menlo,monospace;overflow-wrap:anywhere}
 pre.logview{flex:1;max-height:none;min-height:60vh}
-pre.logview .e{color:var(--bad)}pre.logview .w{color:#b26a00}
-@media (prefers-color-scheme:dark){pre.logview .w{color:#f0a030}}
+pre.logview .e{color:var(--bad)}pre.logview .w{color:var(--warn)}
 pre{font:12px/1.4 ui-monospace,Menlo,monospace;background:var(--fill);border-radius:8px;padding:8px;margin:0;max-height:300px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
 
 /* Top bar with tabs */
@@ -41,12 +41,18 @@ main{flex:1;width:100%;max-width:2000px;padding:16px 16px 24px}
 
 /* Buttons */
 button,a.button{font:inherit;font-weight:500;display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:36px;padding:0 14px;border:0;border-radius:18px;background:var(--fill);color:var(--fg);cursor:pointer;text-decoration:none;white-space:nowrap}
-button.pri{background:var(--primary);color:#fff}
+button.pri{background:var(--primary);color:var(--on-primary)}
 button.text,a.text{background:none;color:var(--primary);padding:0 8px}
 button.plain,a.plain{background:none;color:var(--fg);padding:0 8px}
 button.warn{background:none;color:var(--bad);padding:0 8px}
 button.icon{background:none;color:var(--mute);width:36px;padding:0}
-button:disabled{opacity:.4;cursor:default}
+button:disabled{opacity:1;color:var(--mute);cursor:default}
+button.plain:disabled{color:var(--mute)}
+button.pri:disabled{background:var(--fill);color:var(--mute)}
+a:not(.button){color:var(--primary)}
+:where(button,a,summary,input,select,textarea,[tabindex]):focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+.search:focus-within,.field:focus-within{box-shadow:0 0 0 2px var(--primary)}
+.search input::placeholder{color:var(--mute);opacity:1}
 .actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:12px}
 .actions.end{justify-content:flex-end}
 
@@ -93,8 +99,7 @@ button.spec-name{min-width:0;flex:1 1 160px;justify-content:flex-start;text-alig
 .spec-builds>.card{gap:12px}
 .spec-build-list{margin-top:4px}
 #specEditor{max-width:960px;margin:0 auto}
-#specEditor,.spec-editor-bar,.device-config-page{--editor-action:#006985;--mute:#555}
-@media (prefers-color-scheme:dark){#specEditor,.spec-editor-bar,.device-config-page{--editor-action:#75d7f1;--mute:#bdbdbd}}
+#specEditor,.spec-editor-bar,.device-config-page{--editor-action:var(--primary)}
 .spec-editor-bar h1{display:block;flex:1 1 120px;min-width:0;overflow-wrap:anywhere}
 @media (max-width:640px){header .spec-editor-bar>button{margin-bottom:0}}
 .task-page{width:min(100%,1080px);margin:0 auto}
@@ -116,10 +121,17 @@ button.spec-name{min-width:0;flex:1 1 160px;justify-content:flex-start;text-alig
 .device-settings-card .switch input{flex:none;accent-color:var(--editor-action,var(--primary))}
 .device-settings-card a:not(.button){color:var(--editor-action,var(--primary))}
 .device-settings-card .actions{justify-content:flex-end}
-.device-config-page button.pri{background:var(--editor-action);color:var(--card)}
+.device-config-page button.pri{background:var(--editor-action);color:var(--on-primary)}
 #settingsPage .dlg-body{display:grid;gap:12px}
 #settingsPage .settings-section{background:var(--card);padding:16px;border-radius:var(--radius)}
 #settingsPage h3{margin-top:0}
+#dFirmware,#dInfo,#wizardPage .dlg-body{background:var(--card);border-radius:var(--radius);padding:16px}
+#wizardPage .choice{background:var(--fill)}
+#wizardPage .choice.on{background:var(--chip)}
+.device-config-page #dConnections > #noIo{margin-top:0!important}
+.health-panel{margin-bottom:12px}
+.health-status{margin-inline-start:auto;flex:none}
+@media(max-width:480px){.hrow{flex-wrap:wrap}.health-status{margin-inline-start:22px}}
 #logDlg[open]{position:fixed;inset:0 0 0 auto;z-index:12;pointer-events:auto}
 #specExampleField{margin-top:14px;max-width:300px}
 #specEditorHost > mb-yaml-editor{--yaml-height:50vh}
@@ -128,7 +140,7 @@ button.spec-name{min-width:0;flex:1 1 160px;justify-content:flex-start;text-alig
 #specEditor .ed-add{background:var(--fill);border:0;color:var(--editor-action)}
 #specEditor .ed-add:hover{background:var(--chip)}
 #specEditor .seg button.on{color:var(--editor-action)}
-.spec-editor-bar button.pri{background:var(--editor-action);color:var(--card)}
+.spec-editor-bar button.pri{background:var(--editor-action);color:var(--on-primary)}
 :is(#specEditor,.spec-editor-bar,.device-config-page) :is(button,summary,input,select,textarea):focus-visible{outline:2px solid var(--editor-action);outline-offset:2px}
 
 #catalogView{margin-inline-start:auto}
@@ -156,7 +168,7 @@ body:not(.ready) main{opacity:0}
 .busy>*{visibility:hidden}
 .busy::after{content:"";position:absolute;left:50%;top:50%;width:16px;height:16px;margin:-8px 0 0 -8px;border-radius:50%;
   border:2px solid var(--primary);border-right-color:transparent;animation:spin .7s linear infinite}
-button.pri.busy::after{border-color:#fff;border-right-color:transparent}
+button.pri.busy::after{border-color:var(--on-primary);border-right-color:transparent}
 .spin{display:inline-block;width:10px;height:10px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 #loadbar{position:fixed;top:0;left:0;right:0;height:3px;z-index:20;overflow:hidden;pointer-events:none;opacity:0;transition:opacity .2s}
@@ -270,9 +282,10 @@ mb-yaml-editor textarea.yaml{display:block;width:100%;min-height:var(--yaml-heig
 .seg button{min-height:30px;background:none;font-size:13px}
 .seg button.on{background:var(--card);color:var(--primary)}
 .switch{display:flex;align-items:center;gap:10px;cursor:pointer}
-.switch input{width:36px;height:20px;appearance:none;border-radius:10px;background:var(--line);position:relative;cursor:pointer;margin:0;flex:none}
+.switch input{width:36px;height:20px;appearance:none;border-radius:10px;background:var(--control);position:relative;cursor:pointer;margin:0;flex:none}
 .switch input::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .2s}
 .switch input:checked{background:var(--primary)}
+.switch input:checked::after{background:var(--on-primary)}
 .switch input:checked::after{left:18px}
 .progress{height:6px;border-radius:3px;background:var(--fill);overflow:hidden;margin-top:8px}
 .progress i{display:block;height:100%;background:var(--primary);transition:width .5s}
@@ -328,7 +341,7 @@ details.boards{margin:8px 0 12px}details.boards summary{cursor:pointer}
 .share-code .mono{font-size:24px;letter-spacing:2px;font-weight:600;color:var(--fg)}
 .share-manual{margin-top:16px}
 .share-manual summary{cursor:pointer;padding:8px 0}
-a.button.pri{background:var(--primary);color:#fff}
+a.button.pri{background:var(--primary);color:var(--on-primary)}
 .auth{flex:1;display:flex;align-items:center;justify-content:center;padding:24px 16px}
 .auth .card{width:100%;max-width:380px;padding:24px}
 .auth h2{margin:0 0 4px;font-size:22px;font-weight:400}
@@ -2991,20 +3004,23 @@ function drawHealth() {
   const box = $('#dNetwork'), d = health.data;
   if (!d) { setHtml(box, `<div class="sub" style="margin-top:14px">${t('checking')}</div>`); return; }
   const v = d.verdict, samples = d.samples || [];
-  const rows = v.links.map(l => `<div class="row hrow"><span class="hdot ${l.state}"></span><div class="label">${esc(l.name)}
-    <div class="sub">${esc(l.text)}${l.note ? ' ' + esc(l.note) : ''}</div></div></div>`).join('');
+  const healthLabels = {ok: 'OK', warn: 'Warning', bad: 'Problem', unknown: 'Unknown'};
+  const rows = v.links.map(l => `<div class="row hrow"><span class="hdot ${l.state}" aria-hidden="true"></span><div class="label">${esc(l.name)}
+    <div class="sub">${esc(l.text)}${l.note ? ' ' + esc(l.note) : ''}</div></div><span class="chip health-status ${l.state}">${healthLabels[l.state] || healthLabels.unknown}</span></div>`).join('');
   // One bar per check over the last day: green answered, red did not
   const end = Date.now() / 1000, start = end - 86400, width = 288;
   const bars = samples.map(x => `<rect class="${x.ok ? 'ok' : 'bad'}" x="${Math.max(0, (x.t - start) / 86400 * width - 0.5).toFixed(1)}" y="${x.ok ? 8 : 0}" width="1" height="${x.ok ? 28 : 36}" rx="0.5"/>`).join('');
   const last = samples.length ? new Date(samples[samples.length - 1].t * 1000).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : '';
-  setHtml(box, `<div class="health ${v.state}">${esc(v.summary)}</div>
-    <div class="sub" style="margin-bottom:4px">${t('hHelp')}</div>
-    <div>${rows}</div>
-    ${samples.length ? `<h3 style="margin-top:16px">${t('last24')}</h3>
+  setHtml(box, `<section class="device-settings-card health-panel"><h3>Network health</h3>
+    <div class="health ${v.state}" role="status">${esc(v.summary)}</div>
+    <p class="sub">${t('hHelp')}</p>
+    <div>${rows}</div></section>
+    <section class="device-settings-card health-panel">
+    ${samples.length ? `<h3>${t('last24')}</h3>
       <svg class="hbars" viewBox="0 0 ${width} 36" preserveAspectRatio="none" role="img" aria-label="${t('last24')}">${bars}</svg>
       <div class="hscale sub"><span>${t('hAgo')}</span><span>${t('hNow')}</span></div>` : ''}
     <div class="actions"><span class="sub">${t('hEvery', Math.round((d.every || 300) / 60), last)}</span><span class="grow"></span>
-      <button onclick="loadHealth('${health.id}', true)">${t('checkNow')}</button></div>`);
+      <button onclick="loadHealth('${health.id}', true)">${t('checkNow')}</button></div></section>`);
 }
 
 function renderDevicePanel() {
@@ -3043,14 +3059,14 @@ function renderDevicePanel() {
   }
   $('#ioEditor').hidden = !(managed && managed.io);
   const files = firmwareFiles(r ? r.app : p.app).sort((a, b) => newer(fileVersion(a), fileVersion(b)) ? -1 : 1);
-  setHtml($('#dFirmware'), `<div class="row" style="margin-top:8px"><div class="label">${t('running')}</div><div>${r ? esc(appTitle(r.app) + ' ' + r.version) : '–'}</div></div>
+  setHtml($('#dFirmware'), `<h3>${t('firmware')}</h3><div class="row" style="margin-top:8px"><div class="label">${t('running')}</div><div>${r ? esc(appTitle(r.app) + ' ' + r.version) : '–'}</div></div>
     ${files.length ? `<div class="row"><label class="field" style="flex:1"><span>${t('installFile')}</span><select id="fwPick">${files.map(f => `<option>${esc(f)}</option>`).join('')}</select></label>
       <button class="pri" onclick="updateProxy('${p.id}', $('#fwPick').value)" ${state.job.running ? 'disabled' : ''}>${t('install')}</button></div>`
       : `<div class="sub" style="margin-top:12px">${t('noFirmware')}</div>`}
     <div class="row"><div class="label">${t('nightUpdates')}<div class="sub">${t('nightUpdatesHelp', String(state.settings.night_hour ?? 3).padStart(2, '0'))}</div></div>
       <label class="switch"><input type="checkbox" ${p.auto_update ? 'checked' : ''} onchange="setAutoUpdate('${p.id}', this.checked)"></label></div>`);
   const token = shownTokens[p.id];
-  setHtml($('#dInfo'), `<div class="row" style="margin-top:8px"><div class="label">${t('address')}<div class="sub mono">${esc(p.host)}</div></div>
+  setHtml($('#dInfo'), `<h3>${t('info')}</h3><div class="row" style="margin-top:8px"><div class="label">${t('address')}<div class="sub mono">${esc(p.host)}</div></div>
       <a class="button text" href="${esc(portalUrl(p))}">${t('openPage')} ${icon('open')}</a></div>
     ${r ? `<div class="row"><div class="label">${t('network')}<div class="sub">${esc(r.net)}</div></div></div>` : ''}
     ${s && !s.ok && !s.auth ? `<div class="row"><div class="label">${t('notReachable')}<div class="sub mono">${esc(s.error || '')}</div></div></div>` : ''}

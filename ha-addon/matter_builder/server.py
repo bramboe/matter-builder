@@ -2691,8 +2691,9 @@ def password_problem(password):
 
 # ---------------------------------------------------------------- HTTP
 
-# Without a session: the page itself (it shows the login) and the login API
-PUBLIC_PATHS = {"/", "/index.html", "/esptool.js", "/yaml-editor.js", "/api/auth", "/api/auth/login", "/api/auth/setup"}
+# Without a session: the login page, its assets and the login API.
+BRAND_ICON = "/matter-builder-app-icoon-ivoor.svg"
+PUBLIC_PATHS = {"/", "/index.html", "/esptool.js", "/yaml-editor.js", BRAND_ICON, "/api/auth", "/api/auth/login", "/api/auth/setup"}
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -2851,6 +2852,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         path = self.path.split("?")[0]
         if path in ("/", "/index.html"):
             return self.reply((HERE / "www" / "index.html").read_bytes(), ctype="text/html; charset=utf-8")
+        if path == BRAND_ICON:
+            return self.reply((HERE / "www" / BRAND_ICON[1:]).read_bytes(), ctype="image/svg+xml")
         if path == "/yaml-editor.js":
             return self.reply((HERE / "www" / "yaml-editor.js").read_bytes(), ctype="text/javascript; charset=utf-8")
         if path == "/esptool.js":

@@ -1,0 +1,22 @@
+<!-- Copyright (c) 2026 Bram Boersma. All rights reserved. See BRANDING.md in the repository. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <title>Matter Builder app-icoon</title>
+  <rect width="1024" height="1024" rx="224" fill="#FFF1DE"/>
+  <g transform="translate(79.37 94.85) scale(0.69)">
+    <g id="boven" transform="rotate(0 627 688) translate(627 468)" fill-rule="evenodd">
+      <path id="boven-schakel-links" fill="#D63238" transform="rotate(-65.270105)" d="M 62 0 V -265.333752 A 62 62 0 0 0 -62 -265.333752 V 0 A 62 62 0 0 0 62 0 Z M -25 0 a 25 25 0 1 0 50 0 a 25 25 0 1 0 -50 0 Z M -25 -265.333752 a 25 25 0 1 0 50 0 a 25 25 0 1 0 -50 0 Z"/>
+      <path id="boven-schakel-rechts" fill="#18B6E4" transform="rotate(65.270105)" d="M 62 0 V -265.333752 A 62 62 0 0 0 -62 -265.333752 V 0 A 62 62 0 0 0 62 0 Z M -25 0 a 25 25 0 1 0 50 0 a 25 25 0 1 0 -50 0 Z M -25 -265.333752 a 25 25 0 1 0 50 0 a 25 25 0 1 0 -50 0 Z"/>
+      <path id="boven-schakel-midden" fill="#1A2637" transform="rotate(0.000000)" d="M 62 0 V -304.000000 A 62 62 0 0 0 -62 -304.000000 V 0 A 62 62 0 0 0 62 0 Z M -25 0 a 25 25 0 1 0 50 0 a 25 25 0 1 0 -50 0 Z M -25 -304.000000 a 25 25 0 1 0 50 0 a 25 25 0 1 0 -50 0 Z"/>
+    </g>
+    <g id="rechtsonder" transform="rotate(120 627 688) translate(627 468)" fill-rule="evenodd">
+      <path id="rechtsonder-schakel-links" fill="#D63238" transform="rotate(-65.270105)" d="M 62 0 V -265.333752 A 62 62 0 0 0 -62 -265.333752 V 0 A 62 62 0 0 0 62 0 Z M -25 0 a 25 25 0 1 0 50 0 a 25 25 0 1 0 -50 0 Z M -25 -265.333752 a 25 25 0 1 0 50 0 a 25 25 0 1 0 -50 0 Z"/>
+      <path id="rechtsonder-schakel-rechts" fill="#18B6E4" transform="rotate(65.270105)" d="M 62 0 V -265.333752 A 62 62 0 0 0 -62 -265.333752 V 0 A 62 62 0 0 0 62 0 Z M -25 0 a 25 25 0 1 0 50 0 a 25 25 0 1 0 -50 0 Z M -25 -265.333752 a 25 25 0 1 0 50 0 a 25 25 0 1 0 -50 0 Z"/>
+      <path id="rechtsonder-schakel-midden" fill="#1A2637" transform="rotate(0.000000)" d="M 62 0 V -304.000000 A 62 62 0 0 0 -62 -304.000000 V 0 A 62 62 0 0 0 62 0 Z M -25 0 a 25 25 0 1 0 50 0 a 25 25 0 1 0 -50 0 Z M -25 -304.000000 a 25 25 0 1 0 50 0 a 25 25 0 1 0 -50 0 Z"/>
+    </g>
+    <g id="linksonder" transform="rotate(240 627 688) translate(627 468)" fill-rule="evenodd">
+      <path id="linksonder-schakel-links" fill="#D63238" transform="rotate(-65.270105)" d="M 62 0 V -265.333752 A 62 62 0 0 0 -62 -265.333752 V 0 A 62 62 0 0 0 62 0 Z M -25 0 a 25 25 0 1 0 50 0 a 25 25 0 1 0 -50 0 Z M -25 -265.333752 a 25 25 0 1 0 50 0 a 25 25 0 1 0 -50 0 Z"/>
+      <path id="linksonder-schakel-rechts" fill="#18B6E4" transform="rotate(65.270105)" d="M 62 0 V -265.333752 A 62 62 0 0 0 -62 -265.333752 V 0 A 62 62 0 0 0 62 0 Z M -25 0 a 25 25 0 1 0 50 0 a 25 25 0 1 0 -50 0 Z M -25 -265.333752 a 25 25 0 1 0 50 0 a 25 25 0 1 0 -50 0 Z"/>
+      <path id="linksonder-schakel-midden" fill="#1A2637" transform="rotate(0.000000)" d="M 62 0 V -304.000000 A 62 62 0 0 0 -62 -304.000000 V 0 A 62 62 0 0 0 62 0 Z M -25 0 a 25 25 0 1 0 50 0 a 25 25 0 1 0 -50 0 Z M -25 -304.000000 a 25 25 0 1 0 50 0 a 25 25 0 1 0 -50 0 Z"/>
+    </g>
+  </g>
+</svg>

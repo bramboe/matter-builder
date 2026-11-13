@@ -266,4 +266,5 @@ before it installs anything.
 
 ## License
 
-MIT
+The software is released under the [MIT License](LICENSE). The Matter Builder
+logo artwork and app icon are covered by the [branding notice](BRANDING.md).

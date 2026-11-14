@@ -67,6 +67,8 @@ a:not(.button){color:var(--primary)}
 .card .acts details.more{margin-left:auto}
 #catalogBody[data-view="list"] .grid{grid-template-columns:minmax(0,1fr);gap:8px}
 #catalogBody .card{cursor:pointer}
+#catalogBody .card:focus-visible{outline-width:1px;outline-offset:-1px}
+@media (hover:hover){#catalogBody .card:hover{background:color-mix(in srgb,var(--card) 60%,var(--fill))}}
 #catalogBody .card .acts{margin:auto 0 0}
 #catalogBody .needs,.catalog-detail .needs{align-items:center}
 .catalog-tip{position:relative;display:inline-flex}

@@ -2319,7 +2319,12 @@ function renderCatalog() {
   const categories = new Set(items.filter(it => it.kind === 'recipe').map(recipeCategory));
   const overview = recipeFilter === 'overview';
   const groupBeds = overview && !q.trim();
-  const bedCount = recipes.filter(([it]) => recipeCategory(it) === 'beds').length;
+  const categoryCounts = new Map();
+  for (const [recipe] of recipes) {
+    const category = recipeCategory(recipe);
+    categoryCounts.set(category, (categoryCounts.get(category) || 0) + 1);
+  }
+  const bedCount = categoryCounts.get('beds') || 0;
   const visibleRecipes = recipes.filter(([it]) => overview
     ? !groupBeds || recipeCategory(it) !== 'beds'
     : recipeCategory(it) === recipeFilter);
@@ -2332,7 +2337,7 @@ function renderCatalog() {
       ${categoryButton('overview', 'Overview')}
       ${categories.has('beds') || recipeFilter === 'beds' ? categoryButton('beds', 'Beds', bedCount) : ''}
       ${[...recipeCategories].filter(([key]) => key !== 'beds' && (categories.has(key) || key === recipeFilter))
-        .map(([key, label]) => categoryButton(key, esc(label))).join('')}
+        .map(([key, label]) => categoryButton(key, esc(label), categoryCounts.get(key) || 0)).join('')}
     </div>` : '';
   const emptyRecipes = groupBeds && bedCount ? 'Choose Beds to see the matching recipes.' : 'No recipes match these filters.';
   setHtml($('#catalogBody'), (catalogData ? '' : `<p class="sub" style="margin:12px 2px">${t('catalogOffline')}</p>`) +
@@ -2358,6 +2363,20 @@ async function loadRecipes() {
 }
 
 // The details of a catalog item, like the Marketplace's project page
+const itemDialog = $('#itemDlg');
+if (!('closedBy' in itemDialog)) {
+  // A click on the backdrop is delivered to the dialog itself.
+  let pressedBackdrop = false;
+  itemDialog.addEventListener('pointerdown', event => {
+    pressedBackdrop = event.target === itemDialog;
+  });
+  itemDialog.addEventListener('click', event => {
+    if (pressedBackdrop && event.target === itemDialog && itemDialog.getAttribute('closedby') === 'any') {
+      itemDialog.close();
+    }
+    pressedBackdrop = false;
+  });
+}
 let item = null, itemVariant;
 function openItem(i, trigger) {
   catalogContext = launchContext(trigger);
@@ -2367,6 +2386,7 @@ function openItem(i, trigger) {
   if (!$('#itemDlg').open) $('#itemDlg').showModal();
 }
 function renderItem() {
+  itemDialog.setAttribute('closedby', 'any');
   const it = item;
   const rows = rowsOf(it.connections);
   const facts = [
@@ -2489,6 +2509,7 @@ async function shareSpec(slug) {
   let user = '';
   try { user = localStorage.getItem('mbGithubUser') || ''; } catch (e) {}
   share = {slug, text: r.text || '', name: (state_specName(slug) || slug), user, repo: 'matter-builder-recipes', copied: false, flow: null};
+  itemDialog.removeAttribute('closedby');
   renderShare();
   if (!$('#itemDlg').open) $('#itemDlg').showModal();
 }

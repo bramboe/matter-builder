@@ -1,6 +1,6 @@
 # Matter Builder
 
-<img src="ha-addon/matter_builder/icon.png" alt="Red and cyan Matter Builder logo" width="112">
+<img src="ha-addon/matter_builder/www/matter-builder-app-icoon-transparant.svg" alt="Red and cyan Matter Builder logo" width="112">
 
 [![Sponsor on GitHub](https://img.shields.io/badge/Sponsor-GitHub-EA4AAA?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/bramboe?frequency=one-time) [![Sponsor bunq.me](https://img.shields.io/badge/Sponsor-bunq.me-2E9AD0)](https://bunq.me/bramboe)
 

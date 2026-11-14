@@ -8,7 +8,7 @@ Bram Boersma reserves all rights he holds in the Matter Builder artwork below.
 | --- | --- | --- |
 | Red and cyan symbol | <img src="ha-addon/matter_builder/www/matter-builder-rood-cyaan.svg" alt="Red and cyan Matter Builder symbol" width="96"> | [SVG](ha-addon/matter_builder/www/matter-builder-rood-cyaan.svg) |
 | Logo with wordmark | <img src="ha-addon/matter_builder/www/matter-builder-logo.svg" alt="Matter Builder logo with wordmark" width="112"> | [SVG](ha-addon/matter_builder/www/matter-builder-logo.svg) |
-| Transparent app icon | <img src="ha-addon/matter_builder/icon.png" alt="Matter Builder app icon" width="96"> | [SVG](ha-addon/matter_builder/www/matter-builder-app-icoon-transparant.svg) · [PNG](ha-addon/matter_builder/icon.png) |
+| Transparent app icon | <img src="ha-addon/matter_builder/www/matter-builder-app-icoon-transparant.svg" alt="Matter Builder app icon" width="96"> | [SVG](ha-addon/matter_builder/www/matter-builder-app-icoon-transparant.svg) · [PNG](ha-addon/matter_builder/icon.png) |
 | Sidebar icon | <img src="ha-addon/matter_builder/www/matter-builder-zijbalk.svg" alt="Monochrome Matter Builder sidebar icon" width="64"> | [SVG](ha-addon/matter_builder/www/matter-builder-zijbalk.svg) |
 
 These assets are excluded from the repository's MIT software license. Except

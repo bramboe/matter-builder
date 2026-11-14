@@ -1,0 +1,72 @@
+# Summary: Okimat RFS ELLIPSE met afstandsbedieningscode 80608.
+# Vereist de meegeleverde Matter Builder-patch.
+device:
+  name: Okimat 80608
+  app: generic
+  board: esp32-c6
+
+bluetooth_device:
+  service: "62741523-52F9-8864-B1AB-3B3A8D65950B"
+  characteristic: "62741525-52F9-8864-B1AB-3B3A8D65950B"
+  write: response
+  idle: 3600
+  setup:
+    - type: pair
+      ms: 10000
+    - type: discover
+      ms: 5000
+  commands:
+    - label: Rug omhoog
+      bytes: "040200000001"
+      times: 5
+      gap: 100
+    - label: Rug omlaag
+      bytes: "040200000002"
+      times: 5
+      gap: 100
+    - label: Benen omhoog
+      bytes: "040200000004"
+      times: 5
+      gap: 100
+    - label: Benen omlaag
+      bytes: "040200000008"
+      times: 5
+      gap: 100
+    - label: Vlak
+      bytes: "0402100000AA"
+      times: 50
+      gap: 200
+    - label: Licht wisselen
+      bytes: "040200020000"
+
+connections:
+  - slot: 0
+    type: ble_command
+    number: 1
+    group: Bed
+    name: Rug omhoog
+  - slot: 1
+    type: ble_command
+    number: 2
+    group: Bed
+    name: Rug omlaag
+  - slot: 2
+    type: ble_command
+    number: 3
+    group: Bed
+    name: Benen omhoog
+  - slot: 3
+    type: ble_command
+    number: 4
+    group: Bed
+    name: Benen omlaag
+  - slot: 4
+    type: ble_command
+    number: 5
+    group: Bed
+    name: Vlak
+  - slot: 5
+    type: ble_command
+    number: 6
+    group: Bed
+    name: Licht wisselen

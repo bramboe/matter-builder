@@ -405,6 +405,7 @@ dialog > .card{border:0;padding:16px 20px}
         <label class="field"><span data-t="bleHello"></span><input id="bleHello" placeholder="4020430004190000000040" autocomplete="off" spellcheck="false"></label>
         <label class="field" id="blePinField" hidden><span data-t="blePin"></span><input id="blePin" inputmode="numeric" maxlength="4" autocomplete="off"></label>
         <label class="field"><span data-t="bleIdle"></span><input id="bleIdle" type="number" min="0" max="3600" value="30"></label>
+        <div id="bleLocalSecrets" hidden></div>
         <div class="sub" id="bleState"></div>
         <div class="features" style="margin-top:0"><button class="pri" type="submit" data-t="save"></button>
           <button type="button" id="bleDisconnect" data-t="bleDisconnectBtn"></button></div>
@@ -1869,7 +1870,38 @@ async function loadBle() {
   $('#bleState').textContent = (r.connected ? t('bleConnected') : t('bleNotConnected')) + (r.sent ? ' · ' + t('bleSentCount', r.sent) : '') + (r.error ? ' · ' + r.error : '');
   $('#bleState').style.color = r.error ? 'var(--bad)' : '';
   if (!$('#bleRows').contains(document.activeElement)) renderBleRows();
+  const secrets = $('#bleLocalSecrets');
+  secrets.hidden = !r.secrets?.length;
+  if (!secrets.hidden && !secrets.contains(document.activeElement) && secrets.dataset.state !== JSON.stringify(r.secrets)) {
+    secrets.dataset.state = JSON.stringify(r.secrets);
+    secrets.innerHTML = r.secrets.map(secret => `<label class="field"><span>${esc(secret.name)} (${secret.set ? 'set' : 'required'})</span>
+      <input type="password" autocomplete="new-password" maxlength="64" data-ble-secret="${esc(secret.name)}"
+        inputmode="${secret.encoding === 'digits' ? 'numeric' : 'text'}"></label>
+      <button type="button" data-ble-secret-save="${esc(secret.name)}">Save local BLE secret</button>
+      ${secret.set ? `<button type="button" data-ble-secret-clear="${esc(secret.name)}">Clear secret</button>` : ''}`).join('');
+  }
 }
+
+$('#bleLocalSecrets').onclick = async event => {
+  const button = event.target.closest('button');
+  const name = button?.dataset.bleSecretSave || button?.dataset.bleSecretClear;
+  if (!name) return;
+  const input = $('#bleLocalSecrets').querySelector(`[data-ble-secret="${name}"]`);
+  if (!button.dataset.bleSecretClear && !/^[0-9a-fA-F]{1,64}$/.test(input.value)) {
+    $('#bleState').textContent = 'Enter the local PIN or hex value.';
+    return;
+  }
+  button.disabled = true;
+  try {
+    const reply = await cmd(`bledev secret ${name} ${button.dataset.bleSecretClear ? '-' : input.value}`);
+    if (!reply.startsWith('ok')) throw new Error(reply.trim());
+    input.value = '';
+    button.blur();
+    await loadBle();
+  } catch (error) {
+    $('#bleState').textContent = error.message;
+  } finally { button.disabled = false; }
+};
 
 function renderBleRows(extra) {
   const rows = ble.commands.map((c, i) => ({...c, i})).filter(c => c.bytes || (extra !== undefined && extra === c.i));
@@ -1887,9 +1919,11 @@ async function saveBleRow(row) {
   const n = row.dataset.cmd, label = row.querySelector('.bl').value.trim() || `Command ${+n + 1}`;
   const bytes = cleanHex(row.querySelector('.bb').value);
   if (!isHex(bytes)) { toast(t('bleBadHex')); return false; }
-  const out = await cmd(`bledev cmd ${n} ${bytes} ${row.querySelector('.bt').value || 1} ${row.querySelector('.bg').value || 0} ${hex(label)}`);
+  const previous = ble.commands[n];
+  const finish = previous.finish ? ` ${previous.finish} ${previous.finish_gap || 0}` : '';
+  const out = await cmd(`bledev cmd ${n} ${bytes} ${row.querySelector('.bt').value || 1} ${row.querySelector('.bg').value || 0} ${hex(label)}${finish}`);
   if (!out.startsWith('ok')) { toast(out); return false; }
-  ble.commands[n] = {label, bytes, times: +row.querySelector('.bt').value || 1, gap: +row.querySelector('.bg').value || 0};
+  ble.commands[n] = {...previous, label, bytes, times: +row.querySelector('.bt').value || 1, gap: +row.querySelector('.bg').value || 0};
   return true;
 }
 

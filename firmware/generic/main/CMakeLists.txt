@@ -6,7 +6,7 @@ endif()
 # Bluetooth (listening, and a device to send commands to) only where the chip
 # has room for it: without it, ble_none.cpp answers for both
 if(CONFIG_BT_ENABLED)
-    set(bluetooth "ble_scan.cpp" "ble_device.cpp")
+    set(bluetooth "ble_scan.cpp" "ble_device.cpp" "ble_setup.cpp")
 else()
     set(bluetooth "ble_none.cpp")
 endif()

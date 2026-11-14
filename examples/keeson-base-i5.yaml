@@ -1,0 +1,87 @@
+# Summary: Keeson Base-i5 met motoren en presets.
+# Vereist de meegeleverde Matter Builder-patch.
+device:
+  name: Keeson Base-i5
+  app: generic
+  board: esp32-c6
+
+bluetooth_device:
+  service: "FFE5"
+  characteristic: "FFE9"
+  write: response
+  idle: 3600
+  commands:
+    - label: Rug omhoog
+      bytes: "E5FE160100000005"
+      times: 4
+      gap: 200
+      finish: "E5FE160000000006"
+      finish_gap: 0
+    - label: Rug omlaag
+      bytes: "E5FE160200000004"
+      times: 4
+      gap: 200
+      finish: "E5FE160000000006"
+      finish_gap: 0
+    - label: Benen omhoog
+      bytes: "E5FE160400000002"
+      times: 4
+      gap: 200
+      finish: "E5FE160000000006"
+      finish_gap: 0
+    - label: Benen omlaag
+      bytes: "E5FE1608000000FE"
+      times: 4
+      gap: 200
+      finish: "E5FE160000000006"
+      finish_gap: 0
+    - label: Stop
+      bytes: "E5FE160000000006"
+    - label: Vlak
+      bytes: "E5FE1600000008FE"
+    - label: Zero G
+      bytes: "E5FE1600100000F6"
+    - label: Geheugen 1
+      bytes: "E5FE1600200000E6"
+
+connections:
+  - slot: 0
+    type: ble_command
+    number: 1
+    group: Bed
+    name: Rug omhoog
+  - slot: 1
+    type: ble_command
+    number: 2
+    group: Bed
+    name: Rug omlaag
+  - slot: 2
+    type: ble_command
+    number: 3
+    group: Bed
+    name: Benen omhoog
+  - slot: 3
+    type: ble_command
+    number: 4
+    group: Bed
+    name: Benen omlaag
+  - slot: 4
+    type: ble_command
+    number: 5
+    group: Bed
+    name: Stop
+  - slot: 5
+    type: ble_command
+    number: 6
+    group: Bed
+    name: Vlak
+  - slot: 6
+    type: ble_command
+    number: 7
+    group: Bed
+    name: Zero G
+  - slot: 7
+    type: ble_command
+    number: 8
+    group: Bed
+    name: Geheugen 1

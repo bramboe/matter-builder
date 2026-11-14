@@ -1,0 +1,94 @@
+# Summary: Richmat WiLinke FFF0 met afstandsbedieningscode ZR10.
+# Kies zowel de GATT-variant als de code op de afstandsbediening.
+# Vereist de meegeleverde Matter Builder-patch.
+device:
+  name: Richmat WiLinke FFF0 ZR10
+  app: generic
+  board: esp32-c6
+
+bluetooth_device:
+  service: "0000FFF0-0000-1000-8000-00805F9B34FB"
+  characteristic: "0000FFF2-0000-1000-8000-00805F9B34FB"
+  write: response
+  idle: 60
+  commands:
+    - label: Rug omhoog
+      bytes: "6E01002493"
+      times: 6
+      gap: 100
+      finish: "6E01006EDD"
+      finish_gap: 0
+    - label: Rug omlaag
+      bytes: "6E01002594"
+      times: 6
+      gap: 100
+      finish: "6E01006EDD"
+      finish_gap: 0
+    - label: Benen omhoog
+      bytes: "6E01002695"
+      times: 6
+      gap: 100
+      finish: "6E01006EDD"
+      finish_gap: 0
+    - label: Benen omlaag
+      bytes: "6E01002796"
+      times: 6
+      gap: 100
+      finish: "6E01006EDD"
+      finish_gap: 0
+    - label: Stop
+      bytes: "6E01006EDD"
+    - label: Vlak
+      bytes: "6E010031A0"
+      finish: "6E01006EDD"
+      finish_gap: 50
+    - label: Zero G
+      bytes: "6E010045B4"
+      finish: "6E01006EDD"
+      finish_gap: 50
+    - label: Licht wisselen
+      bytes: "6E01003CAB"
+      finish: "6E01006EDD"
+      finish_gap: 50
+
+connections:
+  - slot: 0
+    type: ble_command
+    number: 1
+    group: Bed
+    name: Rug omhoog
+  - slot: 1
+    type: ble_command
+    number: 2
+    group: Bed
+    name: Rug omlaag
+  - slot: 2
+    type: ble_command
+    number: 3
+    group: Bed
+    name: Benen omhoog
+  - slot: 3
+    type: ble_command
+    number: 4
+    group: Bed
+    name: Benen omlaag
+  - slot: 4
+    type: ble_command
+    number: 5
+    group: Bed
+    name: Stop
+  - slot: 5
+    type: ble_command
+    number: 6
+    group: Bed
+    name: Vlak
+  - slot: 6
+    type: ble_command
+    number: 7
+    group: Bed
+    name: Zero G
+  - slot: 7
+    type: ble_command
+    number: 8
+    group: Bed
+    name: Licht wisselen

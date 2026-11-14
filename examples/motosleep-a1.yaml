@@ -1,0 +1,90 @@
+# Summary: MotoSleep-profiel volgens de Bluetooth-naam van het bed.
+# Tekens 9 en 10 van de Bluetooth-naam: A1.
+# Vereist de meegeleverde Matter Builder-patch.
+device:
+  name: MotoSleep A1
+  app: generic
+  board: esp32-c6
+
+bluetooth_device:
+  service: "FFE0"
+  characteristic: "FFE1"
+  write: response
+  idle: 60
+  commands:
+    - label: Stop
+      bytes: "2462"
+      times: 5
+      gap: 100
+    - label: Rug omhoog
+      bytes: "244B"
+      times: 6
+      gap: 100
+      finish: "2462"
+      finish_gap: 0
+    - label: Rug omlaag
+      bytes: "244C"
+      times: 6
+      gap: 100
+      finish: "2462"
+      finish_gap: 0
+    - label: Lendensteun omhoog
+      bytes: "2450"
+      times: 6
+      gap: 100
+      finish: "2462"
+      finish_gap: 0
+    - label: Lendensteun omlaag
+      bytes: "2451"
+      times: 6
+      gap: 100
+      finish: "2462"
+      finish_gap: 0
+    - label: Vlak
+      bytes: "244F"
+    - label: Licht wisselen
+      bytes: "2441"
+    - label: Massage rug
+      bytes: "2443"
+
+connections:
+  - slot: 0
+    type: ble_command
+    number: 1
+    group: Bed
+    name: Stop
+  - slot: 1
+    type: ble_command
+    number: 2
+    group: Bed
+    name: Rug omhoog
+  - slot: 2
+    type: ble_command
+    number: 3
+    group: Bed
+    name: Rug omlaag
+  - slot: 3
+    type: ble_command
+    number: 4
+    group: Bed
+    name: Lendensteun omhoog
+  - slot: 4
+    type: ble_command
+    number: 5
+    group: Bed
+    name: Lendensteun omlaag
+  - slot: 5
+    type: ble_command
+    number: 6
+    group: Bed
+    name: Vlak
+  - slot: 6
+    type: ble_command
+    number: 7
+    group: Bed
+    name: Licht wisselen
+  - slot: 7
+    type: ble_command
+    number: 8
+    group: Bed
+    name: Massage rug

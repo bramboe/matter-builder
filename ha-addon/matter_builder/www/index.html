@@ -88,6 +88,9 @@ button.catalog-tip-trigger.optional{background:var(--fill);color:var(--mute);bor
   #catalogBody[data-view="list"] .card{display:grid;grid-template-columns:minmax(150px,1fr) minmax(0,2fr) auto;align-items:center;gap:20px}
 }
 .catalog-toolbar{display:flex;gap:10px 16px;flex-wrap:wrap}
+.catalog-recipe-heading{flex-wrap:wrap}
+.catalog-recipe-heading .field{min-width:min(220px,100%);background:var(--card)}
+.catalog-bed-link{margin-top:12px}
 .spec-list{display:grid;gap:8px}
 .spec-row{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);display:flex;align-items:center;gap:12px;padding:10px 12px;flex-wrap:wrap}
 button.spec-name{min-width:0;flex:1 1 160px;justify-content:flex-start;text-align:start;background:none;padding:0;white-space:normal}
@@ -2267,24 +2270,71 @@ function catalogCard(it, i) {
 
 function catalogSearchText(it) {
   const {labels, boards, experimental} = catalogCompatibility(it, catalogVariants(it));
-  return [it.title, catalogDescription(it), it.maker, it.source, ...labels, ...boards, ...experimental]
+  return [it.title, catalogDescription(it), it.maker, it.source, ...labels, ...boards, ...experimental, it.kind === 'recipe' ? recipeCategories.get(recipeCategory(it)) : '']
     .join(' ').toLowerCase();
+}
+
+const recipeCategories = new Map([
+  ['lighting', 'Lighting'], ['sensors', 'Sensors'], ['climate', 'Climate'],
+  ['energy', 'Energy'], ['access', 'Doors & access'], ['outdoors', 'Outdoors'],
+  ['audio', 'Audio & video'], ['beds', 'Beds'], ['other', 'Other'],
+]);
+const officialRecipeCategories = new Map([
+  ['led-strip', 'lighting'], ['light-switch', 'lighting'], ['motion-light', 'lighting'],
+  ['mmwave-presence', 'sensors'], ['scd41-air-quality', 'sensors'], ['humidity-fan', 'climate'],
+  ['energy-pulse-meter', 'energy'], ['garage-door-pulse', 'access'],
+  ['shed', 'outdoors'], ['single-zone-irrigation', 'outdoors'], ['yamaha-receiver-ir', 'audio'],
+]);
+
+function recipeCategory(item) {
+  const declared = String(item.text || '').match(/^# Category:[ \t]*([a-z]+)[ \t]*\r?$/im)?.[1].toLowerCase();
+  if (recipeCategories.has(declared)) return declared;
+  if (!item.official) return 'other';
+  const slug = item.id?.split('/').at(-1);
+  if (/^(?:keeson-|leggett-platt-|linak-|motosleep-|octo-bed-|okimat-|reverie-|richmat-|solace(?:-|$))/.test(slug)) return 'beds';
+  return officialRecipeCategories.get(slug) || 'other';
+}
+
+let recipeFilter = 'all';
+function filterRecipes(category) {
+  recipeFilter = category;
+  renderCatalog();
+  $('#recipeCategory').focus();
 }
 
 let shownItems = [];
 function renderCatalog() {
   if (!catalogData && !catalogLoading && !recipes) loadCatalog();
   const q = catalogQuery.toLowerCase();
-  shownItems = catalogItems().filter(it => (catalogFilter === 'all' || it.kind === catalogFilter) &&
+  const items = catalogItems();
+  shownItems = items.filter(it => (catalogFilter === 'all' || it.kind === catalogFilter) &&
     (sourceFilter === 'any' || (sourceFilter === 'official') === !!it.official) &&
     (!q || catalogSearchText(it).includes(q)));
-  const fw = shownItems.map((it, i) => [it, i]).filter(([it]) => it.kind === 'firmware');
-  const rc = shownItems.map((it, i) => [it, i]).filter(([it]) => it.kind === 'recipe')
-    .sort(([a], [b]) => (b.official ? 1 : 0) - (a.official ? 1 : 0) || (b.stars || 0) - (a.stars || 0));
+  const indexed = shownItems.map((it, i) => [it, i]);
+  const fw = indexed.filter(([it]) => it.kind === 'firmware');
+  const recipes = indexed.filter(([it]) => it.kind === 'recipe')
+    .sort(([a], [b]) => Number(!!b.official) - Number(!!a.official) || (b.stars || 0) - (a.stars || 0));
+  const categories = new Set(items.filter(it => it.kind === 'recipe').map(recipeCategory));
+  const groupBeds = recipeFilter === 'all' && !q.trim();
+  const bedCount = groupBeds ? recipes.filter(([it]) => recipeCategory(it) === 'beds').length : 0;
+  const visibleRecipes = recipes.filter(([it]) => recipeFilter === 'all'
+    ? !groupBeds || recipeCategory(it) !== 'beds'
+    : recipeCategory(it) === recipeFilter);
+  const showRecipes = catalogFilter !== 'firmware' && (categories.size || recipeFilter !== 'all');
+  const heading = showRecipes ? `<div class="section-head catalog-recipe-heading">
+    <h2>${t('recipeSection')}</h2><span class="grow"></span>
+    ${bedCount ? `<button type="button" onclick="filterRecipes('beds')">Browse bed recipes (${bedCount})</button>` : ''}
+    <label class="field"><span>Recipe category</span><select id="recipeCategory" onchange="filterRecipes(this.value)">
+      <option value="all">All categories</option>
+      ${[...recipeCategories].filter(([key]) => categories.has(key) || key === recipeFilter)
+        .map(([key, label]) => `<option value="${key}" ${recipeFilter === key ? 'selected' : ''}>${label}</option>`).join('')}
+    </select></label></div>` : '';
   setHtml($('#catalogBody'), (catalogData ? '' : `<p class="sub" style="margin:12px 2px">${t('catalogOffline')}</p>`) +
     (fw.length ? `<div class="section-head"><h2>${t('firmwareSection')}</h2></div><div class="grid">${fw.map(([it, i]) => catalogCard(it, i)).join('')}</div>` : '') +
-    (rc.length ? `<div class="section-head"><h2>${t('recipeSection')}</h2></div><div class="grid">${rc.map(([it, i]) => catalogCard(it, i)).join('')}</div>` : '') +
-    (!shownItems.length ? `<div class="empty"><p class="sub">${catalogLoading ? t('checking') : t('noCatalog')}</p></div>` : ''));
+    heading +
+    (visibleRecipes.length ? `<div class="grid">${visibleRecipes.map(([it, i]) => catalogCard(it, i)).join('')}</div>` : '') +
+    (showRecipes && !visibleRecipes.length && !bedCount ? '<p class="sub">No recipes match these filters.</p>' : '') +
+    (!fw.length && !showRecipes ? `<div class="empty"><p class="sub">${catalogLoading ? t('checking') : t('noCatalog')}</p></div>` : ''));
 }
 
 // Example specs of the generic device, when the catalog is not reachable

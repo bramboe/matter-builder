@@ -884,6 +884,10 @@ function liveText(d, r) {
   if (d.type === 'contact') return r.active ? t('contactClosed') : t('contactOpen');
   if (d.type === 'motion') return r.active ? t('motionSeen') : t('motionNone');
   if (d.type === 'button') return r.active ? t('pressed') : t('released');
+  if (d.type === 'scd4x') return r.co2_ppm === undefined ? t('waitingValue') : `${r.co2_ppm} ppm`;
+  if (d.type === 'pulse_meter') return r.energy_mwh === undefined ? t('waitingValue')
+    : [r.power_mw === undefined ? '' : `${(r.power_mw / 1000).toFixed(1)} W`,
+       `${(r.energy_mwh / 1e6).toFixed(3)} kWh`].filter(Boolean).join(' · ');
   if (d.type === 'sht4x') return r.temperature === undefined ? t('waitingValue')
     : `${r.temperature.toFixed(1)} °C · ${r.humidity.toFixed(0)} %`;
   return r.on ? t('testOn') : t('testOff');
@@ -912,7 +916,7 @@ function roleOf(d) {
   const drv = driverOf(d.type);
   if (d.type === 'button' || d.type === 'ir_receive' || (drv && drv.matter === 'button')) return 'button';
   if (['contact', 'motion', 'ble_presence'].includes(d.type) || (drv && ['contact', 'occupancy'].includes(drv.matter))) return 'input';
-  if (d.type === 'sht4x' || d.type === 'ble_sensor' || (drv && drv.matter === 'climate')) return 'climate';
+  if (d.type === 'sht4x' || d.type === 'ble_sensor' || (drv && ['climate', 'air_quality'].includes(drv.matter))) return 'climate';
   return '';
 }
 const slotsFor = role => (state ? state.io.draft : []).filter(d => d.type !== 'none' && (!role || roleOf(d) === role));
@@ -1138,9 +1142,9 @@ function freePins(except) {
   const used = new Set();
   const type = $('#ioType').value;
   state.io.draft.forEach(d => {
-    if (d.type === 'none' || d.index === except || isBle(d.type) || (isIr(type) && d.type === type)) return;
+    if (d.type === 'none' || d.index === except || isBle(d.type) || driverOf(d.type)?.pins === 0 || (isIr(type) && d.type === type)) return;
     used.add(d.pin);
-    if (d.type === 'sht4x') used.add(d.pin2);
+    if (d.type === 'sht4x' || driverOf(d.type)?.pins === 2) used.add(d.pin2);
   });
   return state.io.pins.filter(p => !used.has(p));
 }
@@ -1255,7 +1259,7 @@ function ioEdit(index) {
   updateIoForm();
   $('#ioControls').value = d.controls === null || d.controls === undefined ? '' : String(d.controls);
   $('#ioPin').value = d.pin;
-  if (d.type === 'sht4x') $('#ioPin2').value = d.pin2;
+  if (d.type === 'sht4x' || driverOf(d.type)?.pins === 2) $('#ioPin2').value = d.pin2;
   updateIoForm();
   openIoDialog();
 }

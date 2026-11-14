@@ -37,6 +37,10 @@ connections, not code. In Matter Builder,
 *Share* on a configuration (Configs) makes such a repository with you: it
 opens GitHub with the recipe filled in. Add a `# Summary: ...` comment with
 one short sentence to describe what the recipe does in the catalog.
+Add one `# Setup: ...` comment per step for wiring, calibration or a first
+test. Matter Builder shows these steps in the catalog and when applying a
+recipe. Put the connection, pin, polarity, timeout and calibration values in
+the YAML itself so they are applied with the recipe.
 
 ## Release
 

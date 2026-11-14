@@ -21,6 +21,7 @@
 #include "ble_scan.h"
 #include "io.h"
 #include "ir.h"
+#include "measurements.h"
 #include "rules.h"
 #if CONFIG_OPENTHREAD_ENABLED
 #include "config_mode.h"
@@ -84,6 +85,7 @@ struct Live {
     int64_t last_release = 0;
     uint8_t presses = 0;
     bool long_sent = false;
+    int64_t measurement[2] = {-1, -1};
     bool have_climate = false;
     int16_t centi_celsius = 0;
     uint16_t centi_percent = 0;
@@ -408,23 +410,8 @@ void setup_pins() {
         } else if (const Driver* d = driver_of(s.type)) {
             if (!d->setup(i, s)) ESP_LOGE(TAG, "Connection %d (%s): setup failed", i, d->type);
         } else if (s.type == Type::sht4x) {
-            i2c_master_bus_config_t bus_config = {};
-            bus_config.i2c_port = I2C_NUM_0;
-            bus_config.sda_io_num = static_cast<gpio_num_t>(s.pin);
-            bus_config.scl_io_num = static_cast<gpio_num_t>(s.pin2);
-            bus_config.clk_source = I2C_CLK_SRC_DEFAULT;
-            bus_config.glitch_ignore_cnt = 7;
-            bus_config.flags.enable_internal_pullup = true;
-            i2c_master_bus_handle_t bus = nullptr;
-            i2c_device_config_t device = {};
-            device.dev_addr_length = I2C_ADDR_BIT_LEN_7;
-            device.device_address = SHT4X_ADDRESS;
-            device.scl_speed_hz = 100000;
-            if (i2c_new_master_bus(&bus_config, &bus) != ESP_OK ||
-                i2c_master_bus_add_device(bus, &device, &l.sensor) != ESP_OK) {
-                ESP_LOGE(TAG, "Connection %d: no I2C bus on pins %d/%d", i, s.pin, s.pin2);
-                l.sensor = nullptr;
-            }
+            l.sensor = measurements::i2c_device(s.pin, s.pin2, SHT4X_ADDRESS);
+            if (!l.sensor) ESP_LOGE(TAG, "Connection %d: no I2C bus on pins %d/%d", i, s.pin, s.pin2);
         }
     }
 }
@@ -433,17 +420,6 @@ bool input_level_active(const Slot& s) {
     const bool high = gpio_get_level(static_cast<gpio_num_t>(s.pin)) != 0;
     const bool active = s.type == Type::motion ? high : !high;
     return active != ((s.flags & INVERTED) != 0);
-}
-
-uint8_t crc8(const uint8_t* data) {
-    uint8_t crc = 0xFF;
-    for (int i = 0; i < 2; ++i) {
-        crc ^= data[i];
-        for (int bit = 0; bit < 8; ++bit) {
-            crc = (crc & 0x80) ? static_cast<uint8_t>((crc << 1) ^ 0x31) : static_cast<uint8_t>(crc << 1);
-        }
-    }
-    return crc;
 }
 
 // High-precision measurement: 10 ms, then temperature and humidity with CRCs
@@ -455,8 +431,8 @@ void read_sht4x(int i) {
         return;
     }
     vTaskDelay(pdMS_TO_TICKS(10));
-    if (i2c_master_receive(l.sensor, data, sizeof(data), 100) != ESP_OK || crc8(data) != data[2] ||
-        crc8(data + 3) != data[5]) {
+    if (i2c_master_receive(l.sensor, data, sizeof(data), 100) != ESP_OK || measurements::sensirion_crc(data) != data[2] ||
+        measurements::sensirion_crc(data + 3) != data[5]) {
         return;
     }
     const uint32_t t = (data[0] << 8) | data[1];
@@ -575,6 +551,15 @@ std::string slot_json(const Slot& s, int i, bool with_state) {
         if (l.have_climate) {
             out += ",\"temperature\":" + std::to_string(l.centi_celsius / 100.0) +
                    ",\"humidity\":" + std::to_string(l.centi_percent / 100.0);
+        }
+        if (const Driver* d = driver_of(s.type); d != nullptr) {
+            std::lock_guard<std::mutex> guard(lock);
+            if (d->matter == Matter::air_quality && l.measurement[0] >= 0) {
+                out += ",\"co2_ppm\":" + std::to_string(l.measurement[0]);
+            } else if (d->matter == Matter::electrical) {
+                if (l.measurement[0] >= 0) out += ",\"power_mw\":" + std::to_string(l.measurement[0]);
+                if (l.measurement[1] >= 0) out += ",\"energy_mwh\":" + std::to_string(l.measurement[1]);
+            }
         }
         if (is_ble(s.type) && l.seen_us > 0) {
             out += ",\"rssi\":" + std::to_string(l.rssi) +
@@ -874,6 +859,21 @@ void report_climate(int slot, int16_t centi_celsius, uint16_t centi_percent) {
         live[slot].centi_percent = centi_percent;
     }
     emit_climate(slot, centi_celsius, centi_percent);
+}
+
+void report_measurement(int slot, unsigned channel, int64_t value) {
+    if (slot < 0 || slot >= SLOTS || channel > 1) return;
+    {
+        std::lock_guard<std::mutex> guard(lock);
+        if (live[slot].measurement[channel] == value) return;
+        live[slot].measurement[channel] = value;
+    }
+    if (listener.measurement) listener.measurement(slot, channel);
+}
+
+int64_t measurement(int slot, unsigned channel) {
+    std::lock_guard<std::mutex> guard(lock);
+    return live[slot].measurement[channel];
 }
 
 void report_output(int slot, bool on) {
@@ -1293,7 +1293,7 @@ std::string state_json() {
     out += "],\"drivers\":[";
     for (int i = 0; i < driver_count; ++i) {
         const Driver& d = drivers[i];
-        static const char* MATTER[] = {"on_off", "dimmable", "button", "contact", "occupancy", "climate", "color"};
+        static const char* MATTER[] = {"on_off", "dimmable", "button", "contact", "occupancy", "climate", "color", "air_quality", "electrical"};
         out += (i ? ",{" : "{") + std::string("\"type\":") + json_text(d.type) + ",\"title\":" + json_text(d.title) +
                ",\"matter\":\"" + MATTER[static_cast<int>(d.matter)] + "\",\"pins\":" + std::to_string(d.pins) +
                ",\"number\":" + (d.number_label ? json_text(d.number_label) : std::string("null")) + "}";
@@ -1318,8 +1318,8 @@ bool pin_free_for_led(int pin) {
     std::lock_guard<std::mutex> guard(lock);
     for (int i = 0; i < SLOTS; ++i) {
         for (const Slot* s : {&running[i], &draft[i]}) {
-            if (s->type == Type::none || is_ble(s->type)) continue;
-            if (s->pin == pin || (s->type == Type::sht4x && s->pin2 == pin)) return false;
+            const int pins = pin_count(s->type);
+            if (pins > 0 && (s->pin == pin || (pins == 2 && s->pin2 == pin))) return false;
         }
     }
     return true;

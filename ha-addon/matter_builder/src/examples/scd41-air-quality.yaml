@@ -1,0 +1,11 @@
+# Summary: Measure CO2, temperature and humidity with an SCD41 over I2C.
+# Setup: Use firmware that includes the SCD4x driver. Connect SDA to GPIO 6, SCL to GPIO 7, and share ground with the ESP32.
+# Setup: Use a breakout compatible with 3.3 V I2C levels. Allow the first periodic reading to arrive before checking Matter.
+# https://github.com/Sensirion/embedded-i2c-scd4x
+device:
+  name: SCD41 air quality
+  app: generic
+  board: esp32-c6
+
+connections:
+  - { slot: 0, type: scd4x, pin: 6, pin2: 7, name: Air quality }

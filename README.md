@@ -127,6 +127,11 @@ issue with how it went. The wizard's first step can **recognise your board**
 over USB: it says which chip it is, whether there is firmware for it and
 what does and does not work on it, and picks the right firmware.
 
+### ESPHome recipes
+
+See the [wiring and reuse notes](docs/esphome-recipes.md) for GPIO presence,
+ventilation, irrigation, garage relay pulses, NEC infrared, CO₂ and energy.
+
 ### Status LED and BOOT button
 
 A device shows where it is without the page. Set a **status LED** on its

@@ -1,0 +1,12 @@
+# Summary: Pulse a garage opener's wall-button input and report its closed contact separately.
+# Setup: Check that the opener accepts a one-second dry-contact pulse on its wall-button input. Wire the relay to that input.
+# Setup: Connect a reed switch between GPIO 5 and GND so it closes when the door is fully shut. Verify the contact state before testing the pulse.
+# https://devices.esphome.io/devices/shelly-1/#example-as-a-garage-door-opener-via-dry-contact
+device:
+  name: Garage door pulse
+  app: generic
+  board: esp32-c6
+
+connections:
+  - { slot: 0, type: relay, pin: 4, off_after: 1, name: Garage door pulse, group: Garage }
+  - { slot: 1, type: contact, pin: 5, name: Door closed, group: Garage }

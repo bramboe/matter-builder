@@ -78,7 +78,14 @@ LED_STRIPS = {
     "led_strip_rgbw": {"type": "led_strip_rgbw", "title": "LED strip RGBW (SK6812)", "matter": "color", "pins": 1,
                        "number": "LEDs", "description": "SK6812 RGBW on one data pin, as a colour light with white."},
 }
+MEASUREMENT_DRIVERS = {
+    "scd4x": {"type": "scd4x", "title": "SCD4x CO2 sensor", "matter": "air_quality", "pins": 2, "number": None,
+              "description": "I2C CO2, temperature and humidity. Pin is SDA and pin2 is SCL."},
+    "pulse_meter": {"type": "pulse_meter", "title": "Energy pulse meter", "matter": "electrical", "pins": 1,
+                    "number": "Pulses per kWh", "description": "Optical or isolated S0 pulse input. Default: 1000 pulses/kWh."},
+}
 BUILTIN_DRIVERS.update(LED_STRIPS)
+BUILTIN_DRIVERS.update(MEASUREMENT_DRIVERS)
 # What a type is in Matter when it is an output
 OUTPUT_MATTER = ("on_off", "dimmable", "color")
 # Options that work on the device itself (io.cpp): what an output does at
@@ -616,13 +623,13 @@ def check(spec):
             "components": [{"source": d["source"], "type": d["type"], "path": d["path"]} for d in components],
             # The firmware's own types a config uses (LED strips), so editors know them as they know a component's
             "drivers": [{k: d[k] for k in ("type", "title", "description", "matter", "pins", "number")}
-                        for d in components + [LED_STRIPS[t] for t in sorted({c["type"] for c in clean} & set(LED_STRIPS))]]}
+                        for d in components + [BUILTIN_DRIVERS[t] for t in sorted({c["type"] for c in clean} & (LED_STRIPS.keys() | MEASUREMENT_DRIVERS.keys()))]]}
 
 
 # ---------------------------------------------------------------- components
 
 COMPONENT_TYPE = re.compile(r"^[a-z][a-z0-9_]{1,23}$")
-MATTER_KINDS = {"on_off", "dimmable", "button", "contact", "occupancy", "climate", "color"}
+MATTER_KINDS = {"on_off", "dimmable", "button", "contact", "occupancy", "climate", "color", "air_quality", "electrical"}
 GITHUB_SOURCE = re.compile(r"^github:([A-Za-z0-9-]+)/([A-Za-z0-9._-]+)((?:/[A-Za-z0-9._-]+)*)@([A-Za-z0-9._/-]+)$")
 
 

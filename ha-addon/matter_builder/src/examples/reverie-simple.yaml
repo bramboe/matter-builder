@@ -1,0 +1,79 @@
+# Summary: Reverie Simple met vaste doelposities en presets.
+# De 0%- en 100%-knoppen vragen een doelpositie aan. Stop is een afzonderlijk commando.
+device:
+  name: Reverie Simple
+  app: generic
+  board: esp32-c6
+
+bluetooth_device:
+  service: "1B1D9641-B942-4DA8-89CC-98E6A58FBD93"
+  characteristic: "6AF87926-DC79-412E-A3E0-5F85C2D55DE2"
+  write: response
+  idle: 3600
+  commands:
+    - label: Rug 100%
+      bytes: "55516460"
+      times: 2
+      gap: 50
+    - label: Rug 0%
+      bytes: "55510004"
+      times: 2
+      gap: 50
+    - label: Benen 100%
+      bytes: "55526463"
+      times: 2
+      gap: 50
+    - label: Benen 0%
+      bytes: "55520007"
+      times: 2
+      gap: 50
+    - label: Stop
+      bytes: "55FFAA"
+    - label: Vlak
+      bytes: "550550"
+    - label: Zero G
+      bytes: "551540"
+    - label: Licht wisselen
+      bytes: "555B000E"
+
+connections:
+  - slot: 0
+    type: ble_command
+    number: 1
+    group: Bed
+    name: Rug 100%
+  - slot: 1
+    type: ble_command
+    number: 2
+    group: Bed
+    name: Rug 0%
+  - slot: 2
+    type: ble_command
+    number: 3
+    group: Bed
+    name: Benen 100%
+  - slot: 3
+    type: ble_command
+    number: 4
+    group: Bed
+    name: Benen 0%
+  - slot: 4
+    type: ble_command
+    number: 5
+    group: Bed
+    name: Stop
+  - slot: 5
+    type: ble_command
+    number: 6
+    group: Bed
+    name: Vlak
+  - slot: 6
+    type: ble_command
+    number: 7
+    group: Bed
+    name: Zero G
+  - slot: 7
+    type: ble_command
+    number: 8
+    group: Bed
+    name: Licht wisselen

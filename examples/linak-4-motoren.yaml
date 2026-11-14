@@ -1,0 +1,104 @@
+# Summary: Linak-bed met 4 motoren.
+# Het aantal motoren komt uit de bedconfiguratie, niet uit het BLE-adres.
+# Vereist de meegeleverde Matter Builder-patch.
+device:
+  name: Linak 4 motoren
+  app: generic
+  board: esp32-c6
+
+bluetooth_device:
+  service: "99FA0001-338A-1024-8A49-009C0215F78A"
+  characteristic: "99FA0002-338A-1024-8A49-009C0215F78A"
+  write: response
+  idle: 60
+  commands:
+    - label: Rug omhoog
+      bytes: "0B00"
+      times: 4
+      gap: 200
+      finish: "FF00"
+      finish_gap: 0
+    - label: Rug omlaag
+      bytes: "0A00"
+      times: 4
+      gap: 200
+      finish: "FF00"
+      finish_gap: 0
+    - label: Benen omhoog
+      bytes: "0900"
+      times: 4
+      gap: 200
+      finish: "FF00"
+      finish_gap: 0
+    - label: Benen omlaag
+      bytes: "0800"
+      times: 4
+      gap: 200
+      finish: "FF00"
+      finish_gap: 0
+    - label: Hoofd omhoog
+      bytes: "0300"
+      times: 4
+      gap: 200
+      finish: "FF00"
+      finish_gap: 0
+    - label: Hoofd omlaag
+      bytes: "0200"
+      times: 4
+      gap: 200
+      finish: "FF00"
+      finish_gap: 0
+    - label: Voeten omhoog
+      bytes: "0500"
+      times: 4
+      gap: 200
+      finish: "FF00"
+      finish_gap: 0
+    - label: Voeten omlaag
+      bytes: "0400"
+      times: 4
+      gap: 200
+      finish: "FF00"
+      finish_gap: 0
+
+connections:
+  - slot: 0
+    type: ble_command
+    number: 1
+    group: Bed
+    name: Rug omhoog
+  - slot: 1
+    type: ble_command
+    number: 2
+    group: Bed
+    name: Rug omlaag
+  - slot: 2
+    type: ble_command
+    number: 3
+    group: Bed
+    name: Benen omhoog
+  - slot: 3
+    type: ble_command
+    number: 4
+    group: Bed
+    name: Benen omlaag
+  - slot: 4
+    type: ble_command
+    number: 5
+    group: Bed
+    name: Hoofd omhoog
+  - slot: 5
+    type: ble_command
+    number: 6
+    group: Bed
+    name: Hoofd omlaag
+  - slot: 6
+    type: ble_command
+    number: 7
+    group: Bed
+    name: Voeten omhoog
+  - slot: 7
+    type: ble_command
+    number: 8
+    group: Bed
+    name: Voeten omlaag

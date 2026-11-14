@@ -16,9 +16,13 @@
 //   bledev target <AA:BB:CC:DD:EE:FF> [public|random]
 //   bledev service <uuid> | characteristic <uuid>   (16-bit "FFE0" or 128-bit)
 //   bledev write response|no-response
+//   bledev pair on|off                    initiate GAP security before GATT discovery
 //   bledev hello <hex>|none                 sent after every connect
+//   bledev setup <compact JSON array>       ordered connection steps; [] restores defaults
+//   bledev secret <name> <value>|-          set or clear a local setup secret
+//   bledev test                            rerun setup; status is reported by json
 //   bledev idle <seconds>                   stay connected after the last command (0-3600)
-//   bledev cmd <n> <hex> <times> <ms> <label as hex>   command n (0-7): bytes, repeat, gap
+//   bledev cmd <n> <hex> <times> <ms> <label as hex> [finish as hex finish-ms]  command n (0-7)
 //   bledev clear <n> | send <n> | raw <hex> | disconnect
 //   bledev template <name>                  fill in a known device (octo)
 

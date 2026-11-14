@@ -405,6 +405,88 @@ BLE_UUID = re.compile(r"^([0-9A-Fa-f]{4}|[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-
 BLE_COMMANDS = 8
 
 
+BLE_STEP_FIELDS = {
+    "pair": set(), "discover": set(), "delay": set(),
+    "subscribe": {"service", "characteristic", "indicate"},
+    "write": {"service", "characteristic", "bytes", "secret", "encoding", "frame", "checksum", "escapes", "escape_byte"},
+    "read": {"service", "characteristic", "expect"},
+    "wait": {"service", "characteristic", "expect", "reject"},
+}
+
+
+def check_ble_setup(steps):
+    if not isinstance(steps, list) or not 1 <= len(steps) <= 10:
+        raise SpecError("bluetooth_device.setup: 1-10 steps")
+    result, subscriptions, discovered = [], set(), False
+    for index, step in enumerate(steps, 1):
+        error = f"bluetooth_device.setup step {index}"
+        if not isinstance(step, dict) or not isinstance(step.get("type"), str) or step["type"] not in BLE_STEP_FIELDS:
+            raise SpecError(f"{error}: choose pair, discover, delay, subscribe, write, read or wait")
+        kind = step["type"]
+        if set(step) - {"type", "ms"} - BLE_STEP_FIELDS[kind]:
+            raise SpecError(f"{error}: unknown setting")
+        ms = step.get("ms", 250 if kind == "delay" else 3000)
+        if type(ms) is not int or not 1 <= ms <= 10000:
+            raise SpecError(f"{error}: ms must be 1-10000")
+        out = {"type": kind, "ms": ms}
+        target = None
+        if "service" in step or "characteristic" in step:
+            values = tuple(str(step.get(key, "")).upper() for key in ("service", "characteristic"))
+            if not all(BLE_UUID.fullmatch(value) for value in values):
+                raise SpecError(f"{error}: provide both service and characteristic UUIDs")
+            target = values
+            out.update(zip(("service", "characteristic"), values))
+        if kind in {"subscribe", "write", "read", "wait"} and target is None and not discovered:
+            raise SpecError(f"{error}: add discover before using the main characteristic")
+        if kind == "discover":
+            discovered = True
+        if kind == "subscribe":
+            subscriptions.add(target)
+            indicate = step.get("indicate", False)
+            if type(indicate) is not bool:
+                raise SpecError(f"{error}: indicate must be true or false")
+            if indicate:
+                out["indicate"] = True
+        if kind == "wait" and target not in subscriptions:
+            raise SpecError(f"{error}: subscribe to this characteristic before waiting")
+        for key in ("bytes", "expect", "reject", "frame", "escapes", "escape_byte"):
+            if key not in step:
+                continue
+            value = re.sub(r"[\s:-]", "", str(step[key])).upper()
+            if not re.fullmatch(r"(?:[0-9A-F]{2}){1,32}", value) or (
+                key in {"frame", "escape_byte"} and len(value) != 2
+            ) or (key == "escapes" and len(value) % 4):
+                raise SpecError(f"{error}: invalid hex in {key}")
+            out[key] = value
+        if kind == "wait" and ("expect" not in out or out.get("expect") == out.get("reject")):
+            raise SpecError(f"{error}: specify the expected notification and use a different rejection value")
+        if kind == "write":
+            if "secret" in step:
+                secret = step["secret"]
+                if not isinstance(secret, str) or not re.fullmatch(r"[a-z][a-z0-9_]{0,11}", secret):
+                    raise SpecError(f"{error}: secret must be a local name (1-12 characters)")
+                encoding = step.get("encoding", "hex")
+                if encoding not in ("hex", "digits") or not isinstance(encoding, str):
+                    raise SpecError(f"{error}: encoding must be hex or digits")
+                out.update(secret=secret, encoding=encoding)
+            elif "encoding" in step:
+                raise SpecError(f"{error}: encoding requires a local secret")
+            if "bytes" not in out and "secret" not in out:
+                raise SpecError(f"{error}: write needs bytes or a local secret")
+            if "checksum" in step:
+                if step["checksum"] != "negative-sum8":
+                    raise SpecError(f"{error}: checksum must be negative-sum8")
+                out["checksum"] = step["checksum"]
+            if ("escapes" in out) != ("escape_byte" in out):
+                raise SpecError(f"{error}: escapes and escape_byte belong together")
+        result.append(out)
+    if not discovered:
+        raise SpecError("bluetooth_device.setup: add a discover step for the main characteristic")
+    if sum(step["ms"] for step in result) > 40000:
+        raise SpecError("bluetooth_device.setup: total time budget is 40000 ms")
+    return result
+
+
 def check_bluetooth_device(device):
     """A Bluetooth LE device the ESP32 sends commands to (firmware: ble_device):
     where to write (service, characteristic) and up to 8 commands. The same
@@ -415,7 +497,7 @@ def check_bluetooth_device(device):
         return None
     if not isinstance(device, dict):
         raise SpecError("bluetooth_device: a mapping")
-    unknown = set(device) - {"address", "address_type", "service", "characteristic", "write", "idle", "commands"}
+    unknown = set(device) - {"address", "address_type", "service", "characteristic", "write", "idle", "pair", "setup", "commands"}
     if unknown:
         raise SpecError(f"bluetooth_device: unknown “{sorted(unknown)[0]}”")
     out = {}
@@ -432,6 +514,15 @@ def check_bluetooth_device(device):
     if not isinstance(idle, int) or isinstance(idle, bool) or not 0 <= idle <= 3600:
         raise SpecError("bluetooth_device: idle in seconds, 0-3600")
     out["idle"] = idle
+    pair = device.get("pair", False)
+    if not isinstance(pair, bool):
+        raise SpecError("bluetooth_device: pair true or false")
+    if "setup" in device:
+        if pair:
+            raise SpecError("bluetooth_device: use a pair step inside setup")
+        out["setup"] = check_ble_setup(device["setup"])
+    if pair:
+        out["pair"] = True
     if device.get("address"):
         address = str(device["address"])
         if not MAC.match(address):
@@ -447,7 +538,7 @@ def check_bluetooth_device(device):
     for n, c in enumerate(commands, 1):
         if not isinstance(c, dict):
             raise SpecError(f"bluetooth_device command {n}: a mapping")
-        unknown = set(c) - {"label", "bytes", "times", "gap"}
+        unknown = set(c) - {"label", "bytes", "times", "gap", "finish", "finish_gap"}
         if unknown:
             raise SpecError(f"bluetooth_device command {n}: unknown “{sorted(unknown)[0]}”")
         label = str(c.get("label") or f"Command {n}").strip()
@@ -461,7 +552,18 @@ def check_bluetooth_device(device):
             raise SpecError(f"bluetooth_device command {n}: times 1-50")
         if not isinstance(gap, int) or isinstance(gap, bool) or not 0 <= gap <= 2000:
             raise SpecError(f"bluetooth_device command {n}: gap in milliseconds, 0-2000")
-        out["commands"].append({"label": label, "bytes": data, "times": times, "gap": gap})
+        command = {"label": label, "bytes": data, "times": times, "gap": gap}
+        if "finish" in c:
+            finish = re.sub(r"[\s:-]", "", str(c["finish"])).upper()
+            if not re.fullmatch(r"(?:[0-9A-F]{2}){1,64}", finish):
+                raise SpecError(f"bluetooth_device command {n}: finish as 1-64 hex bytes")
+            finish_gap = c.get("finish_gap", 0)
+            if type(finish_gap) is not int or not 0 <= finish_gap <= 5000:
+                raise SpecError(f"bluetooth_device command {n}: finish_gap in milliseconds, 0-5000")
+            command.update(finish=finish, finish_gap=finish_gap)
+        elif "finish_gap" in c:
+            raise SpecError(f"bluetooth_device command {n}: finish_gap requires finish")
+        out["commands"].append(command)
     return out
 
 

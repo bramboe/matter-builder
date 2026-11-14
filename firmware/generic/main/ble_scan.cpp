@@ -9,6 +9,8 @@
 #include "nimble/nimble_port.h"
 #include "nimble/nimble_port_freertos.h"
 
+extern "C" void ble_store_config_init(void);
+
 namespace ble_scan {
 
 namespace {
@@ -146,6 +148,11 @@ void start_task(void*) {
             }
             ble_hs_cfg.sync_cb = on_sync;
             ble_hs_cfg.reset_cb = on_reset;
+            ble_hs_cfg.sm_bonding = 1;
+            ble_hs_cfg.sm_our_key_dist = BLE_SM_PAIR_KEY_DIST_ENC | BLE_SM_PAIR_KEY_DIST_ID;
+            ble_hs_cfg.sm_their_key_dist = BLE_SM_PAIR_KEY_DIST_ENC | BLE_SM_PAIR_KEY_DIST_ID;
+            ble_hs_cfg.store_status_cb = ble_store_util_status_rr;
+            ble_store_config_init();
             nimble_port_freertos_init(host_task);
             vTaskDelete(nullptr);
         }

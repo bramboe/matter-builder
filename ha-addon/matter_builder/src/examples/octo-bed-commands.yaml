@@ -3,6 +3,7 @@
 # (ESP32-C6) sends the remote's commands over Bluetooth. The commands are the
 # same for every Octo bed; your bed's Bluetooth address and its PIN are set
 # on the device's page (Bluetooth device), never in here.
+# Setup: For a bed with a PIN, enable Verify Octo PIN under Bluetooth connection steps. Save bed_pin on the device page, then test the connection.
 # For positions, presets and calibration use the Octo bed bridge instead.
 device:
   name: Octo bed

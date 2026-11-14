@@ -29,7 +29,7 @@ namespace http_api {
 namespace {
 
 const char* TAG = "http";
-constexpr size_t MAX_COMMAND_LEN = 600;  // "thread dataset <hex>" fits
+constexpr size_t MAX_COMMAND_LEN = 4000;  // includes a complete BLE setup
 constexpr size_t OTA_CHUNK = 4096;
 
 constexpr size_t MIN_PASSWORD_LEN = 8;
@@ -378,7 +378,8 @@ esp_err_t handle_cmd(httpd_req_t* req) {
         httpd_resp_set_status(req, "400 Bad Request");
         return httpd_resp_sendstr(req, "body must be one command line\n");
     }
-    char line[MAX_COMMAND_LEN + 1] = {};
+    auto body = std::make_unique<char[]>(req->content_len + 1);
+    char* line = body.get();
     size_t got = 0;
     while (got < req->content_len) {
         int r = httpd_req_recv(req, line + got, req->content_len - got);
@@ -392,6 +393,10 @@ esp_err_t handle_cmd(httpd_req_t* req) {
         return httpd_resp_sendstr(req, "body must be one command line\n");
     }
     const auto args = parse_command(line);
+    if (caller != Who::owner && args.size() >= 2 && args[0] == "bledev" && args[1] == "secret") {
+        httpd_resp_set_status(req, "403 Forbidden");
+        return httpd_resp_sendstr(req, "only with the page password\n");
+    }
     // Which programs have access is for the owner to change
     if (caller == Who::program && !args.empty() && args[0] == "access" &&
         !(args.size() == 2 && args[1] == "json")) {

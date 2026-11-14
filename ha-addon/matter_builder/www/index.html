@@ -575,7 +575,7 @@ dialog.side{max-width:100vw}
           <div class="sub" data-t="manageHelp" style="margin-top:12px"></div>
           <div class="error" id="mError" role="alert" hidden></div>
           <div class="notice" id="mNotice" hidden></div>
-          <div class="actions end"><button class="plain" id="mSaveConfig" data-t="saveConfig"></button><span class="grow"></span><button id="mSave" data-t="saveDraft"></button>
+          <div class="actions end"><button class="plain" id="mSaveConfig" data-t="saveConfig"></button><button id="mBleTest" hidden>Test Bluetooth connection</button><span class="grow"></span><button id="mSave" data-t="saveDraft"></button>
             <button class="pri" id="mDeploy" hidden>Apply to device</button>
             <button class="pri" id="mApply" data-t="applyRestart" hidden></button>
             <button class="pri" id="mConfirm" data-t="keep" hidden></button></div>
@@ -1406,7 +1406,7 @@ class ConfigEditor {
     this.rules = []; this.ruleOpen = new Set(); this.rulesSupported = true; this.clock = null;
     this.grouping = false;  // the Groups switch: connections shown and moved by group
     this.ble = null; this.bleSupported = true;  // a Bluetooth device it sends commands to (ESP32-C6)
-    this.bleOpen = new Set(); this.bleSettingsOpen = false;
+    this.bleOpen = new Set(); this.bleSettingsOpen = false; this.bleSetupOpen = false;
     this.specDevice = null;
     this.board = null;  // the chip it is made for (the wizard), to show what does not work on it
     EDITORS[id] = this;
@@ -1486,18 +1486,21 @@ class ConfigEditor {
         if (['enable', 'disable', 'toggle_rule'].includes(st.kind) && !this.rules.some(x => x.index === st.target)) throw new Error(t('ruleNeedsRule', r.name));
       }
     }
-    return {name: this.name.trim(), rows, rules: JSON.parse(JSON.stringify(this.rules)), ble: this.checkedBle(rows)};
+    const ble = this.checkedBle(rows);
+    if (ble?.setup?.length) return await parseSpec(this.text());
+    return {name: this.name.trim(), rows, rules: JSON.parse(JSON.stringify(this.rules)), ble};
   }
 
   // ---- Bluetooth device
   cleanBle() {
     const b = this.ble;
     if (!b || (!(b.address || '').trim() && !(b.service || '').trim() && !(b.characteristic || '').trim() && !b.commands.length &&
-        b.address_type === 'public' && b.write === 'response' && b.idle === 30)) return null;
+        b.address_type === 'public' && b.write === 'response' && b.idle === 30 && !b.pair && !b.setup?.length)) return null;
     return {address: (b.address || '').trim().toUpperCase(), address_type: b.address_type || 'public', service: (b.service || '').trim().toUpperCase(),
       characteristic: (b.characteristic || '').trim().toUpperCase(), write: b.write, idle: Math.max(0, Math.min(3600, Math.round(+b.idle || 0))),
-      commands: b.commands.map((c, i) => ({label: (c.label || '').trim() || `Command ${i + 1}`, bytes: bleHex(c.bytes),
-        times: Math.max(1, Math.min(50, Math.round(+c.times || 1))), gap: Math.max(0, Math.min(2000, Math.round(+c.gap || 0)))}))};
+      ...(b.setup?.length ? {setup: b.setup} : b.pair ? {pair: true} : {}), commands: b.commands.map((c, i) => ({label: (c.label || '').trim() || `Command ${i + 1}`, bytes: bleHex(c.bytes),
+        times: Math.max(1, Math.min(50, Math.round(+c.times || 1))), gap: Math.max(0, Math.min(2000, Math.round(+c.gap || 0))),
+        ...(bleHex(c.finish || '') ? {finish: bleHex(c.finish), finish_gap: Math.max(0, Math.min(5000, Math.round(+c.finish_gap || 0)))} : {})}))};
   }
   checkedBle(rows) {
     const b = this.cleanBle(), uuid = /^([0-9A-F]{4}|[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12})$/;
@@ -1505,7 +1508,10 @@ class ConfigEditor {
     if (!b) return null;
     if (!uuid.test(b.service) || !uuid.test(b.characteristic)) throw new Error(t('bleNeedUuid'));
     if (b.address && !/^[0-9A-F]{2}(:[0-9A-F]{2}){5}$/.test(b.address)) throw new Error(t('bleNeedAddress'));
-    b.commands.forEach((c, i) => { if (!/^([0-9A-F]{2}){1,64}$/.test(c.bytes)) throw new Error(t('bleNeedBytes', i + 1)); });
+    b.commands.forEach((c, i) => {
+      const hexFrame = /^([0-9A-F]{2}){1,64}$/;
+      if (!hexFrame.test(c.bytes) || (c.finish && !hexFrame.test(c.finish))) throw new Error(t('bleNeedBytes', i + 1));
+    });
     for (const r of used) if (!(r.number >= 1 && r.number <= b.commands.length)) throw new Error(t('bleNoCommand', r.name || this.title(r.type)));
     return b;
   }
@@ -1525,6 +1531,7 @@ class ConfigEditor {
     row.querySelector('.ble-command-name').textContent = command.label || t('bleLabel', i + 1);
     row.querySelector('.ble-command-timing').textContent = this.bleTiming(command);
     row.querySelector('[data-ble-pause]').disabled = command.times <= 1;
+    row.querySelector('[data-ble-finish-gap]').disabled = !command.finish;
     this.changed(false);
   }
   trackBleCommand(i, open) {
@@ -1574,6 +1581,74 @@ class ConfigEditor {
     this.rows.sort((a, b) => a.slot - b.slot);
     this.changed();
   }
+  bleStepAction(action, index = 0) {
+    const steps = this.ble.setup ??= [];
+    if (action === 'add') {
+      if (steps.length === 0) {
+        if (this.ble.pair) steps.push({type: 'pair', ms: 10000});
+        steps.push({type: 'discover', ms: 5000});
+      } else if (steps.length < 10) steps.push({type: 'delay', ms: 250});
+      delete this.ble.pair;
+    } else if (action === 'remove') steps.splice(index, 1);
+    else {
+      const other = index + (action === 'up' ? -1 : 1);
+      if (other >= 0 && other < steps.length) [steps[index], steps[other]] = [steps[other], steps[index]];
+    }
+    this.changed();
+  }
+  bleStepField(index, key, value) {
+    const step = this.ble.setup[index];
+    if (key === 'type') {
+      this.ble.setup[index] = {type: value, ms: value === 'delay' ? 250 : 3000};
+      this.changed();
+    } else {
+      if (value === '' || value === false) delete step[key];
+      else step[key] = value;
+      this.changed(false);
+    }
+  }
+  useOctoVerification() {
+    this.ble.setup = structuredClone(OCTO_BLE_SETUP);
+    delete this.ble.pair;
+    this.bleSetupOpen = true;
+    this.changed();
+  }
+  bleSetup(b) {
+    const ref = this.ref, steps = b.setup || [];
+    const field = (i, st, key, label, type = 'text') =>
+      `<label class="field"><span>${label}</span><input type="${type}" ${type === 'number' ? 'min="1" max="10000"' : 'spellcheck="false"'} value="${esc(st[key] ?? '')}" oninput="${ref}.bleStepField(${i}, '${key}', ${type === 'number' ? '+this.value' : 'this.value'})"></label>`;
+    const controls = steps.map((st, i) => {
+      const target = ['subscribe', 'write', 'read', 'wait'].includes(st.type);
+      const expected = ['read', 'wait'].includes(st.type);
+      return `<div class="ed-item ble-panel"><div class="ed-item-body">
+        <div class="ed-fields"><label class="field"><span>Step ${i + 1}</span><select onchange="${ref}.bleStepField(${i}, 'type', this.value)">
+          ${Object.entries(BLE_STEP_TYPES).map(([type, label]) => `<option value="${type}" ${st.type === type ? 'selected' : ''}>${label}</option>`).join('')}
+        </select></label>${field(i, st, 'ms', st.type === 'delay' ? 'Delay (ms)' : 'Timeout (ms)', 'number')}
+        ${target ? field(i, st, 'service', 'Service UUID (optional)') + field(i, st, 'characteristic', 'Characteristic UUID (optional)') : ''}
+        ${st.type === 'subscribe' ? `<label class="field"><span>Use indications</span><input type="checkbox" ${st.indicate ? 'checked' : ''} onchange="${ref}.bleStepField(${i}, 'indicate', this.checked)"></label>` : ''}
+        ${st.type === 'write' ? field(i, st, 'bytes', 'Bytes (hex)') + field(i, st, 'secret', 'Local secret name') +
+          `<label class="field"><span>Secret encoding</span><select onchange="${ref}.bleStepField(${i}, 'encoding', this.value)">
+          <option value="">Hex (default)</option><option value="hex" ${st.encoding === 'hex' ? 'selected' : ''}>Hex bytes</option>
+          <option value="digits" ${st.encoding === 'digits' ? 'selected' : ''}>One byte per digit</option></select></label>` +
+          field(i, st, 'frame', 'Framing byte (hex)') + field(i, st, 'checksum', 'Checksum (negative-sum8)') +
+          field(i, st, 'escape_byte', 'Escape byte (hex)') + field(i, st, 'escapes', 'Escape pairs (hex)') : ''}
+        ${expected ? field(i, st, 'expect', 'Expected value (hex)') : ''}
+        ${st.type === 'wait' ? field(i, st, 'reject', 'Rejection value (hex, optional)') : ''}
+        </div><div class="actions"><button type="button" onclick="${ref}.bleStepAction('up', ${i})" ${i === 0 ? 'disabled' : ''}>Move up</button>
+        <button type="button" onclick="${ref}.bleStepAction('down', ${i})" ${i === steps.length - 1 ? 'disabled' : ''}>Move down</button>
+        <button type="button" class="warn" onclick="${ref}.bleStepAction('remove', ${i})">${t('remove')}</button></div>
+        </div></div>`;
+    }).join('');
+    return `<details class="ed-item ble-panel" ${this.bleSetupOpen ? 'open' : ''} ontoggle="if (this.isConnected) ${ref}.bleSetupOpen = this.open">
+      <summary><span class="info"><b>Bluetooth connection steps</b></span><span class="chev"></span></summary>
+      <div class="ed-item-body"><p class="sub">Steps run after every new connection. Leave both UUID fields empty to use the main characteristic.</p>
+      ${controls}
+      <div class="actions"><button type="button" onclick="${ref}.bleStepAction('add')" ${steps.length >= 10 ? 'disabled' : ''}>Add step</button>
+      ${!steps.length && bleUuidIs(b.service, 'FFE0') && bleUuidIs(b.characteristic, 'FFE1') && b.commands.some(c => c.bytes === '40027300000B40') ?
+        `<button type="button" onclick="${ref}.useOctoVerification()">Verify Octo PIN</button>` : ''}
+      </div></div>
+    </details>`;
+  }
   bleSection() {
     if (!this.bleSupported) return '';
     if (this.noBluetooth() && !this.ble) return `<div class="ed-section"><h3>${t('bleTitle')}</h3></div><div class="sub warnText" style="margin:-4px 2px 8px">${esc(t('notOnBoard', BOARDS[this.board].name))}</div>`;
@@ -1612,6 +1687,10 @@ class ConfigEditor {
           <div><label class="field"><span>${t('bleGap')}</span><input type="number" min="0" max="2000" value="${c.gap}" data-ble-pause ${c.times <= 1 ? 'disabled' : ''} oninput="${ref}.bleCmd(${i}, 'gap', +this.value)"></label>
             <div class="sub ble-field-help">${t('bleGapHelp')}</div></div>
         </div>
+        <div class="ble-timing">
+          <label class="field"><span>Finish bytes (hex)</span><input class="mono" spellcheck="false" value="${esc(c.finish || '')}" oninput="${ref}.bleCmd(${i}, 'finish', this.value)"></label>
+          <label class="field"><span>Delay before finish (ms)</span><input type="number" min="0" max="5000" value="${c.finish_gap || 0}" data-ble-finish-gap ${c.finish ? '' : 'disabled'} oninput="${ref}.bleCmd(${i}, 'finish_gap', +this.value)"></label>
+        </div>
         <div class="actions">
           ${linked ? '' : `<button onclick="${ref}.bleAsConnection(${i})" ${full ? 'disabled' : ''}>${t('bleAsConnection')}</button>`}
           <span class="grow"></span>${i === b.commands.length - 1 ? `<button class="warn" onclick="${ref}.bleDropCommand(${i})">${t('remove')}</button>` : ''}</div></div></details>`;
@@ -1627,9 +1706,11 @@ class ConfigEditor {
         <label class="field"><span>${t('bleWrite')}</span><select onchange="${ref}.bleSet('write', this.value)">
           <option value="response" ${b.write === 'response' ? 'selected' : ''}>${t('bleWriteResp')}</option><option value="no-response" ${b.write === 'no-response' ? 'selected' : ''}>${t('bleWriteNoResp')}</option></select></label>
         <label class="field"><span>${t('bleIdle')}</span><input type="number" min="0" max="3600" value="${b.idle}" oninput="${ref}.bleSet('idle', +this.value)"></label></div>
+      ${b.setup?.length ? '' : `<label class="field"><span>Pair with the Bluetooth device</span><input type="checkbox" ${b.pair ? 'checked' : ''} onchange="${ref}.bleSet('pair', this.checked)"></label>`}
       <p class="sub ble-settings-help">${t('bleSettingsHelp')} ${t('bleIdleHelp')}</p>
       <p class="sub ble-settings-help">${t('blePinNote')}</p>
       <div class="actions"><span class="grow"></span><button class="warn" data-ble-remove ${this.cleanBle() ? '' : 'hidden'} onclick="${ref}.bleRemove()">${t('bleRemove')}</button></div></div></details>
+      ${this.ble ? this.bleSetup(b) : ''}
       ${presets}
       ${commands}
       <button class="ed-add" onclick="${ref}.bleAddCommand()" ${b.commands.length >= BLE_COMMANDS_MAX ? 'disabled' : ''}>${icon('plus')} ${t('bleAddCommand')}</button>`;
@@ -3057,7 +3138,11 @@ async function loadDeviceConfiguration(id, requestId, which, recipe) {
   if (requestId !== deviceRequest) return;
   if (device.io) {
     // The Bluetooth device it sends commands to: only firmware that has it (ESP32-C6)
-    try { device.ble = bleFromDevice(JSON.parse(await proxyCommand(id, 'bledev json')).bledev); } catch (e) { device.ble = undefined; }
+    try {
+      const ble = JSON.parse(await proxyCommand(id, 'bledev json')).bledev;
+      device.ble = bleFromDevice(ble);
+      device.bleTestSupported = Array.isArray(ble.setup);
+    } catch (e) { device.ble = undefined; }
     if (requestId !== deviceRequest) return;
     devEditor.bleSupported = device.ble !== undefined;
     devEditor.mode = defaultEditorMode();
@@ -3687,10 +3772,19 @@ function specYaml(name, rows, components = [], drivers = [], rules = [], ble = n
   if (ble) {
     lines.push('', 'bluetooth_device:');
     if (ble.address) lines.push(`  address: ${ble.address}`, ...(ble.address_type === 'random' ? ['  address_type: random'] : []));
-    lines.push(`  service: ${ble.service}`, `  characteristic: ${ble.characteristic}`, `  write: ${ble.write}`, `  idle: ${ble.idle}`, '  commands:');
+    lines.push(`  service: ${ble.service}`, `  characteristic: ${ble.characteristic}`, `  write: ${ble.write}`, `  idle: ${ble.idle}`);
+    if (ble.setup?.length) {
+      lines.push('  setup:');
+      for (const {type, ...fields} of ble.setup) {
+        lines.push(`    - type: ${type}`);
+        for (const [key, value] of Object.entries(fields)) lines.push(`      ${key}: ${JSON.stringify(value)}`);
+      }
+    } else if (ble.pair) lines.push('  pair: true');
+    lines.push('  commands:');
     for (const c of ble.commands) {
       lines.push(`    - label: ${c.label}`, `      bytes: "${c.bytes}"`);
       if (c.times > 1) lines.push(`      times: ${c.times}`, `      gap: ${c.gap}`);
+      if (c.finish) lines.push(`      finish: "${c.finish}"`, `      finish_gap: ${c.finish_gap || 0}`);
     }
   }
   lines.push(...rulesYaml(rules));
@@ -3711,6 +3805,16 @@ async function parseSpec(text) {
 // command can be a connection ("Bluetooth command"). The first message after
 // connecting (a PIN) is set on the device's own page, never here.
 const BLE_COMMANDS_MAX = 8;
+const bleUuidIs = (value, short) => [short, `0000${short}-0000-1000-8000-00805F9B34FB`].includes(value);
+const BLE_STEP_TYPES = {pair: 'Pair and encrypt', discover: 'Discover main characteristic', delay: 'Wait a fixed time',
+  subscribe: 'Subscribe', write: 'Write', read: 'Read', wait: 'Wait for notification'};
+const OCTO_BLE_SETUP = [
+  {type:'discover', ms:5000},
+  {type:'subscribe', ms:5000},
+  {type:'write', ms:3000, bytes:'20430004', secret:'bed_pin', encoding:'digits',
+    frame:'40', checksum:'negative-sum8', escape_byte:'3C', escapes:'40013C024F034104'},
+  {type:'wait', ms:4000, expect:'40214300011A0140', reject:'40214300011B0040'},
+];
 const bleHex = v => String(v).replace(/[\s:-]/g, '').toUpperCase();
 const groupHex = value => value.match(/.{1,2}/g)?.join(' ') || '';
 function formatHexInput(input, normalize, event) {
@@ -3767,10 +3871,20 @@ function bleFromDevice(d) {
   d.commands.forEach((c, i) => { if (c.bytes) last = i; });
   if (!d.service && !d.characteristic && !d.mac && last < 0) return null;
   return {address: d.mac || '', address_type: d.random ? 'random' : 'public', service: d.service, characteristic: d.characteristic,
-    write: d.no_response ? 'no-response' : 'response', idle: d.idle,
-    commands: d.commands.slice(0, last + 1).map(c => ({label: c.label, bytes: c.bytes, times: c.times || 1, gap: c.gap || 0}))};
+    write: d.no_response ? 'no-response' : 'response', idle: d.idle, ...(d.pair ? {pair: true} : {}), ...(d.setup?.length ? {setup: d.setup} : {}),
+    commands: d.commands.slice(0, last + 1).map(c => ({label: c.label, bytes: c.bytes, times: c.times || 1, gap: c.gap || 0,
+      ...(c.finish ? {finish: c.finish, finish_gap: c.finish_gap || 0} : {})}))};
 }
 // The commands that turn the device's Bluetooth device into this one
+function requireBedFirmware(deviceBle, configuredBle) {
+  if (configuredBle?.setup?.length && !Array.isArray(deviceBle?.setup)) {
+    throw new Error('Update the generic ESP32-C6 firmware to use Bluetooth connection steps.');
+  }
+  if ((configuredBle?.pair || configuredBle?.commands.some(c => c.finish)) && typeof deviceBle?.pair !== 'boolean') {
+    throw new Error('Update the generic ESP32-C6 firmware to use this Bluetooth configuration.');
+  }
+}
+
 function bleLines(before, after) {
   if (!after) return [];
   const b = before || bleEmpty(), lines = [];
@@ -3778,9 +3892,12 @@ function bleLines(before, after) {
   if (after.characteristic !== b.characteristic) lines.push(`bledev characteristic ${after.characteristic}`);
   if (after.write !== b.write) lines.push(`bledev write ${after.write}`);
   if (after.idle !== b.idle) lines.push(`bledev idle ${after.idle}`);
+  if (JSON.stringify(after.setup || []) !== JSON.stringify(b.setup || [])) lines.push(`bledev setup ${JSON.stringify(after.setup || [])}`);
+  if (Boolean(after.pair) !== Boolean(b.pair)) lines.push(`bledev pair ${after.pair ? 'on' : 'off'}`);
   if (after.address && (after.address !== b.address || after.address_type !== b.address_type)) lines.push(`bledev target ${after.address} ${after.address_type}`);
   after.commands.forEach((c, i) => {
-    if (JSON.stringify(c) !== JSON.stringify(b.commands[i])) lines.push(`bledev cmd ${i} ${c.bytes} ${c.times} ${c.gap} ${hexOfText(c.label)}`);
+    const finish = c.finish ? ` ${c.finish} ${c.finish_gap || 0}` : '';
+    if (JSON.stringify(c) !== JSON.stringify(b.commands[i])) lines.push(`bledev cmd ${i} ${c.bytes} ${c.times} ${c.gap} ${hexOfText(c.label)}${finish}`);
   });
   for (let i = after.commands.length; i < b.commands.length; i++) if (b.commands[i].bytes) lines.push(`bledev clear ${i}`);
   return lines;
@@ -3822,6 +3939,8 @@ function showManageState() {
   const io = managed.io;
   const editing = $('#mSave').classList.contains('pri');
   $('#mSave').disabled = io.trial > 0;
+  $('#mBleTest').hidden = !managed.ble || !managed.bleTestSupported;
+  $('#mBleTest').disabled = editing || deviceBusy || io.trial > 0;
   $('#mDeploy').hidden = !editing || io.trial > 0;
   $('#mApply').hidden = editing || !io.changed || io.trial > 0;
   $('#mConfirm').hidden = !(io.trial > 0);
@@ -3855,7 +3974,11 @@ async function saveManageNow() {
   // Refresh persisted values so a retry after a partially completed write only sends the remaining changes.
   managed.io = JSON.parse(await proxyCommand(managed.id, 'io json')).io;
   if (managed.io.trial > 0) { showManageState(); return; }
-  if (managed.ble !== undefined) managed.ble = bleFromDevice(JSON.parse(await proxyCommand(managed.id, 'bledev json')).bledev);
+  if (managed.ble !== undefined) {
+    const deviceBle = JSON.parse(await proxyCommand(managed.id, 'bledev json')).bledev;
+    requireBedFirmware(deviceBle, spec.ble);
+    managed.ble = bleFromDevice(deviceBle);
+  }
   if (managed.rules) managed.rules = JSON.parse(await proxyCommand(managed.id, 'rule json'));
   // The Bluetooth device first: its commands must be there for the connections that use them
   const lines = bleLines(managed.ble, spec.ble).concat(diffLines(managed.io, spec.rows, spec.name, devEditor.drivers))
@@ -3930,6 +4053,30 @@ async function applyManageNow() {
 }
 
 $('#mSave').onclick = saveManage;
+$('#mBleTest').onclick = async () => {
+  if (!managed || deviceBusy) return;
+  const id = managed.id, button = $('#mBleTest');
+  deviceBusy = true;
+  button.disabled = true;
+  $('#mError').hidden = true;
+  try {
+    await sendLines(id, ['bledev test']);
+    note('Testing the saved Bluetooth connection…');
+    for (let attempt = 0; attempt < 80; ++attempt) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      if (managed?.id !== id || !$('#deviceDlg').open) return;
+      const status = JSON.parse(await proxyCommand(id, 'bledev json')).bledev;
+      if (status.test === 'passed') { note('Bluetooth connection passed.'); return; }
+      if (status.test === 'failed') throw new Error(status.test_error || 'Bluetooth connection failed.');
+    }
+    throw new Error('The Bluetooth connection test is still pending.');
+  } catch (error) {
+    if (managed?.id === id) { $('#mNotice').hidden = true; $('#mError').textContent = error.message; $('#mError').hidden = false; }
+  } finally {
+    deviceBusy = false;
+    if (managed?.id === id) showManageState();
+  }
+};
 $('#mDeploy').onclick = saveAndApply;
 $('#mSaveConfig').onclick = saveAsConfig;
 $('#mApply').onclick = applyManage;
@@ -4359,7 +4506,11 @@ async function applyConfig() {
     if (tooOld(running(st), spec.rows)) throw new Error(t('firmwareTooOld', MIN_NEW_TYPES));
     const missing = missingType(spec.rows, io.drivers);
     if (missing) throw new Error(t('missingComponent', missing));
-    if (spec.ble) await sendLines(id, bleLines(null, spec.ble));
+    if (spec.ble) {
+      const deviceBle = JSON.parse(await proxyCommand(id, 'bledev json')).bledev;
+      requireBedFirmware(deviceBle, spec.ble);
+      await sendLines(id, bleLines(bleFromDevice(deviceBle), spec.ble));
+    }
     await sendLines(id, diffLines(io, spec.rows, spec.name, (io.drivers || []).concat(spec.drivers || [])));
     if (spec.rules && spec.rules.length) {
       let have = null;

@@ -1,5 +1,6 @@
-# Summary: Leggett & Platt Okin met Bluetooth-pairing.
-# Vereist de meegeleverde Matter Builder-patch.
+# Summary: Adjust the backrest and the leg section with Matter buttons. Return the bed to flat and recall three saved positions.
+# Setup: Use this recipe for the Okin controller. The ESP32 pairs over Bluetooth before it discovers the control characteristic.
+# Setup: Use generic ESP32-C6 firmware 0.1.32 or later.
 device:
   name: Leggett Platt Okin
   app: generic
@@ -16,29 +17,29 @@ bluetooth_device:
     - type: discover
       ms: 5000
   commands:
-    - label: Rug omhoog
+    - label: Backrest up
       bytes: "040200000001"
       times: 4
       gap: 200
-    - label: Rug omlaag
+    - label: Backrest down
       bytes: "040200000002"
       times: 4
       gap: 200
-    - label: Benen omhoog
+    - label: Legs up
       bytes: "040200000004"
       times: 4
       gap: 200
-    - label: Benen omlaag
+    - label: Legs down
       bytes: "040200000008"
       times: 4
       gap: 200
-    - label: Vlak
+    - label: Flat
       bytes: "040208000000"
-    - label: Geheugen 1
+    - label: Memory 1
       bytes: "040200001000"
-    - label: Geheugen 2
+    - label: Memory 2
       bytes: "040200002000"
-    - label: Geheugen 3
+    - label: Memory 3
       bytes: "040200004000"
 
 connections:
@@ -46,39 +47,39 @@ connections:
     type: ble_command
     number: 1
     group: Bed
-    name: Rug omhoog
+    name: Backrest up
   - slot: 1
     type: ble_command
     number: 2
     group: Bed
-    name: Rug omlaag
+    name: Backrest down
   - slot: 2
     type: ble_command
     number: 3
     group: Bed
-    name: Benen omhoog
+    name: Legs up
   - slot: 3
     type: ble_command
     number: 4
     group: Bed
-    name: Benen omlaag
+    name: Legs down
   - slot: 4
     type: ble_command
     number: 5
     group: Bed
-    name: Vlak
+    name: Flat
   - slot: 5
     type: ble_command
     number: 6
     group: Bed
-    name: Geheugen 1
+    name: Memory 1
   - slot: 6
     type: ble_command
     number: 7
     group: Bed
-    name: Geheugen 2
+    name: Memory 2
   - slot: 7
     type: ble_command
     number: 8
     group: Bed
-    name: Geheugen 3
+    name: Memory 3

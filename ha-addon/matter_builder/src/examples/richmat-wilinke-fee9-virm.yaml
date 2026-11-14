@@ -1,6 +1,6 @@
-# Summary: Richmat WiLinke FEE9 met afstandsbedieningscode VIRM.
-# Kies zowel de GATT-variant als de code op de afstandsbediening.
-# Vereist de meegeleverde Matter Builder-patch.
+# Summary: Adjust the backrest and the leg section with Matter buttons. Return the bed to flat, recall Zero G, and toggle the under-bed light.
+# Setup: Use this recipe for remote code VIRM. Match the Bluetooth service and write characteristic listed below to your bed.
+# Setup: Use generic ESP32-C6 firmware 0.1.32 or later.
 device:
   name: Richmat WiLinke FEE9 VIRM
   app: generic
@@ -12,25 +12,25 @@ bluetooth_device:
   write: response
   idle: 60
   commands:
-    - label: Rug omhoog
+    - label: Backrest up
       bytes: "6E01002493"
       times: 6
       gap: 100
       finish: "6E01006EDD"
       finish_gap: 0
-    - label: Rug omlaag
+    - label: Backrest down
       bytes: "6E01002594"
       times: 6
       gap: 100
       finish: "6E01006EDD"
       finish_gap: 0
-    - label: Benen omhoog
+    - label: Legs up
       bytes: "6E01002695"
       times: 6
       gap: 100
       finish: "6E01006EDD"
       finish_gap: 0
-    - label: Benen omlaag
+    - label: Legs down
       bytes: "6E01002796"
       times: 6
       gap: 100
@@ -38,7 +38,7 @@ bluetooth_device:
       finish_gap: 0
     - label: Stop
       bytes: "6E01006EDD"
-    - label: Vlak
+    - label: Flat
       bytes: "6E010031A0"
       finish: "6E01006EDD"
       finish_gap: 50
@@ -46,7 +46,7 @@ bluetooth_device:
       bytes: "6E010045B4"
       finish: "6E01006EDD"
       finish_gap: 50
-    - label: Licht wisselen
+    - label: Toggle light
       bytes: "6E01003CAB"
       finish: "6E01006EDD"
       finish_gap: 50
@@ -56,22 +56,22 @@ connections:
     type: ble_command
     number: 1
     group: Bed
-    name: Rug omhoog
+    name: Backrest up
   - slot: 1
     type: ble_command
     number: 2
     group: Bed
-    name: Rug omlaag
+    name: Backrest down
   - slot: 2
     type: ble_command
     number: 3
     group: Bed
-    name: Benen omhoog
+    name: Legs up
   - slot: 3
     type: ble_command
     number: 4
     group: Bed
-    name: Benen omlaag
+    name: Legs down
   - slot: 4
     type: ble_command
     number: 5
@@ -81,7 +81,7 @@ connections:
     type: ble_command
     number: 6
     group: Bed
-    name: Vlak
+    name: Flat
   - slot: 6
     type: ble_command
     number: 7
@@ -91,4 +91,4 @@ connections:
     type: ble_command
     number: 8
     group: Bed
-    name: Licht wisselen
+    name: Toggle light

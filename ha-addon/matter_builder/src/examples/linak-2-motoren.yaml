@@ -1,8 +1,8 @@
-# Summary: Linak-bed met 2 motoren.
-# Het aantal motoren komt uit de bedconfiguratie, niet uit het BLE-adres.
-# Vereist de meegeleverde Matter Builder-patch.
+# Summary: Adjust the backrest and the leg section with Matter buttons. Switch the under-bed light on or off.
+# Setup: Use this recipe for a Linak bed with 2 motor assemblies. Check the number of motors on the bed.
+# Setup: Use generic ESP32-C6 firmware 0.1.32 or later.
 device:
-  name: Linak 2 motoren
+  name: Linak 2 motors
   app: generic
   board: esp32-c6
 
@@ -12,33 +12,33 @@ bluetooth_device:
   write: response
   idle: 60
   commands:
-    - label: Rug omhoog
+    - label: Backrest up
       bytes: "0B00"
       times: 4
       gap: 200
       finish: "FF00"
       finish_gap: 0
-    - label: Rug omlaag
+    - label: Backrest down
       bytes: "0A00"
       times: 4
       gap: 200
       finish: "FF00"
       finish_gap: 0
-    - label: Benen omhoog
+    - label: Legs up
       bytes: "0900"
       times: 4
       gap: 200
       finish: "FF00"
       finish_gap: 0
-    - label: Benen omlaag
+    - label: Legs down
       bytes: "0800"
       times: 4
       gap: 200
       finish: "FF00"
       finish_gap: 0
-    - label: Licht aan
+    - label: Light on
       bytes: "9200"
-    - label: Licht uit
+    - label: Light off
       bytes: "9300"
     - label: Stop
       bytes: "FF00"
@@ -48,32 +48,32 @@ connections:
     type: ble_command
     number: 1
     group: Bed
-    name: Rug omhoog
+    name: Backrest up
   - slot: 1
     type: ble_command
     number: 2
     group: Bed
-    name: Rug omlaag
+    name: Backrest down
   - slot: 2
     type: ble_command
     number: 3
     group: Bed
-    name: Benen omhoog
+    name: Legs up
   - slot: 3
     type: ble_command
     number: 4
     group: Bed
-    name: Benen omlaag
+    name: Legs down
   - slot: 4
     type: ble_command
     number: 5
     group: Bed
-    name: Licht aan
+    name: Light on
   - slot: 5
     type: ble_command
     number: 6
     group: Bed
-    name: Licht uit
+    name: Light off
   - slot: 6
     type: ble_command
     number: 7

@@ -1,5 +1,5 @@
-# Summary: Solace-bed met korte motorbewegingen.
-# Vereist de meegeleverde Matter Builder-patch.
+# Summary: Adjust the backrest and the leg section with Matter buttons. Return the bed to flat, recall Zero G, and recall one saved position.
+# Setup: Use generic ESP32-C6 firmware 0.1.32 or later.
 device:
   name: Solace
   app: generic
@@ -11,27 +11,27 @@ bluetooth_device:
   write: response
   idle: 3600
   commands:
-    - label: Rug omhoog
+    - label: Backrest up
       bytes: "FFFFFFFF05000000039701"
       finish: "FFFFFFFF0500000000D700"
       finish_gap: 950
-    - label: Rug omlaag
+    - label: Backrest down
       bytes: "FFFFFFFF0500000004D6C3"
       finish: "FFFFFFFF0500000000D700"
       finish_gap: 950
-    - label: Benen omhoog
+    - label: Legs up
       bytes: "FFFFFFFF05000000065702"
       finish: "FFFFFFFF0500000000D700"
       finish_gap: 950
-    - label: Benen omlaag
+    - label: Legs down
       bytes: "FFFFFFFF050000000796C2"
       finish: "FFFFFFFF0500000000D700"
       finish_gap: 950
-    - label: Alles vlak
+    - label: All flat
       bytes: "FFFFFFFF050000002A56DF"
     - label: Zero G
       bytes: "FFFFFFFF05000000091706"
-    - label: Geheugen 1
+    - label: Memory 1
       bytes: "FFFFFFFF050000A10A2E97"
     - label: Stop
       bytes: "FFFFFFFF0500000000D700"
@@ -41,27 +41,27 @@ connections:
     type: ble_command
     number: 1
     group: Bed
-    name: Rug omhoog
+    name: Backrest up
   - slot: 1
     type: ble_command
     number: 2
     group: Bed
-    name: Rug omlaag
+    name: Backrest down
   - slot: 2
     type: ble_command
     number: 3
     group: Bed
-    name: Benen omhoog
+    name: Legs up
   - slot: 3
     type: ble_command
     number: 4
     group: Bed
-    name: Benen omlaag
+    name: Legs down
   - slot: 4
     type: ble_command
     number: 5
     group: Bed
-    name: Alles vlak
+    name: All flat
   - slot: 5
     type: ble_command
     number: 6
@@ -71,7 +71,7 @@ connections:
     type: ble_command
     number: 7
     group: Bed
-    name: Geheugen 1
+    name: Memory 1
   - slot: 7
     type: ble_command
     number: 8

@@ -1,6 +1,6 @@
-# Summary: MotoSleep-profiel volgens de Bluetooth-naam van het bed.
-# Tekens 9 en 10 van de Bluetooth-naam: 33, 34, 43, 44, 55, 75, 97.
-# Vereist de meegeleverde Matter Builder-patch.
+# Summary: Adjust the backrest, the leg section, and the neck support with Matter buttons. Return the bed to flat.
+# Setup: Check characters 9 and 10 of the bed’s Bluetooth name. Use this recipe for 33, 34, 43, 44, 55, 75, and 97.
+# Setup: Use generic ESP32-C6 firmware 0.1.32 or later.
 device:
   name: MotoSleep 33
   app: generic
@@ -16,43 +16,43 @@ bluetooth_device:
       bytes: "2462"
       times: 5
       gap: 100
-    - label: Rug omhoog
+    - label: Backrest up
       bytes: "244B"
       times: 6
       gap: 100
       finish: "2462"
       finish_gap: 0
-    - label: Rug omlaag
+    - label: Backrest down
       bytes: "244C"
       times: 6
       gap: 100
       finish: "2462"
       finish_gap: 0
-    - label: Benen omhoog
+    - label: Legs up
       bytes: "244D"
       times: 6
       gap: 100
       finish: "2462"
       finish_gap: 0
-    - label: Benen omlaag
+    - label: Legs down
       bytes: "244E"
       times: 6
       gap: 100
       finish: "2462"
       finish_gap: 0
-    - label: Nek omhoog
+    - label: Neck up
       bytes: "2450"
       times: 6
       gap: 100
       finish: "2462"
       finish_gap: 0
-    - label: Nek omlaag
+    - label: Neck down
       bytes: "2451"
       times: 6
       gap: 100
       finish: "2462"
       finish_gap: 0
-    - label: Vlak
+    - label: Flat
       bytes: "244F"
 
 connections:
@@ -65,34 +65,34 @@ connections:
     type: ble_command
     number: 2
     group: Bed
-    name: Rug omhoog
+    name: Backrest up
   - slot: 2
     type: ble_command
     number: 3
     group: Bed
-    name: Rug omlaag
+    name: Backrest down
   - slot: 3
     type: ble_command
     number: 4
     group: Bed
-    name: Benen omhoog
+    name: Legs up
   - slot: 4
     type: ble_command
     number: 5
     group: Bed
-    name: Benen omlaag
+    name: Legs down
   - slot: 5
     type: ble_command
     number: 6
     group: Bed
-    name: Nek omhoog
+    name: Neck up
   - slot: 6
     type: ble_command
     number: 7
     group: Bed
-    name: Nek omlaag
+    name: Neck down
   - slot: 7
     type: ble_command
     number: 8
     group: Bed
-    name: Vlak
+    name: Flat

@@ -645,7 +645,7 @@ dialog.side{max-width:100vw}
       </section>
       <section class="settings-section">
         <h3>Default Wi-Fi for configuration</h3>
-        <div class="sub">Used for configuration mode and firmware updates. New devices receive this network after linking. Matter uses the network chosen when pairing.</div>
+        <div class="sub">Used for configuration mode and firmware updates. New devices receive this network after linking. Devices that use Matter over Wi-Fi can also switch to this network after a restart. Thread devices keep their Matter network.</div>
         <p class="sub" id="wifiDefaultState"></p>
         <form id="bulkWifi" class="form">
           <label class="field"><span data-t="wifiName"></span><input id="bSsid" maxlength="32" required autocomplete="off" data-1p-ignore data-lpignore="true"></label>
@@ -4288,7 +4288,7 @@ function renderWizard() {
     title = t('wLinked');
     const a = wiz.apply || {};
     body = `<p>${esc(wiz.configSpec ? t('linkedName', wiz.linkedName || '') : t('linkedText', wiz.linkedName || ''))}</p>
-      ${wiz.defaultWifi === true ? '<p class="sub">The default configuration Wi-Fi was saved on this device.</p>' : ''}
+      ${wiz.defaultWifi === true ? '<p class="sub">The default Wi-Fi was saved on this device. If it uses Matter over Wi-Fi, it can switch to this network after a restart.</p>' : ''}
       ${wiz.defaultWifi === false ? '<p class="error">Could not save the default configuration Wi-Fi. You can retry from Settings.</p>' : ''}
       ${a.state === 'applying' ? `<p class="notice">${t('applyingConfig')}</p>` : ''}
       ${a.state === 'trial' ? `<p class="notice">${t('configOnTrial', a.trial)}</p>` : ''}
@@ -4579,7 +4579,7 @@ $('#bulkWifi').onsubmit = e => {
 $('#wifiDefaultApply').onclick = async () => {
   const ssid = state.wifi_default;
   const ids = state.proxies.map(p => p.id);
-  if (await confirmAction('Apply default Wi-Fi?', `Save “${ssid}” for configuration mode on ${ids.length} linked devices.`, 'Apply to devices')) {
+  if (await confirmAction('Apply default Wi-Fi?', `Save “${ssid}” on ${ids.length} linked devices. After a restart, Matter devices on Wi-Fi can switch to this network. Make sure it is reachable from Home Assistant.`, 'Apply to devices')) {
     await updateDefaultWifi('apply', {ssid, ids});
   }
 };

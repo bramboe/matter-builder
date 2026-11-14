@@ -1318,8 +1318,8 @@ bool pin_free_for_led(int pin) {
     std::lock_guard<std::mutex> guard(lock);
     for (int i = 0; i < SLOTS; ++i) {
         for (const Slot* s : {&running[i], &draft[i]}) {
-            if (s->type == Type::none || is_ble(s->type)) continue;
-            if (s->pin == pin || (s->type == Type::sht4x && s->pin2 == pin)) return false;
+            const int pins = pin_count(s->type);
+            if (pins > 0 && (s->pin == pin || (pins == 2 && s->pin2 == pin))) return false;
         }
     }
     return true;

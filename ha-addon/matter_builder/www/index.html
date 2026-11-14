@@ -88,8 +88,8 @@ button.catalog-tip-trigger.optional{background:var(--fill);color:var(--mute);bor
   #catalogBody[data-view="list"] .card{display:grid;grid-template-columns:minmax(150px,1fr) minmax(0,2fr) auto;align-items:center;gap:20px}
 }
 .catalog-toolbar{display:flex;gap:10px 16px;flex-wrap:wrap}
-.catalog-recipe-heading{flex-wrap:wrap}
-.catalog-recipe-heading .field{min-width:min(220px,100%);background:var(--card)}
+#recipeCategories{margin:0 2px 14px}
+#recipeCategories .recipe-count{font-size:11px;font-variant-numeric:tabular-nums;color:var(--mute);background:var(--card);border-radius:20px;padding:1px 6px}
 .catalog-bed-link{margin-top:12px}
 .spec-list{display:grid;gap:8px}
 .spec-row{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);display:flex;align-items:center;gap:12px;padding:10px 12px;flex-wrap:wrap}
@@ -2295,12 +2295,14 @@ function recipeCategory(item) {
   return officialRecipeCategories.get(slug) || 'other';
 }
 
-let recipeFilter = 'all';
-function filterRecipes(category) {
-  recipeFilter = category;
+let recipeFilter = 'overview';
+$('#catalogBody').addEventListener('click', event => {
+  const button = event.target.closest('button[data-recipe-category]');
+  if (!button || button.dataset.recipeCategory === recipeFilter) return;
+  recipeFilter = button.dataset.recipeCategory;
   renderCatalog();
-  $('#recipeCategory').focus();
-}
+  $(`#recipeCategories [data-recipe-category="${recipeFilter}"]`)?.focus();
+});
 
 let shownItems = [];
 function renderCatalog() {
@@ -2315,25 +2317,29 @@ function renderCatalog() {
   const recipes = indexed.filter(([it]) => it.kind === 'recipe')
     .sort(([a], [b]) => Number(!!b.official) - Number(!!a.official) || (b.stars || 0) - (a.stars || 0));
   const categories = new Set(items.filter(it => it.kind === 'recipe').map(recipeCategory));
-  const groupBeds = recipeFilter === 'all' && !q.trim();
-  const bedCount = groupBeds ? recipes.filter(([it]) => recipeCategory(it) === 'beds').length : 0;
-  const visibleRecipes = recipes.filter(([it]) => recipeFilter === 'all'
+  const overview = recipeFilter === 'overview';
+  const groupBeds = overview && !q.trim();
+  const bedCount = recipes.filter(([it]) => recipeCategory(it) === 'beds').length;
+  const visibleRecipes = recipes.filter(([it]) => overview
     ? !groupBeds || recipeCategory(it) !== 'beds'
     : recipeCategory(it) === recipeFilter);
-  const showRecipes = catalogFilter !== 'firmware' && (categories.size || recipeFilter !== 'all');
-  const heading = showRecipes ? `<div class="section-head catalog-recipe-heading">
-    <h2>${t('recipeSection')}</h2><span class="grow"></span>
-    ${bedCount ? `<button type="button" onclick="filterRecipes('beds')">Browse bed recipes (${bedCount})</button>` : ''}
-    <label class="field"><span>Recipe category</span><select id="recipeCategory" onchange="filterRecipes(this.value)">
-      <option value="all">All categories</option>
-      ${[...recipeCategories].filter(([key]) => categories.has(key) || key === recipeFilter)
-        .map(([key, label]) => `<option value="${key}" ${recipeFilter === key ? 'selected' : ''}>${label}</option>`).join('')}
-    </select></label></div>` : '';
+  const showRecipes = catalogFilter !== 'firmware' && (categories.size || !overview);
+  const categoryButton = (key, label, count) => `<button type="button" data-recipe-category="${key}"
+    aria-pressed="${recipeFilter === key}" class="${recipeFilter === key ? 'on' : ''}">${label}
+    ${count === undefined ? '' : `<span class="recipe-count">${count}</span>`}</button>`;
+  const heading = showRecipes ? `<div class="section-head"><h2>${t('recipeSection')}</h2></div>
+    <div class="filters" id="recipeCategories" role="group" aria-label="Recipe category">
+      ${categoryButton('overview', 'Overview')}
+      ${categories.has('beds') || recipeFilter === 'beds' ? categoryButton('beds', 'Beds', bedCount) : ''}
+      ${[...recipeCategories].filter(([key]) => key !== 'beds' && (categories.has(key) || key === recipeFilter))
+        .map(([key, label]) => categoryButton(key, esc(label))).join('')}
+    </div>` : '';
+  const emptyRecipes = groupBeds && bedCount ? 'Choose Beds to see the matching recipes.' : 'No recipes match these filters.';
   setHtml($('#catalogBody'), (catalogData ? '' : `<p class="sub" style="margin:12px 2px">${t('catalogOffline')}</p>`) +
     (fw.length ? `<div class="section-head"><h2>${t('firmwareSection')}</h2></div><div class="grid">${fw.map(([it, i]) => catalogCard(it, i)).join('')}</div>` : '') +
     heading +
     (visibleRecipes.length ? `<div class="grid">${visibleRecipes.map(([it, i]) => catalogCard(it, i)).join('')}</div>` : '') +
-    (showRecipes && !visibleRecipes.length && !bedCount ? '<p class="sub">No recipes match these filters.</p>' : '') +
+    (showRecipes && !visibleRecipes.length ? `<p class="sub">${emptyRecipes}</p>` : '') +
     (!fw.length && !showRecipes ? `<div class="empty"><p class="sub">${catalogLoading ? t('checking') : t('noCatalog')}</p></div>` : ''));
 }
 

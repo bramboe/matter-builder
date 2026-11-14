@@ -6,7 +6,7 @@ Bram Boersma reserves all rights he holds in the following Matter Builder artwor
 
 - [Red and cyan symbol](ha-addon/matter_builder/www/matter-builder-rood-cyaan.svg)
 - [Logo with the Matter Builder wordmark](ha-addon/matter_builder/www/matter-builder-logo.svg)
-- [Ivory app icon](ha-addon/matter_builder/www/matter-builder-app-icoon-ivoor.svg) and its [PNG rendition](ha-addon/matter_builder/icon.png)
+- [Transparent app icon](ha-addon/matter_builder/www/matter-builder-app-icoon-transparant.svg) and its [PNG rendition](ha-addon/matter_builder/icon.png)
 
 - [Monochrome sidebar silhouette](ha-addon/matter_builder/www/matter-builder-zijbalk.svg)
 

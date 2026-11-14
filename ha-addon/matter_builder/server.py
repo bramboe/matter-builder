@@ -2692,7 +2692,7 @@ def password_problem(password):
 # ---------------------------------------------------------------- HTTP
 
 # Without a session: the login page, its assets and the login API.
-BRAND_ICON = "/matter-builder-app-icoon-ivoor.svg"
+BRAND_ICON = "/matter-builder-app-icoon-transparant.svg"
 PUBLIC_PATHS = {"/", "/index.html", "/esptool.js", "/yaml-editor.js", BRAND_ICON, "/api/auth", "/api/auth/login", "/api/auth/setup"}
 
 

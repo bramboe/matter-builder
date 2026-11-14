@@ -1,5 +1,6 @@
-# Summary: Okimat RF-FLASHLINE met afstandsbedieningscode 91244.
-# Vereist de meegeleverde Matter Builder-patch.
+# Summary: Adjust the backrest and the leg section with Matter buttons. Return the bed to flat and toggle the under-bed light.
+# Setup: Use this recipe for a RF-FLASHLINE remote with code 91244. The ESP32 pairs over Bluetooth before it discovers the control characteristic.
+# Setup: Use generic ESP32-C6 firmware 0.1.32 or later.
 device:
   name: Okimat 91244
   app: generic
@@ -16,27 +17,27 @@ bluetooth_device:
     - type: discover
       ms: 5000
   commands:
-    - label: Rug omhoog
+    - label: Backrest up
       bytes: "040200000001"
       times: 5
       gap: 100
-    - label: Rug omlaag
+    - label: Backrest down
       bytes: "040200000002"
       times: 5
       gap: 100
-    - label: Benen omhoog
+    - label: Legs up
       bytes: "040200000004"
       times: 5
       gap: 100
-    - label: Benen omlaag
+    - label: Legs down
       bytes: "040200000008"
       times: 5
       gap: 100
-    - label: Vlak
+    - label: Flat
       bytes: "0402100000AA"
       times: 50
       gap: 200
-    - label: Licht wisselen
+    - label: Toggle light
       bytes: "040200020000"
 
 connections:
@@ -44,29 +45,29 @@ connections:
     type: ble_command
     number: 1
     group: Bed
-    name: Rug omhoog
+    name: Backrest up
   - slot: 1
     type: ble_command
     number: 2
     group: Bed
-    name: Rug omlaag
+    name: Backrest down
   - slot: 2
     type: ble_command
     number: 3
     group: Bed
-    name: Benen omhoog
+    name: Legs up
   - slot: 3
     type: ble_command
     number: 4
     group: Bed
-    name: Benen omlaag
+    name: Legs down
   - slot: 4
     type: ble_command
     number: 5
     group: Bed
-    name: Vlak
+    name: Flat
   - slot: 5
     type: ble_command
     number: 6
     group: Bed
-    name: Licht wisselen
+    name: Toggle light

@@ -1,6 +1,6 @@
-# Summary: MotoSleep-profiel volgens de Bluetooth-naam van het bed.
-# Tekens 9 en 10 van de Bluetooth-naam: 31, 41.
-# Vereist de meegeleverde Matter Builder-patch.
+# Summary: Adjust the backrest with Matter buttons. Return the bed to flat, recall Zero G, recall the anti-snore preset, recall one saved position, and toggle the under-bed light.
+# Setup: Check characters 9 and 10 of the bed’s Bluetooth name. Use this recipe for 31 and 41.
+# Setup: Use generic ESP32-C6 firmware 0.1.32 or later.
 device:
   name: MotoSleep 31
   app: generic
@@ -16,27 +16,27 @@ bluetooth_device:
       bytes: "2462"
       times: 5
       gap: 100
-    - label: Rug omhoog
+    - label: Backrest up
       bytes: "244B"
       times: 6
       gap: 100
       finish: "2462"
       finish_gap: 0
-    - label: Rug omlaag
+    - label: Backrest down
       bytes: "244C"
       times: 6
       gap: 100
       finish: "2462"
       finish_gap: 0
-    - label: Vlak
+    - label: Flat
       bytes: "244F"
-    - label: Licht wisselen
+    - label: Toggle light
       bytes: "2441"
     - label: Zero G
       bytes: "2454"
-    - label: Geheugen 1
+    - label: Memory 1
       bytes: "2455"
-    - label: Anti-snurk
+    - label: Anti-snore
       bytes: "2452"
 
 connections:
@@ -49,22 +49,22 @@ connections:
     type: ble_command
     number: 2
     group: Bed
-    name: Rug omhoog
+    name: Backrest up
   - slot: 2
     type: ble_command
     number: 3
     group: Bed
-    name: Rug omlaag
+    name: Backrest down
   - slot: 3
     type: ble_command
     number: 4
     group: Bed
-    name: Vlak
+    name: Flat
   - slot: 4
     type: ble_command
     number: 5
     group: Bed
-    name: Licht wisselen
+    name: Toggle light
   - slot: 5
     type: ble_command
     number: 6
@@ -74,9 +74,9 @@ connections:
     type: ble_command
     number: 7
     group: Bed
-    name: Geheugen 1
+    name: Memory 1
   - slot: 7
     type: ble_command
     number: 8
     group: Bed
-    name: Anti-snurk
+    name: Anti-snore

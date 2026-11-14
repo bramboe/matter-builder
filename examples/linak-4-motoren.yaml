@@ -1,8 +1,8 @@
-# Summary: Linak-bed met 4 motoren.
-# Het aantal motoren komt uit de bedconfiguratie, niet uit het BLE-adres.
-# Vereist de meegeleverde Matter Builder-patch.
+# Summary: Adjust the backrest, the leg section, the headrest, and the footrest with Matter buttons.
+# Setup: Use this recipe for a Linak bed with 4 motor assemblies. Check the number of motors on the bed.
+# Setup: Use generic ESP32-C6 firmware 0.1.32 or later.
 device:
-  name: Linak 4 motoren
+  name: Linak 4 motors
   app: generic
   board: esp32-c6
 
@@ -12,49 +12,49 @@ bluetooth_device:
   write: response
   idle: 60
   commands:
-    - label: Rug omhoog
+    - label: Backrest up
       bytes: "0B00"
       times: 4
       gap: 200
       finish: "FF00"
       finish_gap: 0
-    - label: Rug omlaag
+    - label: Backrest down
       bytes: "0A00"
       times: 4
       gap: 200
       finish: "FF00"
       finish_gap: 0
-    - label: Benen omhoog
+    - label: Legs up
       bytes: "0900"
       times: 4
       gap: 200
       finish: "FF00"
       finish_gap: 0
-    - label: Benen omlaag
+    - label: Legs down
       bytes: "0800"
       times: 4
       gap: 200
       finish: "FF00"
       finish_gap: 0
-    - label: Hoofd omhoog
+    - label: Headrest up
       bytes: "0300"
       times: 4
       gap: 200
       finish: "FF00"
       finish_gap: 0
-    - label: Hoofd omlaag
+    - label: Headrest down
       bytes: "0200"
       times: 4
       gap: 200
       finish: "FF00"
       finish_gap: 0
-    - label: Voeten omhoog
+    - label: Footrest up
       bytes: "0500"
       times: 4
       gap: 200
       finish: "FF00"
       finish_gap: 0
-    - label: Voeten omlaag
+    - label: Footrest down
       bytes: "0400"
       times: 4
       gap: 200
@@ -66,39 +66,39 @@ connections:
     type: ble_command
     number: 1
     group: Bed
-    name: Rug omhoog
+    name: Backrest up
   - slot: 1
     type: ble_command
     number: 2
     group: Bed
-    name: Rug omlaag
+    name: Backrest down
   - slot: 2
     type: ble_command
     number: 3
     group: Bed
-    name: Benen omhoog
+    name: Legs up
   - slot: 3
     type: ble_command
     number: 4
     group: Bed
-    name: Benen omlaag
+    name: Legs down
   - slot: 4
     type: ble_command
     number: 5
     group: Bed
-    name: Hoofd omhoog
+    name: Headrest up
   - slot: 5
     type: ble_command
     number: 6
     group: Bed
-    name: Hoofd omlaag
+    name: Headrest down
   - slot: 6
     type: ble_command
     number: 7
     group: Bed
-    name: Voeten omhoog
+    name: Footrest up
   - slot: 7
     type: ble_command
     number: 8
     group: Bed
-    name: Voeten omlaag
+    name: Footrest down

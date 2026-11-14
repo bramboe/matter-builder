@@ -1,5 +1,4 @@
-# Summary: Reverie Simple met vaste doelposities en presets.
-# De 0%- en 100%-knoppen vragen een doelpositie aan. Stop is een afzonderlijk commando.
+# Summary: Send the backrest and leg section to 0% or 100%, stop movement, recall Flat or Zero G, and toggle the under-bed light.
 device:
   name: Reverie Simple
   app: generic
@@ -11,29 +10,29 @@ bluetooth_device:
   write: response
   idle: 3600
   commands:
-    - label: Rug 100%
+    - label: Backrest 100%
       bytes: "55516460"
       times: 2
       gap: 50
-    - label: Rug 0%
+    - label: Backrest 0%
       bytes: "55510004"
       times: 2
       gap: 50
-    - label: Benen 100%
+    - label: Legs 100%
       bytes: "55526463"
       times: 2
       gap: 50
-    - label: Benen 0%
+    - label: Legs 0%
       bytes: "55520007"
       times: 2
       gap: 50
     - label: Stop
       bytes: "55FFAA"
-    - label: Vlak
+    - label: Flat
       bytes: "550550"
     - label: Zero G
       bytes: "551540"
-    - label: Licht wisselen
+    - label: Toggle light
       bytes: "555B000E"
 
 connections:
@@ -41,22 +40,22 @@ connections:
     type: ble_command
     number: 1
     group: Bed
-    name: Rug 100%
+    name: Backrest 100%
   - slot: 1
     type: ble_command
     number: 2
     group: Bed
-    name: Rug 0%
+    name: Backrest 0%
   - slot: 2
     type: ble_command
     number: 3
     group: Bed
-    name: Benen 100%
+    name: Legs 100%
   - slot: 3
     type: ble_command
     number: 4
     group: Bed
-    name: Benen 0%
+    name: Legs 0%
   - slot: 4
     type: ble_command
     number: 5
@@ -66,7 +65,7 @@ connections:
     type: ble_command
     number: 6
     group: Bed
-    name: Vlak
+    name: Flat
   - slot: 6
     type: ble_command
     number: 7
@@ -76,4 +75,4 @@ connections:
     type: ble_command
     number: 8
     group: Bed
-    name: Licht wisselen
+    name: Toggle light

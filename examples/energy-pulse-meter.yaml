@@ -1,0 +1,11 @@
+# Summary: Measure active power and cumulative imported energy from meter pulses.
+# Setup: Use firmware with the Energy pulse meter driver. Connect a 3.3 V-compatible optical reader or isolated S0 interface to GPIO 4.
+# Setup: Set Pulses per kWh to the meter's printed value. Use Invert for rising-edge pulses. Verify the count against the meter.
+# https://next.esphome.io/cookbook/power_meter/
+device:
+  name: Energy pulse meter
+  app: generic
+  board: esp32-c6
+
+connections:
+  - { slot: 0, type: pulse_meter, pin: 4, number: 1000, name: Electricity }

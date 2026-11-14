@@ -1,0 +1,14 @@
+# Summary: Send separate Power On and Standby commands to a Yamaha RX-V861 with standard remote ID.
+# Setup: Connect a 38 kHz IR receiver to GPIO 5 and an IR LED driver to GPIO 4. Apply the recipe to start the receiver.
+# Setup: For a different NEC remote, point it at the receiver, press the desired key, and select Use followed by the received code in the IR connection. Test with Send.
+# Yamaha RX-V861 service manual, RAV350 remote control table: 7A-1D and 7A-1E.
+# https://manual.fixim.ru/doc_file/3/man3351-yamaha_dsp-ax861-se_htr-6080_rx-v861_sm.pdf
+device:
+  name: Yamaha receiver IR
+  app: generic
+  board: esp32-c6
+
+connections:
+  - { slot: 0, type: ir_send, pin: 4, code: "nec:857A:E21D", name: Power on, group: Receiver }
+  - { slot: 1, type: ir_send, pin: 4, code: "nec:857A:E11E", name: Standby, group: Receiver }
+  - { slot: 2, type: ir_receive, pin: 5, code: "nec:857A:E21D", name: Remote power key, group: Receiver }

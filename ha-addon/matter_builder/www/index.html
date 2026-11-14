@@ -726,6 +726,8 @@ const TEXT = {
   settingsYamlMissing: 'Keep every device setting in the settings: block.',
   settingsSaved: 'Saved: the device restarts with the new settings.', settingsSame: 'Nothing changed: the device keeps these settings.', saving: 'Saving…', settingsUnknown: k => `Unknown setting: ${k}`,
   settingsRange: (k, a, b) => `${k}: a whole number from ${a} to ${b}`, settingsChoice: (k, c) => `${k}: one of ${c.join(', ')}`,
+  recipeSetup: 'Wiring and setup',
+  recipeMeasurementsFirmware: 'Requires generic firmware 0.1.31 or later.',
   wConfigure: 'Configure the device', configureHelp: 'Its name and what is connected. Wi-Fi, Thread and passwords are set on the device itself.',
   startEmpty: 'Empty', fromConfigs: 'My configs', fromRecipes: 'Recipes', skipConfiguration: 'Continue without a configuration', saveToConfigs: 'Save a reusable copy',
   saveToConfigsHelp: 'Find it later under Configs → My configs to use the same connections and rules on another ESP32.',
@@ -1345,7 +1347,7 @@ function roleOf(r, d) {
   if (optOutput(r.type, d) || r.type === 'ir_send') return 'output';
   if (r.type === 'button' || r.type === 'ir_receive' || (d && d.matter === 'button')) return 'button';
   if (['contact', 'motion', 'ble_presence'].includes(r.type) || (d && ['contact', 'occupancy'].includes(d.matter))) return 'input';
-  if (r.type === 'sht4x' || r.type === 'ble_sensor' || (d && d.matter === 'climate')) return 'climate';
+  if (r.type === 'sht4x' || r.type === 'ble_sensor' || (d && ['climate', 'air_quality'].includes(d.matter))) return 'climate';
   return '';
 }
 const ROLE_OF_KIND = {press: 'button', long: 'button', active: 'input', inactive: 'input', on: 'output', off: 'output',
@@ -1449,9 +1451,9 @@ class ConfigEditor {
 
   async setMode(mode) {
     if (mode === this.mode) return;
-    if (mode === 'yaml') this.yaml = specYaml(this.name, this.rows, this.components, this.drivers, this.rules, this.cleanBle(), this.specDevice);
+    if (mode === 'yaml') this.yaml = this.text();
     else {
-      try { const s = await parseSpec(this.yaml); this.name = s.name; this.rows = s.rows; this.components = s.components; this.drivers = s.drivers; this.rules = s.rules; this.ble = s.ble; this.loadSpecDevice(s.device); this.error = ''; }
+      try { const s = await parseSpec(this.yaml); this.name = s.name; this.rows = s.rows; this.components = s.components; this.drivers = s.drivers; this.rules = s.rules; this.ble = s.ble; this.loadSpecDevice(s.device); this.originalYaml = this.yaml; this.error = ''; }
       catch (e) { this.error = t('yamlError', e.message); this.render(); return; }
     }
     this.mode = mode; this.error = '';
@@ -1632,7 +1634,7 @@ class ConfigEditor {
       ${commands}
       <button class="ed-add" onclick="${ref}.bleAddCommand()" ${b.commands.length >= BLE_COMMANDS_MAX ? 'disabled' : ''}>${icon('plus')} ${t('bleAddCommand')}</button>`;
   }
-  text() { return this.mode === 'yaml' ? this.yaml : specYaml(this.name.trim(), this.rows, this.components, this.drivers, this.rules, this.cleanBle(), this.specDevice); }
+  text() { return this.mode === 'yaml' ? this.yaml : recipeHeader(this.originalYaml) + specYaml(this.name.trim(), this.rows, this.components, this.drivers, this.rules, this.cleanBle(), this.specDevice); }
 
   // ---- rules
   slotsFor(role) { return this.rows.filter(x => roleOf(x, this.driver(x.type)) === role); }
@@ -1758,8 +1760,8 @@ class ConfigEditor {
   // Who else uses a pin; IR codes of the same kind share their LED or receiver
   usedBy(pin, slot) {
     const me = this.row(slot), type = me ? me.type : null;
-    const r = this.rows.find(x => x.slot !== slot && !isBle(x.type) && !(isIr(type) && x.type === type) &&
-      (x.pin === pin || (x.type === 'sht4x' && x.pin2 === pin)));
+    const r = this.rows.find(x => x.slot !== slot && this.pinCount(x.type) > 0 && !(isIr(type) && x.type === type) &&
+      (x.pin === pin || (this.pinCount(x.type) === 2 && x.pin2 === pin)));
     return r ? (r.name || this.title(r.type)) : null;
   }
   freePin(slot, not) { return this.pins.find(p => p !== not && !this.usedBy(p, slot)); }
@@ -1780,7 +1782,7 @@ class ConfigEditor {
     if (key === 'type') {
       if (isBle(value)) r.pin = 0;
       else if (this.usedBy(r.pin, slot) || !this.pins.includes(r.pin) || r.pin === 0 && this.usedBy(0, slot)) r.pin = this.freePin(slot);
-      if (value === 'sht4x' && (r.pin2 === r.pin || this.usedBy(r.pin2, slot) || !this.pins.includes(r.pin2))) r.pin2 = this.freePin(slot, r.pin);
+      if (this.pinCount(value) === 2 && (r.pin2 === r.pin || this.usedBy(r.pin2, slot) || !this.pins.includes(r.pin2))) r.pin2 = this.freePin(slot, r.pin);
       if (value === 'sht4x' || isIr(value) || isBle(value)) r.inverted = false;
       if (!optOutput(value, this.driver(value))) { r.power = 'off'; r.off_after = 0; }
       if (!optControl(value, this.driver(value))) r.controls = null;
@@ -1866,7 +1868,7 @@ class ConfigEditor {
     const r = {...from, slot: to, name: `${from.name || this.title(from.type)} 2`, pin: undefined, pin2: 0};
     this.rows.push(r);
     r.pin = this.freePin(to);
-    if (r.type === 'sht4x') r.pin2 = this.freePin(to, r.pin);
+    if (this.pinCount(r.type) === 2) r.pin2 = this.freePin(to, r.pin);
     this.rows.sort((a, b) => a.slot - b.slot);
     this.open.add(to);
     this.changed();
@@ -1880,7 +1882,7 @@ class ConfigEditor {
 
   // One card in YAML, like "Edit in YAML" on a Home Assistant trigger
   connectionYaml(row) {
-    const lines = specYaml('x', [row]).split('\n');
+    const lines = specYaml('x', [row], [], this.drivers).split('\n');
     return lines.slice(lines.indexOf('connections:') + 1).map(l => l.slice(2)).join('\n').trim() + '\n';
   }
   editCardYaml(slot) {
@@ -1894,7 +1896,7 @@ class ConfigEditor {
       const s = await parseSpec(text);
       if (s.rows.length !== 1) throw new Error(t('oneConnection'));
       const r = {...s.rows[0], slot, number: s.rows[0].number || 0};
-      const clash = [r.pin, r.type === 'sht4x' ? r.pin2 : null].map(p => p !== null && this.usedBy(p, slot)).find(Boolean);
+      const clash = [r.pin, this.pinCount(r.type) === 2 ? r.pin2 : null].map(p => p !== null && this.usedBy(p, slot)).find(Boolean);
       if (clash) throw new Error(t('pinTaken', clash));
       this.rows = this.rows.map(x => x.slot === slot ? r : x);
       delete this.cardYaml[slot]; this.error = '';
@@ -1908,6 +1910,10 @@ class ConfigEditor {
     if (r.type === 'contact') return l.active ? t('liveClosed') : t('liveOpen');
     if (r.type === 'motion') return l.active ? t('liveMotion') : t('liveNoMotion');
     if (r.type === 'button') return l.active ? t('livePressed') : t('liveReleased');
+    if (r.type === 'scd4x') return l.co2_ppm === undefined ? t('liveWaiting') : `${l.co2_ppm} ppm`;
+    if (r.type === 'pulse_meter') return l.energy_mwh === undefined ? t('liveWaiting')
+      : [l.power_mw === undefined ? '' : `${(l.power_mw / 1000).toFixed(1)} W`,
+         `${(l.energy_mwh / 1e6).toFixed(3)} kWh`].filter(Boolean).join(' · ');
     if (r.type === 'sht4x' || r.type === 'ble_sensor') return l.temperature === undefined ? t('liveWaiting') : `${l.temperature.toFixed(1)} °C · ${l.humidity.toFixed(0)} %`;
     if (r.type === 'ble_presence') return l.active ? t('liveHere') : t('liveAway');
     if (r.type === 'ir_receive' || r.type === 'ir_send') return '';
@@ -1916,7 +1922,7 @@ class ConfigEditor {
 
   pinSelect(slot, key, value) {
     return `<select onchange="${this.ref}.set(${slot}, '${key}', +this.value)">${this.pins.map(p => {
-      const by = this.usedBy(p, slot) || (key === 'pin2' && p === this.row(slot).pin ? t('sda') : null) || (key === 'pin' && this.row(slot).type === 'sht4x' && p === this.row(slot).pin2 ? 'SCL' : null);
+      const by = this.usedBy(p, slot) || (key === 'pin2' && p === this.row(slot).pin ? t('sda') : null) || (key === 'pin' && this.pinCount(this.row(slot).type) === 2 && p === this.row(slot).pin2 ? 'Second pin' : null);
       return `<option value="${p}" ${p === value ? 'selected' : ''} ${by && p !== value ? 'disabled' : ''}>GPIO ${p}${by && p !== value ? ` · ${esc(by)}` : ''}</option>`;
     }).join('')}</select>`;
   }
@@ -2051,11 +2057,28 @@ const catalogBoardName = chip => BOARDS[chip]?.name || String(chip).toUpperCase(
 const catalogBleRequired = it => (it.requires || []).includes('bluetooth') ||
   (it.kind === 'recipe' && rowsNeed(rowsOf(it.connections)).includes('bluetooth'));
 
+const measurementRecipe = it => it.kind === 'recipe' &&
+  (it.connections || []).some(connection => ['scd4x', 'pulse_meter'].includes(connection.type));
+
 function catalogVariants(it) {
   if (it.kind === 'firmware') return it.variants || (it.official ? localCatalogVariants(it.app, it.version) : []);
   if (it.custom_build) return [];
   const generic = catalogItems().find(x => x.official && x.kind === 'firmware' && x.app === 'mb_generic');
+  if (measurementRecipe(it) && (!generic || newer('0.1.31', generic.version))) return [];
   return (generic ? catalogVariants(generic) : []).filter(v => !catalogBleRequired(it) || BOARDS[v.chip]?.bluetooth);
+}
+
+function recipeHeader(text) {
+  return (String(text || '').match(/^# (?:Summary|Setup):[^\r\n]*/gm) || [])
+    .map(line => line + '\n').join('');
+}
+
+function recipeSetupHtml(text) {
+  const steps = [...String(text || '').matchAll(/^# Setup:[ \t]*([^\r\n]+)/gm)]
+    .map(([, step]) => step.trim()).filter(Boolean);
+  if (!steps.length) return '';
+  return `<details open style="margin:8px 0"><summary>${t('recipeSetup')}</summary>
+    <ol class="steps">${steps.map(step => `<li>${esc(step)}</li>`).join('')}</ol></details>`;
 }
 
 function catalogDescription(it) {
@@ -2084,7 +2107,8 @@ function catalogCompatibility(it, variants) {
   return {labels, boards, experimental};
 }
 
-const catalogBoardNotice = it => `<div class="sub">${t(it.custom_build ? 'catalogCustomBuild' : 'catalogBoardsUnknown')}</div>`;
+const catalogBoardNotice = it => `<div class="sub">${t(it.custom_build ? 'catalogCustomBuild'
+  : measurementRecipe(it) ? 'recipeMeasurementsFirmware' : 'catalogBoardsUnknown')}</div>`;
 
 function catalogCompatibilityHtml(it, {labels, boards, experimental}) {
   return `${protocolIcons(labels, 'item')}
@@ -2224,6 +2248,7 @@ function renderItem() {
   setHtml($('#itemBody'), `<div class="catalog-detail"><div class="head" style="display:flex;gap:10px;align-items:center"><span class="ico">${it.kind === 'firmware' ? appIcon(it.app) : icon('recipe')}</span>
       <div style="flex:1"><h2>${esc(it.title)}</h2><div class="sub">${esc(it.maker || '')}</div></div>${badge(it)}</div>
     <p>${esc(catalogDescription(it))}</p>
+    ${it.kind === 'recipe' ? recipeSetupHtml(it.text) : ''}
     <div class="compatibility">${catalogCompatibilityHtml(it, catalogCompatibility(it, variants))}</div>
     ${it.kind === 'recipe' && variants.length && rows.some(r => !isBle(r.type)) ? `<p class="sub">${t('catalogCheckPins')}</p>` : ''}
     ${installable.length ? `<label class="field"><span>${t('catalogBoardNetwork')}</span><select id="catalogVariant">
@@ -3050,8 +3075,9 @@ async function loadDeviceConfiguration(id, requestId, which, recipe) {
       if (recipe.text) { try { full = await parseSpec(recipe.text); } catch (e) {} }
       if (requestId !== deviceRequest) return;
       devEditor.load(device.io.name, (full ? full.rows : recipe.rows).map(r => ({...r})), device.io.pins, full ? full.rules : recipe.rules || [], full ? full.ble : null);
+      devEditor.originalYaml = recipe.text || devEditor.originalYaml;
       devEditor.onChange();
-      $('#recipeNotice').innerHTML = `${esc(t('fromRecipe', recipe.title))} <button class="text" onclick="saveAndApply()">${t('saveApply')}</button>`;
+      $('#recipeNotice').innerHTML = `${esc(t('fromRecipe', recipe.title))}${recipeSetupHtml(recipe.text)} <button class="text" onclick="saveAndApply()">${t('saveApply')}</button>`;
       $('#recipeNotice').hidden = false;
     }
     showManageState();
@@ -3764,9 +3790,13 @@ function bleLines(before, after) {
 function diffLines(io, rows, name, drivers = []) {
   const before = new Map(rowsFromIo(io).map(r => [r.slot, r]));
   const lines = [], groups = groupNames(rows);
+  const after = new Map(rows.map(r => [r.slot, r]));
+  for (const [slot, old] of before) {
+    const next = after.get(slot);
+    if (!next || old.type !== next.type || old.pin !== next.pin || old.pin2 !== next.pin2) lines.push(`io clear ${slot}`);
+  }
   for (const r of rows) {
     const old = before.get(r.slot);
-    before.delete(r.slot);
     if (old && JSON.stringify(old) === JSON.stringify(r)) continue;
     const d = drivers.find(x => x.type === r.type);
     const where = d ? [d.pins > 0 ? r.pin : null, d.pins > 1 ? r.pin2 : null, d.number ? `n=${r.number || 0}` : null].filter(x => x !== null).join(' ')
@@ -3777,7 +3807,6 @@ function diffLines(io, rows, name, drivers = []) {
       r.group || (old && old.group) ? `group=${groups.indexOf(r.group) + 1}` : null].filter(Boolean);
     lines.push(`io set ${r.slot} ${r.type} ${where}${r.inverted && !isIr(r.type) && !isBle(r.type) ? ' inverted' : ''}${options.map(o => ' ' + o).join('')} ${(r.name || TEXT.types[r.type]).trim().replace(/\s+/g, ' ')}`);
   }
-  for (const slot of before.keys()) lines.push(`io clear ${slot}`);
   groups.forEach((g, k) => { if ((io.groups || [])[k] !== g) lines.push(`io group ${k + 1} ${g}`); });
   if (name && name !== io.name) lines.push(`name ${name}`);
   return lines;
@@ -3850,7 +3879,7 @@ async function saveAsConfig() {
   $('#mError').hidden = true;
   try {
     const spec = await devEditor.get();
-    const r = await api('api/specs', {text: specYaml(spec.name, spec.rows, [], [], spec.rules || [], spec.ble)});
+    const r = await api('api/specs', {text: recipeHeader(devEditor.originalYaml) + specYaml(spec.name, spec.rows, [], devEditor.drivers, spec.rules || [], spec.ble)});
     if (r.error) throw new Error(r.error);
     note(t('configSaved', r.spec.name));
     invalidateSpecs();
@@ -4110,10 +4139,15 @@ async function startWith(kind, value) {
   if (kind === 'firmware') { wiz.choice = factoryChoices().find(x => x.file === value) || null; wiz.file = value; wiz.editorReady = false; wizNext(); return; }
   if (!wiz.keepFile && c) { wiz.choice = c; wiz.file = c.file; }
   wizEditor.host = null; wizEditor.board = wiz.chip;
+  wiz.setupText = '';
   if (kind === 'scratch') { wizEditor.load('My device', [], wizPins()); wizEditor.picking = true; }
-  else if (kind === 'config') await wizEditor.loadText((await api(`api/specs/${value}`)).text);
+  else if (kind === 'config') {
+    wiz.setupText = (await api(`api/specs/${value}`)).text;
+    await wizEditor.loadText(wiz.setupText);
+  }
   else {
     const r = catalogItems().filter(i => i.kind === 'recipe')[+value];
+    wiz.setupText = r.text || '';
     if (r.text) await wizEditor.loadText(r.text); else wizEditor.load(r.title, rowsOf(r.connections), wizPins());
   }
   wizEditor.pins = wizPins();
@@ -4204,6 +4238,7 @@ function renderWizard() {
     title = t('wConfigure');
     const cb = BOARDS[wiz.chip];
     body = `<div class="sub">${t('configureHelp')}</div>
+      ${recipeSetupHtml(wiz.configText || wiz.recipe?.text || wiz.setupText)}
       ${cb && cb.not.length ? `<div class="sub warnText" style="margin-top:4px">${esc(t('boardLimits', cb.name, cb.not.join(' · ')))}</div>` : ''}
       <div id="wizEditor"></div>
       <label class="check"><input type="checkbox" ${wiz.saveConfig ? 'checked' : ''} onchange="wiz.saveConfig = this.checked" aria-describedby="wSaveConfigHelp">${t('saveToConfigs')}</label>

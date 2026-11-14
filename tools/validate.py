@@ -24,7 +24,7 @@ from release_manifest import CHIPS, PACKAGE_FIELDS, as_list  # noqa: E402
 NETWORKS = {"thread", "wifi"}
 REQUIRES = {"bluetooth", "thread", "wifi"}
 KINDS = {"standard", "package"}
-MATTER = {"on_off", "dimmable", "button", "contact", "occupancy", "climate", "color"}
+MATTER = {"on_off", "dimmable", "button", "contact", "occupancy", "climate", "color", "air_quality", "electrical"}
 NAME = re.compile(r"^[a-z][a-z0-9_-]{0,39}$")
 REPO = re.compile(r"^[A-Za-z0-9-]{1,39}/[A-Za-z0-9._-]{1,100}$")
 

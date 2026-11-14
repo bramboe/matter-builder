@@ -4,6 +4,11 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <optional>
+
+#include <app/reporting/reporting.h>
+#include <data_model_provider/clusters/electrical_energy_measurement/integration.h>
+#include <data_model_provider/clusters/electrical_power_measurement/integration.h>
 
 #include <app/clusters/boolean-state-server/BooleanStateCluster.h>
 #include <app/clusters/occupancy-sensor-server/OccupancySensingCluster.h>
@@ -316,6 +321,111 @@ void on_climate(int index, int16_t, uint16_t) {
                                                          index);
 }
 
+namespace epm = ElectricalPowerMeasurement;
+namespace eem = ElectricalEnergyMeasurement;
+namespace co2 = CarbonDioxideConcentrationMeasurement;
+using chip::app::DataModel::Nullable;
+
+constexpr int64_t MAX_POWER_MW = 360000000000LL;
+constexpr int64_t MAX_ENERGY_MWH = 0x3fffffffffffffffLL;
+
+class PulsePower : public epm::Delegate {
+public:
+    int slot = 0;
+
+    epm::PowerModeEnum GetPowerMode() override { return epm::PowerModeEnum::kAc; }
+    uint8_t GetNumberOfMeasurementTypes() override { return 1; }
+    CHIP_ERROR StartAccuracyRead() override { return CHIP_NO_ERROR; }
+    CHIP_ERROR EndAccuracyRead() override { return CHIP_NO_ERROR; }
+    CHIP_ERROR GetAccuracyByIndex(uint8_t index, epm::Structs::MeasurementAccuracyStruct::Type& accuracy) override {
+        if (index != 0) return CHIP_ERROR_PROVIDER_LIST_EXHAUSTED;
+        static const epm::Structs::MeasurementAccuracyRangeStruct::Type range = {0, MAX_POWER_MW};
+        accuracy = {epm::MeasurementTypeEnum::kActivePower, false, 0, MAX_POWER_MW, {&range, 1}};
+        return CHIP_NO_ERROR;
+    }
+
+    CHIP_ERROR StartRangesRead() override { return CHIP_NO_ERROR; }
+    CHIP_ERROR EndRangesRead() override { return CHIP_NO_ERROR; }
+    CHIP_ERROR GetRangeByIndex(uint8_t, epm::Structs::MeasurementRangeStruct::Type&) override {
+        return CHIP_ERROR_PROVIDER_LIST_EXHAUSTED;
+    }
+    CHIP_ERROR StartHarmonicCurrentsRead() override { return CHIP_NO_ERROR; }
+    CHIP_ERROR EndHarmonicCurrentsRead() override { return CHIP_NO_ERROR; }
+    CHIP_ERROR GetHarmonicCurrentsByIndex(uint8_t, epm::Structs::HarmonicMeasurementStruct::Type&) override {
+        return CHIP_ERROR_PROVIDER_LIST_EXHAUSTED;
+    }
+    CHIP_ERROR StartHarmonicPhasesRead() override { return CHIP_NO_ERROR; }
+    CHIP_ERROR EndHarmonicPhasesRead() override { return CHIP_NO_ERROR; }
+    CHIP_ERROR GetHarmonicPhasesByIndex(uint8_t, epm::Structs::HarmonicMeasurementStruct::Type&) override {
+        return CHIP_ERROR_PROVIDER_LIST_EXHAUSTED;
+    }
+
+    Nullable<int64_t> GetActivePower() override {
+        const auto mw = io::measurement(slot, 0);
+        return mw < 0 ? Nullable<int64_t>() : Nullable<int64_t>(mw);
+    }
+    Nullable<int64_t> GetVoltage() override { return {}; }
+    Nullable<int64_t> GetActiveCurrent() override { return {}; }
+    Nullable<int64_t> GetReactiveCurrent() override { return {}; }
+    Nullable<int64_t> GetApparentCurrent() override { return {}; }
+    Nullable<int64_t> GetReactivePower() override { return {}; }
+    Nullable<int64_t> GetApparentPower() override { return {}; }
+    Nullable<int64_t> GetRMSVoltage() override { return {}; }
+    Nullable<int64_t> GetRMSCurrent() override { return {}; }
+    Nullable<int64_t> GetRMSPower() override { return {}; }
+    Nullable<int64_t> GetFrequency() override { return {}; }
+    Nullable<int64_t> GetPowerFactor() override { return {}; }
+    Nullable<int64_t> GetNeutralCurrent() override { return {}; }
+};
+
+PulsePower pulse_power[io::SLOTS];
+std::optional<epm::Instance> power_cluster[io::SLOTS];
+
+void update_measurement(int slot, unsigned channel) {
+    const uint16_t ep = endpoint_of[slot];
+    if (!ep) return;
+    const int64_t value = io::measurement(slot, channel);
+    if (io::matter_of(slot) == static_cast<int>(io::Matter::air_quality)) {
+        nullable<float> ppm;
+        if (value >= 0) ppm = static_cast<float>(value);
+        auto attribute = esp_matter_nullable_float(ppm);
+        attribute::update(ep, co2::Id, co2::Attributes::MeasuredValue::Id, &attribute);
+    } else if (io::matter_of(slot) == static_cast<int>(io::Matter::electrical)) {
+        if (channel == 0) {
+            MatterReportingAttributeChangeCallback(ep, epm::Id, epm::Attributes::ActivePower::Id);
+        } else if (value >= 0 && eem::GetClusterInstance(ep)) {
+            eem::Structs::EnergyMeasurementStruct::Type energy = {};
+            energy.energy = value;
+            eem::NotifyCumulativeEnergyMeasured(ep, Nullable<decltype(energy)>(energy), {});
+        }
+    }
+}
+
+void on_measurement(int slot, unsigned channel) {
+    (void) chip::DeviceLayer::PlatformMgr().ScheduleWork([](intptr_t arg) {
+        update_measurement(static_cast<int>(arg >> 1), arg & 1);
+    }, (static_cast<intptr_t>(slot) << 1) | channel);
+}
+
+void add_energy_meter(endpoint_t* ep, int slot) {
+    namespace topology = cluster::power_topology;
+    namespace power = cluster::electrical_power_measurement;
+    namespace energy = cluster::electrical_energy_measurement;
+    endpoint::electrical_sensor::config_t config;
+    config.power_topology.feature_flags = topology::feature::node_topology::get_id();
+    config.with_electrical_power_measurement().feature_flags = power::feature::alternating_current::get_id();
+    config.with_electrical_energy_measurement().feature_flags =
+        energy::feature::imported_energy::get_id() | energy::feature::cumulative_energy::get_id();
+    if (endpoint::electrical_sensor::add(ep, &config) != ESP_OK) return;
+    pulse_power[slot].slot = slot;
+    power_cluster[slot].emplace(endpoint::get_id(ep), pulse_power[slot], epm::Feature::kAlternatingCurrent,
+                               chip::BitMask<epm::OptionalAttributes>());
+    if (power_cluster[slot]->Init() != CHIP_NO_ERROR) {
+        ESP_LOGE(TAG, "Connection %d: could not register power measurements", slot);
+        power_cluster[slot].reset();
+    }
+}
+
 // ---------------------------------------------------------------- endpoints
 
 // A momentary switch with short, long and double presses
@@ -347,6 +457,20 @@ void add_climate_sensor(endpoint_t* ep) {
     endpoint::temperature_sensor::add(ep, &temperature);
     endpoint::humidity_sensor::config_t humidity;
     endpoint::humidity_sensor::add(ep, &humidity);
+}
+
+void add_co2_sensor(endpoint_t* ep) {
+    endpoint::air_quality_sensor::config_t air;
+    endpoint::air_quality_sensor::add(ep, &air);
+    namespace concentration = cluster::carbon_dioxide_concentration_measurement;
+    concentration::config_t config;
+    config.measurement_medium = static_cast<uint8_t>(co2::MeasurementMediumEnum::kAir);
+    config.feature_flags = concentration::feature::numeric_measurement::get_id();
+    config.features.numeric_measurement.min_measured_value = 0.0f;
+    config.features.numeric_measurement.max_measured_value = 40000.0f;
+    config.features.numeric_measurement.measurement_unit = static_cast<uint8_t>(co2::MeasurementUnitEnum::kPpm);
+    concentration::create(ep, &config, CLUSTER_FLAG_SERVER);
+    add_climate_sensor(ep);
 }
 
 // An Extended Color Light: on/off, level, colour temperature (2000-6500 K),
@@ -396,6 +520,12 @@ void add_device_type(endpoint_t* ep, int i) {
             break;
         case 6:
             add_color_light(ep);
+            break;
+        case static_cast<int>(io::Matter::air_quality):
+            add_co2_sensor(ep);
+            break;
+        case static_cast<int>(io::Matter::electrical):
+            add_energy_meter(ep, i);
             break;
         default:
             break;
@@ -548,6 +678,17 @@ void after_start() {
                     io::set_output(i, io::output_on(i), level.val.u8);
                 }
             }
+            if (kind == static_cast<int>(io::Matter::air_quality)) {
+                update_measurement(i, 0);
+                update_climate(i);
+            } else if (kind == static_cast<int>(io::Matter::electrical)) {
+                static const eem::Structs::MeasurementAccuracyRangeStruct::Type range = {0, MAX_ENERGY_MWH};
+                const eem::Structs::MeasurementAccuracyStruct::Type accuracy = {
+                    eem::MeasurementTypeEnum::kElectricalEnergy, true, 0, MAX_ENERGY_MWH, {&range, 1}
+                };
+                (void) eem::SetMeasurementAccuracy(endpoint_of[i], accuracy);
+                update_measurement(i, 1);
+            }
             // Inputs may have changed before Matter listened (Bluetooth starts first)
             if (kind == 3) {
                 set_contact(endpoint_of[i], io::input_active(i));
@@ -594,6 +735,7 @@ void start() {
     listener.input = on_input;
     listener.button = on_button;
     listener.climate = on_climate;
+    listener.measurement = on_measurement;
     listener.output = on_output;
     io::set_listener(listener);
     rules::Listener rule_listener = {};

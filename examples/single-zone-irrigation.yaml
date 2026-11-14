@@ -1,0 +1,19 @@
+# Summary: Water one zone on demand or on a schedule, with a ten-minute shutoff.
+# Setup: Connect a relay for a normally closed valve to GPIO 4. Connect a momentary button between GPIO 5 and GND.
+# Setup: Check the device clock and time zone before enabling Morning watering in Rules.
+# https://esphome.io/components/sprinkler/
+device:
+  name: Single-zone irrigation
+  app: generic
+  board: esp32-c6
+
+connections:
+  - { slot: 0, type: relay, pin: 4, off_after: 600, name: Watering valve }
+  - { slot: 1, type: button, pin: 5, controls: 0, name: Start or stop }
+
+rules:
+  - name: Morning watering
+    enabled: false
+    when: { time: "07:00" }
+    do:
+      - on: 0

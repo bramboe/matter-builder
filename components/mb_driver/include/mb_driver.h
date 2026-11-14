@@ -28,7 +28,7 @@ constexpr uint8_t IR_NEC = 1;
 // What a connection of this type is in Matter (and so in Home Assistant).
 // color: an Extended Color Light (on/off, level, hue and saturation, xy and
 // color temperature), e.g. an addressable LED strip
-enum class Matter : uint8_t { on_off, dimmable, button, contact, occupancy, climate, color };
+enum class Matter : uint8_t { on_off, dimmable, button, contact, occupancy, climate, color, air_quality, electrical };
 
 // The colour a controller set, as Matter keeps it: the mode says which of the
 // values counts (the others are what they were before)
@@ -59,6 +59,7 @@ void register_driver(const Driver& driver);
 void report_input(int slot, bool active);         // contact closed, occupancy
 void report_press(int slot);                      // a short press of a button
 void report_climate(int slot, int16_t centi_celsius, uint16_t centi_percent);
+void report_measurement(int slot, unsigned channel, int64_t value);
 void report_output(int slot, bool on);            // an output that changed by itself
 
 uint16_t number_of(const Slot& s);                // the setting

@@ -39,9 +39,11 @@ struct Listener {
     void (*output)(int slot, bool on);                        // an output that changed by itself
     void (*button)(int slot, Press press, uint8_t count);     // count: presses for multi_complete
     void (*climate)(int slot, int16_t centi_celsius, uint16_t centi_percent);
+    void (*measurement)(int slot, unsigned channel);
 };
 
 void set_listener(const Listener& listener);
+int64_t measurement(int slot, unsigned channel);
 
 // "nec:00FF:A25D" and "AA:BB:CC:DD:EE:FF" into a slot's data, and back
 bool parse_code(const char* text, uint8_t* data);

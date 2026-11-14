@@ -1,0 +1,11 @@
+# Summary: Report room occupancy from an LD2410 radar using its OUT pin.
+# Setup: Connect the LD2410 OUT pin to GPIO 4 and join the grounds. Power the radar according to its board's pinout.
+# Setup: Configure OUT to go high when a target is present. Test by sitting still, then leaving the room.
+# https://esphome.io/components/sensor/ld2410/#out-pin
+device:
+  name: mmWave presence
+  app: generic
+  board: esp32-c6
+
+connections:
+  - { slot: 0, type: motion, pin: 4, name: Room occupancy }

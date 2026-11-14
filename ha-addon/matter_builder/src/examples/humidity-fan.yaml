@@ -1,0 +1,22 @@
+# Summary: Run a fan locally when humidity rises above 70%, and stop it below 60%.
+# Setup: Connect SHT4x SDA to GPIO 6 and SCL to GPIO 7. Connect the fan relay input to GPIO 4.
+# Setup: Check the humidity reading and test the relay. Edit the two thresholds in Rules.
+# https://esphome.io/components/sensor/sht4x/
+device:
+  name: Humidity fan
+  app: generic
+  board: esp32-c6
+
+connections:
+  - { slot: 0, type: sht4x, pin: 6, scl: 7, name: Bathroom climate }
+  - { slot: 1, type: relay, pin: 4, name: Fan }
+
+rules:
+  - name: High humidity
+    when: { humid_above: 0, value: 70 }
+    do:
+      - on: 1
+  - name: Humidity recovered
+    when: { humid_below: 0, value: 60 }
+    do:
+      - off: 1

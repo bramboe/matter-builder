@@ -146,6 +146,22 @@ button.catalog-tip-trigger.optional{background:var(--fill);color:var(--mute);bor
   .catalog-sheet-footer button{flex:1;min-height:44px}
   #clearCatalogFilters{background:var(--card);box-shadow:inset 0 0 0 1px var(--control)}
   #catalogBody .catalog-description{display:none}
+  .bed-family-title{margin:0 0 4px;font-size:22px;font-weight:600}
+  .bed-family-meta{margin:0 0 14px}
+  .bed-family-back{margin:0 0 16px;padding-inline-start:0}
+  .bed-family-list{background:var(--card);border:1px solid var(--line);border-radius:var(--radius)}
+  .bed-family-entry{
+    width:100%;min-height:60px;display:grid;grid-template-columns:auto minmax(0,1fr) auto;
+    text-align:start;gap:12px;padding:9px 12px;background:transparent;border-radius:0;white-space:normal;
+  }
+  .bed-family-entry+.bed-family-entry{border-top:1px solid var(--line)}
+  .bed-family-entry:first-child{border-top-left-radius:var(--radius);border-top-right-radius:var(--radius)}
+  .bed-family-entry:last-child{border-bottom-left-radius:var(--radius);border-bottom-right-radius:var(--radius)}
+  .bed-family-entry .ico{width:32px;height:32px}
+  .bed-family-entry b,.bed-family-entry .sub{display:block}
+  .bed-family-entry .sub{margin-top:2px}
+  .bed-family-entry .chev{transform:rotate(-45deg);margin:0 4px}
+  #catalogBody[data-view="list"] .bed-recipe-summary{display:none}
   #catalogBody[data-view="list"] .grid{gap:0;background:var(--card);border-radius:var(--radius)}
   #catalogBody[data-view="list"] .card{
     display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;
@@ -2381,12 +2397,26 @@ const officialRecipeCategories = new Map([
   ['shed', 'outdoors'], ['single-zone-irrigation', 'outdoors'], ['yamaha-receiver-ir', 'audio'],
 ]);
 
+const bedRecipeFamilies = new Map([
+  ['keeson', 'Keeson'], ['leggett-platt', 'Leggett & Platt'], ['linak', 'Linak'],
+  ['motosleep', 'MotoSleep'], ['octo', 'Octo'], ['okimat', 'OKIMAT'], ['reverie', 'Reverie'],
+  ['richmat', 'Richmat'], ['solace', 'Solace'],
+]);
+const otherBedRecipes = 'other';
+
+function officialBedFamily(item) {
+  if (!item.official) return undefined;
+  const slug = item.id?.split('/').at(-1) || '';
+  return [...bedRecipeFamilies.keys()].find(key => key === 'octo'
+    ? slug.startsWith('octo-bed-') : slug === key || slug.startsWith(key + '-'));
+}
+
 function recipeCategory(item) {
   const declared = String(item.text || '').match(/^# Category:[ \t]*([a-z]+)[ \t]*\r?$/im)?.[1].toLowerCase();
   if (recipeCategories.has(declared)) return declared;
   if (item.official) {
     const slug = item.id?.split('/').at(-1);
-    if (/^(?:keeson-|leggett-platt-|linak-|motosleep-|octo-bed-|okimat-|reverie-|richmat-|solace(?:-|$))/.test(slug)) return 'beds';
+    if (officialBedFamily(item)) return 'beds';
     if (officialRecipeCategories.has(slug)) return officialRecipeCategories.get(slug);
   }
   const types = (item.connections || []).map(connection => connection.type).filter(type => type !== 'button');
@@ -2403,7 +2433,7 @@ const catalogFilterDialog = $('#catalogFilterDialog');
 const catalogFilterIcon = $('#settingsBtn svg').cloneNode(true);
 catalogFilterIcon.setAttribute('aria-hidden', 'true');
 $('#openCatalogFilters').append(catalogFilterIcon);
-let mobileFilters = {...defaultMobileFilters}, draftMobileFilters;
+let mobileFilters = {...defaultMobileFilters}, draftMobileFilters, selectedBedFamily = '';
 const sortOptions = [
   ['recommended', 'Recommended'], ['az', 'Name A–Z'], ['za', 'Name Z–A'], ['stars', 'Most GitHub stars'],
 ];
@@ -2472,6 +2502,7 @@ $('#catalogFilterForm').onchange = ({target}) => {
 $('#catalogFilterForm').onsubmit = event => {
   event.preventDefault();
   mobileFilters = draftMobileFilters;
+  if (mobileFilters.category !== 'beds') selectedBedFamily = '';
   catalogFilterDialog.close();
   renderCatalog();
 };
@@ -2480,11 +2511,47 @@ mobileCatalog.addEventListener('change', () => {
   if (state && tab === 'catalog') renderCatalog();
 });
 $('#catalogBody').addEventListener('click', event => {
+  const familyButton = event.target.closest('[data-bed-family]');
+  if (familyButton) {
+    const previousFamily = selectedBedFamily;
+    selectedBedFamily = familyButton.dataset.bedFamily;
+    renderCatalog();
+    const target = selectedBedFamily ? $('#bedFamilyHeading') :
+      $(`[data-bed-family="${CSS.escape(previousFamily)}"]`) || $('#bedFamilyHeading');
+    target?.focus();
+    return;
+  }
   const button = event.target.closest('button[data-recipe-category]');
   if (!button || button.dataset.recipeCategory === recipeFilter) return;
   recipeFilter = button.dataset.recipeCategory;
   renderCatalog();
 });
+
+function mobileBedRecipes(recipes) {
+  const groups = new Map();
+  for (const recipe of recipes) {
+    const family = officialBedFamily(recipe.it) || otherBedRecipes;
+    if (!groups.has(family)) groups.set(family, []);
+    groups.get(family).push(recipe);
+  }
+  const families = [...bedRecipeFamilies, [otherBedRecipes, 'Other beds']].filter(([key]) => groups.has(key));
+  const selected = families.find(([key]) => key === selectedBedFamily);
+  const entry = (attrs, label, detail, detailClass = '') => `<button type="button" class="bed-family-entry" ${attrs}>
+    <span class="ico" aria-hidden="true">${icon('bed')}</span>
+    <span><b>${esc(label)}</b><span class="sub ${detailClass}">${esc(detail)}</span></span>
+    <span class="chev" aria-hidden="true"></span></button>`;
+  const count = n => `${n} ${n === 1 ? 'recipe' : 'recipes'}`;
+  const models = selected && groups.get(selected[0]);
+  const rows = models
+    ? models.map(({it, i}) => entry(`data-item="${esc(it.id || it.source + '/' + it.title)}" onclick="openItem(${i}, this)"`,
+      it.title, catalogDescription(it), 'bed-recipe-summary'))
+    : families.map(([key, label]) => entry(`data-bed-family="${key}"`, label, count(groups.get(key).length)));
+  return {count: models?.length ?? recipes.length, html: `
+    ${selected ? '<button type="button" class="text bed-family-back" data-bed-family="">← All bed families</button>' : ''}
+    <h2 class="bed-family-title" id="bedFamilyHeading" tabindex="-1">${esc(selected?.[1] || 'Beds')}</h2>
+    ${selected ? '' : `<p class="sub bed-family-meta">${families.length} ${families.length === 1 ? 'family' : 'families'}</p>`}
+    <div class="bed-family-list">${rows.join('')}</div>`};
+}
 
 let shownItems = [];
 function renderCatalog() {
@@ -2500,6 +2567,7 @@ function renderCatalog() {
     .map(([it, i]) => ({it, i, category: recipeCategory(it)}))
     .sort((a, b) => Number(a.category === 'beds') - Number(b.category === 'beds') ||
       Number(!!b.it.official) - Number(!!a.it.official) || (b.it.stars || 0) - (a.it.stars || 0));
+  let bedRecipes;
   if (mobile) {
     const byName = (a, b) => a.title.localeCompare(b.title, 'en', {numeric: true});
     const sort = {
@@ -2510,8 +2578,10 @@ function renderCatalog() {
       fw.sort(([a], [b]) => sort(a, b));
       recipes.sort((a, b) => sort(a.it, b.it));
     }
-    const count = shownItems.length;
-    const label = catalogLoading && !count ? 'Loading catalog…' : `${count} ${count === 1 ? 'result' : 'results'}`;
+    if (filters.category === 'beds' && !q && recipes.length) bedRecipes = mobileBedRecipes(recipes);
+    const count = bedRecipes?.count ?? shownItems.length;
+    const noun = bedRecipes ? (count === 1 ? 'recipe' : 'recipes') : (count === 1 ? 'result' : 'results');
+    const label = catalogLoading && !count ? 'Loading catalog…' : `${count} ${noun}`;
     if ($('#catalogResultCount').textContent !== label) $('#catalogResultCount').textContent = label;
     const active = Object.keys(defaultMobileFilters).filter(key => filters[key] !== defaultMobileFilters[key]).length;
     $('#catalogFilterLabel').textContent = active ? `Filter and sort (${active})` : 'Filter and sort';
@@ -2537,8 +2607,7 @@ function renderCatalog() {
     ? document.activeElement.dataset.recipeCategory : null;
   setHtml($('#catalogBody'), (catalogData ? '' : `<p class="sub" style="margin:12px 2px">${t('catalogOffline')}</p>`) +
     (fw.length ? `<div class="section-head"><h2>${t('firmwareSection')}</h2></div><div class="grid">${fw.map(([it, i]) => catalogCard(it, i)).join('')}</div>` : '') +
-    heading +
-    (visibleRecipes.length ? `<div class="grid">${visibleRecipes.map(({it, i}) => catalogCard(it, i)).join('')}</div>` : '') +
+    (bedRecipes?.html ?? (heading + (visibleRecipes.length ? `<div class="grid">${visibleRecipes.map(({it, i}) => catalogCard(it, i)).join('')}</div>` : ''))) +
     (showRecipes && !visibleRecipes.length ? '<p class="sub">No recipes match these filters.</p>' : '') +
     (!fw.length && !showRecipes ? `<div class="empty"><p class="sub">${catalogLoading ? t('checking') : t('noCatalog')}</p></div>` : ''));
   const nextBar = $('#recipeCategories');

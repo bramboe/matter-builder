@@ -104,14 +104,37 @@ button.catalog-tip-trigger.optional{background:var(--fill);color:var(--mute);bor
 .catalog-filter .seg{flex-wrap:wrap;max-width:100%;margin:0;border:1px solid var(--line)}
 .catalog-filter .seg button.on{background:var(--chip)}
 #recipeCategories{margin:0 2px 14px}
+#openCatalogFilters,#catalogResultCount{display:none}
 @media (max-width:759px){
-  .catalog-filter-strip,#recipeCategories{
-    flex-wrap:nowrap;max-width:100%;overflow-x:auto;padding:4px;
+  .catalog-toolbar{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:14px 8px}
+  .catalog-toolbar .catalog-filter-strip,#catalogBody #recipeCategories{display:none}
+  #openCatalogFilters{display:inline-flex;grid-column:1/-1;justify-self:start;min-height:36px}
+  #catalogResultCount{display:block}
+  #catalogFilterDialog{
+    position:fixed;inset:auto 0 0;margin:0;width:100%;height:min(720px,calc(100dvh - 40px));
+    max-height:calc(100dvh - 40px);border-radius:24px 24px 0 0;
   }
-  .catalog-filter-strip{flex-basis:100%}
-  .catalog-filter-strip .catalog-filter{flex:none}
-  .catalog-filter-strip .seg{flex-wrap:nowrap;max-width:none}
-  .catalog-filter-strip button,#recipeCategories button{flex:none;min-height:36px}
+  #catalogFilterDialog .dlg-head{
+    display:grid;grid-template-columns:40px 1fr 40px;text-align:center;padding:14px;min-height:64px;
+  }
+  #catalogFilterTitle{grid-column:2}
+  #catalogFilterDialog .dlg-body{padding:0;min-height:0;overscroll-behavior:contain}
+  .catalog-sheet-group{border-bottom:1px solid var(--line)}
+  .catalog-sheet-group summary{
+    list-style:none;display:flex;align-items:center;justify-content:space-between;
+    gap:12px;padding:12px 20px;min-height:64px;cursor:pointer;
+  }
+  .catalog-sheet-group summary::-webkit-details-marker{display:none}
+  .catalog-sheet-group[open] summary .chev{transform:rotate(-135deg);margin-bottom:0}
+  .catalog-sheet-group summary .sub{display:block}
+  .catalog-sheet-options{padding:0 20px 10px}
+  .catalog-sheet-options label{display:flex;align-items:center;gap:12px;min-height:44px;cursor:pointer}
+  .catalog-sheet-options input{accent-color:var(--primary);width:18px;height:18px;margin:0;flex:none}
+  .catalog-sheet-footer{
+    display:flex;gap:10px;padding:14px 20px max(14px,env(safe-area-inset-bottom));border-top:1px solid var(--line);
+  }
+  .catalog-sheet-footer button{flex:1;min-height:44px}
+  #clearCatalogFilters{background:var(--card);box-shadow:inset 0 0 0 1px var(--control)}
   #catalogBody .catalog-description{display:none}
   #catalogBody[data-view="list"] .grid{gap:0;background:var(--card);border-radius:var(--radius)}
   #catalogBody[data-view="list"] .card{
@@ -535,6 +558,7 @@ dialog.side{max-width:100vw}
 <!-- Catalog -->
 <section id="catalogTab" hidden>
   <div class="catalog-toolbar">
+    <button type="button" id="openCatalogFilters" aria-haspopup="dialog"><span id="catalogFilterLabel">Filter and sort</span></button>
     <div class="catalog-filter-strip">
       <div class="catalog-filter">
         <span class="sub" id="catalogTypeLabel" data-t="catalogType"></span>
@@ -553,6 +577,7 @@ dialog.side{max-width:100vw}
         </div>
       </div>
     </div>
+    <span id="catalogResultCount" role="status"></span>
     <div class="filters" id="catalogView" role="group" aria-label="Catalog view">
       <button type="button" data-view="cards" data-t="viewCards" aria-pressed="true" class="on"></button>
       <button type="button" data-view="list" data-t="viewList" aria-pressed="false"></button>
@@ -601,6 +626,20 @@ dialog.side{max-width:100vw}
   </div>
   <pre id="jobLog" hidden></pre>
 </div>
+
+<dialog id="catalogFilterDialog" aria-labelledby="catalogFilterTitle">
+  <form class="dlg" id="catalogFilterForm">
+    <div class="dlg-head">
+      <h2 id="catalogFilterTitle">Filter and sort</h2>
+      <button type="button" class="icon" id="closeCatalogFilters" aria-label="Close" autofocus></button>
+    </div>
+    <div class="dlg-body" id="catalogFilterGroups"></div>
+    <div class="catalog-sheet-footer">
+      <button type="button" id="clearCatalogFilters">Clear all</button>
+      <button type="submit" class="pri" id="applyCatalogFilters">View results</button>
+    </div>
+  </form>
+</dialog>
 
 <!-- Device panel -->
 <dialog class="side" id="deviceDlg" aria-labelledby="dName">
@@ -2345,6 +2384,88 @@ function recipeCategory(item) {
 }
 
 let recipeFilter = 'all';
+const mobileCatalog = matchMedia('(max-width:759px)');
+const defaultMobileFilters = {sort: 'recommended', category: 'all', type: 'all', source: 'any'};
+const catalogFilterDialog = $('#catalogFilterDialog');
+const catalogFilterIcon = $('#settingsBtn svg').cloneNode(true);
+catalogFilterIcon.setAttribute('aria-hidden', 'true');
+$('#openCatalogFilters').append(catalogFilterIcon);
+let mobileFilters = {...defaultMobileFilters}, draftMobileFilters;
+const sortOptions = [
+  ['recommended', 'Recommended'], ['az', 'Name A–Z'], ['za', 'Name Z–A'], ['stars', 'Most GitHub stars'],
+];
+
+function catalogMatches(items, {type, source, category}, query) {
+  return items.filter(it => (type === 'all' || it.kind === type) &&
+    (source === 'any' || (source === 'official') === !!it.official) &&
+    (category === 'all' || (it.kind === 'recipe' && recipeCategory(it) === category)) &&
+    (!query || catalogSearchText(it).includes(query)));
+}
+
+function updateCatalogSheet() {
+  const filters = draftMobileFilters;
+  const items = catalogItems();
+  const query = catalogQuery.trim().toLowerCase();
+  const categoryCounts = new Map();
+  for (const it of catalogMatches(items, {...filters, category: 'all'}, query)) {
+    if (it.kind !== 'recipe') continue;
+    const key = recipeCategory(it);
+    categoryCounts.set(key, (categoryCounts.get(key) || 0) + 1);
+  }
+  for (const row of $('#catalogFilterGroups').querySelectorAll('details')) {
+    const key = row.dataset.group;
+    row.hidden = key === 'category' && filters.type === 'firmware';
+    for (const input of row.querySelectorAll('input')) {
+      input.checked = filters[key] === input.value;
+      if (input.checked) row.querySelector('[data-summary]').textContent = input.nextElementSibling.textContent;
+      const count = input.parentElement.querySelector('[data-count]');
+      if (count) count.textContent = categoryCounts.get(input.value) || 0;
+    }
+  }
+  const count = catalogMatches(items, filters, query).length;
+  $('#applyCatalogFilters').textContent = `View ${count} ${count === 1 ? 'result' : 'results'}`;
+}
+
+$('#openCatalogFilters').onclick = () => {
+  if (!mobileCatalog.matches) return;
+  draftMobileFilters = {...mobileFilters};
+  const categories = new Set(catalogItems().filter(it => it.kind === 'recipe').map(recipeCategory));
+  const groups = [
+    ['sort', 'Sort', sortOptions],
+    ['category', 'Category', [['all', 'All categories'], ...[...recipeCategories].filter(([key]) => categories.has(key) || draftMobileFilters.category === key)]],
+    ['type', 'Type', [['all', 'All types'], ['firmware', 'Firmware'], ['recipe', 'Recipes']]],
+    ['source', 'Source', [['any', 'Any source'], ['official', 'Official'], ['community', 'Community']]],
+  ];
+  $('#catalogFilterGroups').innerHTML = groups.map(([key, title, options]) => `<details class="catalog-sheet-group" data-group="${key}">
+    <summary><span><b>${title}</b><span class="sub" data-summary></span></span><span class="chev" aria-hidden="true"></span></summary>
+    <div class="catalog-sheet-options" role="group" aria-label="${title}">
+      ${options.map(([value, label]) => `<label><input type="radio" name="${key}" value="${value}"><span>${esc(label)}</span>
+        ${key === 'category' && value !== 'all' ? '<span class="sub" data-count></span>' : ''}</label>`).join('')}
+    </div></details>`).join('');
+  updateCatalogSheet();
+  catalogFilterDialog.showModal();
+  $('#catalogFilterGroups').scrollTop = 0;
+};
+$('#closeCatalogFilters').onclick = () => catalogFilterDialog.close();
+$('#clearCatalogFilters').onclick = () => {
+  draftMobileFilters = {...defaultMobileFilters};
+  updateCatalogSheet();
+};
+$('#catalogFilterForm').onchange = ({target}) => {
+  draftMobileFilters[target.name] = target.value;
+  if (draftMobileFilters.type === 'firmware') draftMobileFilters.category = 'all';
+  updateCatalogSheet();
+};
+$('#catalogFilterForm').onsubmit = event => {
+  event.preventDefault();
+  mobileFilters = draftMobileFilters;
+  catalogFilterDialog.close();
+  renderCatalog();
+};
+mobileCatalog.addEventListener('change', () => {
+  if (catalogFilterDialog.open) catalogFilterDialog.close();
+  if (state && tab === 'catalog') renderCatalog();
+});
 $('#catalogBody').addEventListener('click', event => {
   const button = event.target.closest('button[data-recipe-category]');
   if (!button || button.dataset.recipeCategory === recipeFilter) return;
@@ -2357,24 +2478,41 @@ function renderCatalog() {
   if (!catalogData && !catalogLoading && !recipes) loadCatalog();
   const q = catalogQuery.trim().toLowerCase();
   const items = catalogItems();
-  shownItems = items.filter(it => (catalogFilter === 'all' || it.kind === catalogFilter) &&
-    (sourceFilter === 'any' || (sourceFilter === 'official') === !!it.official) &&
-    (!q || catalogSearchText(it).includes(q)));
+  const mobile = mobileCatalog.matches;
+  const filters = mobile ? mobileFilters : {type: catalogFilter, source: sourceFilter, category: 'all'};
+  shownItems = catalogMatches(items, filters, q);
   const indexed = shownItems.map((it, i) => [it, i]);
   const fw = indexed.filter(([it]) => it.kind === 'firmware');
   const recipes = indexed.filter(([it]) => it.kind === 'recipe')
     .map(([it, i]) => ({it, i, category: recipeCategory(it)}))
     .sort((a, b) => Number(a.category === 'beds') - Number(b.category === 'beds') ||
       Number(!!b.it.official) - Number(!!a.it.official) || (b.it.stars || 0) - (a.it.stars || 0));
+  if (mobile) {
+    const byName = (a, b) => a.title.localeCompare(b.title, 'en', {numeric: true});
+    const sort = {
+      az: byName, za: (a, b) => byName(b, a),
+      stars: (a, b) => (b.stars || 0) - (a.stars || 0) || byName(a, b),
+    }[filters.sort];
+    if (sort) {
+      fw.sort(([a], [b]) => sort(a, b));
+      recipes.sort((a, b) => sort(a.it, b.it));
+    }
+    const count = shownItems.length;
+    const label = catalogLoading && !count ? 'Loading catalog…' : `${count} ${count === 1 ? 'result' : 'results'}`;
+    if ($('#catalogResultCount').textContent !== label) $('#catalogResultCount').textContent = label;
+    const active = Object.keys(defaultMobileFilters).filter(key => filters[key] !== defaultMobileFilters[key]).length;
+    $('#catalogFilterLabel').textContent = active ? `Filter and sort (${active})` : 'Filter and sort';
+    if (catalogFilterDialog.open) updateCatalogSheet();
+  }
   const categories = new Set(items.filter(it => it.kind === 'recipe').map(recipeCategory));
   const counts = new Map();
   for (const {category} of recipes) counts.set(category, (counts.get(category) || 0) + 1);
-  const visibleRecipes = recipeFilter === 'all' ? recipes : recipes.filter(recipe => recipe.category === recipeFilter);
-  const showRecipes = catalogFilter !== 'firmware' && (categories.size || recipeFilter !== 'all');
+  const visibleRecipes = mobile || recipeFilter === 'all' ? recipes : recipes.filter(recipe => recipe.category === recipeFilter);
+  const showRecipes = mobile ? recipes.length > 0 : catalogFilter !== 'firmware' && (categories.size || recipeFilter !== 'all');
   const categoryButton = (key, label, count) => `<button type="button" data-recipe-category="${key}"
     aria-pressed="${recipeFilter === key}" class="${recipeFilter === key ? 'on' : ''}">${esc(label)}
     <span class="recipe-count">${count}</span></button>`;
-  const heading = showRecipes ? `<div class="section-head"><h2>${t('recipeSection')}</h2></div>
+  const heading = showRecipes && mobile ? `<div class="section-head"><h2>${t('recipeSection')}</h2></div>` : showRecipes ? `<div class="section-head"><h2>${t('recipeSection')}</h2></div>
     <div class="filters" id="recipeCategories" role="group" aria-label="Recipe category">
       ${categoryButton('all', 'All recipes', recipes.length)}
       ${[...recipeCategories].filter(([key]) => categories.has(key) || key === recipeFilter)
@@ -4971,7 +5109,7 @@ document.addEventListener('click', e => {
   $$('.catalog-tip-trigger[aria-expanded="true"]').forEach(button => showCatalogTip(button, false));
 });
 
-for (const [sel, ic] of [['#lClose', 'close'], ['#dClose', 'close'], ['#wClose', 'close'], ['#sClose', 'close'], ['#iClose', 'close'], ['#shClose', 'close'], ['#emptyIcon', 'chip']]) $(sel).innerHTML = icon(ic);
+for (const [sel, ic] of [['#closeCatalogFilters', 'close'], ['#lClose', 'close'], ['#dClose', 'close'], ['#wClose', 'close'], ['#sClose', 'close'], ['#iClose', 'close'], ['#shClose', 'close'], ['#emptyIcon', 'chip']]) $(sel).innerHTML = icon(ic);
 // Password fields can offer a reveal button. Submitting hides them again.
 const EYE = 'M12,9A3,3 0 0,0 9,12A3,3 0 0,0 12,15A3,3 0 0,0 15,12A3,3 0 0,0 12,9M12,17A5,5 0 0,1 7,12A5,5 0 0,1 12,7A5,5 0 0,1 17,12A5,5 0 0,1 12,17M12,4.5C7,4.5 2.73,7.61 1,12C2.73,16.39 7,19.5 12,19.5C17,19.5 21.27,16.39 23,12C21.27,7.61 17,4.5 12,4.5Z';
 const EYE_OFF = 'M11.83,9L15,12.16C15,12.11 15,12.05 15,12A3,3 0 0,0 12,9C11.94,9 11.89,9 11.83,9M7.53,9.8L9.08,11.35C9.03,11.56 9,11.77 9,12A3,3 0 0,0 12,15C12.22,15 12.44,14.97 12.65,14.92L14.2,16.47C13.53,16.8 12.79,17 12,17A5,5 0 0,1 7,12C7,11.21 7.2,10.47 7.53,9.8M2,4.27L4.28,6.55L4.73,7C3.08,8.3 1.78,10 1,12C2.73,16.39 7,19.5 12,19.5C13.55,19.5 15.03,19.2 16.38,18.66L16.81,19.08L19.73,22L21,20.73L3.27,3M12,7A5,5 0 0,1 17,12C17,12.64 16.87,13.26 16.64,13.82L19.57,16.75C21.07,15.5 22.27,13.86 23,12C21.27,7.61 17,4.5 12,4.5C10.6,4.5 9.26,4.75 8,5.2L10.17,7.35C10.74,7.13 11.35,7 12,7Z';

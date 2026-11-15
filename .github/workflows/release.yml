@@ -247,7 +247,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes "Signed firmware for the ESP32-C6 (Thread or Wi-Fi) and the classic ESP32 (Wi-Fi), and untested builds for the ESP32-S3, C3 and C5 (Wi-Fi)" \
-            firmware/*.bin firmware/factory/*.bin firmware/manifest.json firmware/manifest.json.sig
+          notes="Signed firmware for the ESP32-C6 (Thread or Wi-Fi) and the classic ESP32 (Wi-Fi), and untested builds for the ESP32-S3, C3 and C5 (Wi-Fi)"
+          files="firmware/*.bin firmware/factory/*.bin firmware/manifest.json firmware/manifest.json.sig"
+          # The tag may come with a release made on GitHub's page (that is how a
+          # tag is made in the browser): then the files go into that one
+          if gh release view "${GITHUB_REF_NAME}" > /dev/null 2>&1; then
+            gh release edit "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes "$notes" --draft=false
+            gh release upload "${GITHUB_REF_NAME}" $files --clobber
+          else
+            gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes "$notes" $files
+          fi
           # A release made with this token starts no other workflow by itself
           gh workflow run catalog.yml --ref main

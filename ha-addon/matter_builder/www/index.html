@@ -9,10 +9,10 @@
 <style>
 /* Colours, radii and spacing follow the Home Assistant frontend */
 :root{color-scheme:light;--primary:#006985;--on-primary:#fff;--bg:#edf0f2;--card:#fff;--fg:#141414;--mute:#505b64;--line:#d7dfe4;--fill:#eef2f5;--control:#677680;
---ok:#237038;--bad:#a52229;--warn:#815000;--chip:rgba(0,154,199,.12);--okchip:rgba(67,160,71,.14);--badchip:rgba(219,68,55,.12);
+--card-hover:#aebec8;--ok:#237038;--bad:#a52229;--warn:#815000;--chip:rgba(0,154,199,.12);--okchip:rgba(67,160,71,.14);--badchip:rgba(219,68,55,.12);
 --warnchip:rgba(255,152,0,.16);--radius:12px;--shadow:0 2px 12px rgba(0,0,0,.18)}
 @media (prefers-color-scheme:dark){:root{color-scheme:dark;--primary:#82d8ef;--on-primary:#10262e;--bg:#14181c;--card:#20262c;--fg:#f1f3f5;--mute:#bfc9d0;--line:#414c54;--fill:#2b343b;--control:#9baab4;
---ok:#8dd6a1;--bad:#ff9a9e;--warn:#ffca79;
+--card-hover:#687984;--ok:#8dd6a1;--bad:#ff9a9e;--warn:#ffca79;
 --chip:rgba(0,154,199,.22);--okchip:rgba(67,160,71,.22);--badchip:rgba(219,68,55,.22);--warnchip:rgba(255,152,0,.22);--shadow:0 2px 16px rgba(0,0,0,.6)}}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
@@ -68,15 +68,9 @@ a:not(.button){color:var(--primary)}
 #catalogBody[data-view="list"] .grid{grid-template-columns:minmax(0,1fr);gap:8px}
 #catalogBody .card{cursor:pointer}
 @media (hover:hover){
-  #catalogBody .card:hover{background:color-mix(in srgb,var(--card) 60%,var(--fill))}
+  #catalogBody .card:hover,.new:hover,.choice:enabled:not(.on):hover{border-color:var(--card-hover)}
 }
-@media (hover:hover) and (prefers-reduced-motion:no-preference){
-  #catalogBody .card{transition:transform 160ms ease-out,background-color 160ms ease-out}
-  #catalogBody .card:hover{transform:translateY(-2px) perspective(650px) rotateX(3deg)}
-  #catalogBody[data-view="list"] .card:hover{transform:translateY(-1px) perspective(650px) rotateX(2deg)}
-}
-#catalogBody .card:focus-visible{outline:none}
-#catalogBody .card:focus-visible h3{text-decoration:underline;text-underline-offset:3px}
+button.catalog-open{display:inline;min-height:0;padding:0;border-radius:2px;background:transparent;color:inherit;text-align:start;white-space:normal}
 #catalogBody .card .acts{margin:auto 0 0}
 #catalogBody .needs,.catalog-detail .needs{align-items:center}
 .catalog-tip{position:relative;display:inline-flex}
@@ -165,9 +159,14 @@ button.catalog-tip-trigger.optional{background:var(--fill);color:var(--mute);bor
   #catalogBody[data-view="list"] .grid{gap:0;background:var(--card);border-radius:var(--radius)}
   #catalogBody[data-view="list"] .card{
     display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;
-    gap:2px 8px;padding:8px 12px;border:0;border-radius:0;background:transparent;transform:none;
+    gap:2px 8px;padding:8px 12px;border:0;border-radius:0;background:transparent;
   }
   #catalogBody[data-view="list"] .card+.card{border-top:1px solid var(--line)}
+  #catalogBody[data-view="list"] .card:first-child{border-radius:var(--radius) var(--radius) 0 0}
+  #catalogBody[data-view="list"] .card:last-child{border-end-start-radius:var(--radius);border-end-end-radius:var(--radius)}
+  @media (hover:hover){
+    #catalogBody[data-view="list"] .card:hover,.bed-family-entry:hover{box-shadow:inset 0 0 0 1px var(--card-hover)}
+  }
   #catalogBody[data-view="list"] .head{grid-column:1/-1}
   #catalogBody[data-view="list"] .head>.ico{width:28px;height:28px}
   #catalogBody[data-view="list"] .needs{margin-top:0}
@@ -296,7 +295,6 @@ button.pri.busy::after{border-color:var(--on-primary);border-right-color:transpa
 #opening .spin{width:28px;height:28px;border-width:3px;color:var(--primary)}
 @media (prefers-reduced-motion:reduce){.skel,#loadbar::before,.cardwork .track.indef i{animation:none}main{transition:none}}
 .new{border:1.5px dashed var(--line);background:none;align-items:center;justify-content:center;text-align:center;min-height:150px;cursor:pointer;color:var(--mute)}
-.new:hover{border-color:var(--primary);color:var(--primary)}
 .banner{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--chip);color:var(--fg);border-radius:var(--radius);padding:8px 8px 8px 14px;margin-bottom:12px}
 .banner .grow{min-width:200px}
 .empty{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:24px;text-align:center;max-width:560px;margin:32px auto}
@@ -354,7 +352,6 @@ dialog.side{margin:0 0 0 auto;height:100vh;max-height:100vh;border-radius:16px 0
 .error{color:var(--bad);margin-top:10px}
 .warnText{color:var(--warn)}
 .choice{display:flex;gap:12px;align-items:center;width:100%;text-align:left;justify-content:flex-start;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;min-height:64px;white-space:normal;font-weight:400}
-.choice:hover{border-color:var(--primary)}
 .choice.on{border:2px solid var(--primary);padding:11px 13px}
 .choice b{font-weight:500;display:block}
 .choices{display:grid;gap:8px;margin:12px 0}
@@ -532,8 +529,8 @@ dialog.side{max-width:100vw}
   <div class="bar" id="mainBar">
     <img src="matter-builder-app-icoon-transparant.svg" width="48" height="48" alt="">
     <h1>Matter Builder</h1>
-    <nav>
-      <button data-tab="devices" class="on" data-t="tabDevices"></button>
+    <nav aria-label="Matter Builder">
+      <button data-tab="devices" class="on" aria-current="page" data-t="tabDevices"></button>
       <button data-tab="catalog" data-t="tabCatalog"></button>
       <button data-tab="developer" data-t="tabConfigs" id="devTabBtn"></button>
     </nav>
@@ -2431,10 +2428,10 @@ const badge = it => it.official ? `<span class="chip accent">${t('official')}</s
 function catalogCard(it, i) {
   const {labels, boards, experimental} = catalogCompatibility(it, catalogVariants(it));
   const supported = boards.concat(experimental);
-  return `<div class="card" data-item="${esc(it.id || it.source + '/' + it.title)}" tabindex="0"
-    onclick="openItem(${i}, this)" onkeydown="if (event.target === this && ['Enter', ' '].includes(event.key)) { event.preventDefault(); openItem(${i}, this); }">
+  return `<div class="card" data-item="${esc(it.id || it.source + '/' + it.title)}"
+    onclick="openItem(${i}, this.querySelector('.catalog-open'))">
     <div class="head"><span class="ico">${it.kind === 'firmware' ? appIcon(it.app) : icon('recipe')}</span>
-      <div class="info"><h3>${esc(it.title)}</h3><div class="sub">${it.kind === 'firmware' ? esc(it.version || '') : t('recipe')} · ${esc(it.maker || (it.source || '').split('/')[0])}</div></div></div>
+      <div class="info"><h3><button type="button" class="catalog-open" aria-haspopup="dialog">${esc(it.title)}</button></h3><div class="sub">${it.kind === 'firmware' ? esc(it.version || '') : t('recipe')} · ${esc(it.maker || (it.source || '').split('/')[0])}</div></div></div>
     <div class="meta"><div class="sub catalog-description">${esc(catalogDescription(it))}</div>
       ${protocolIcons(labels, i, supported.length ? catalogBoardTooltip(supported, i) : '')}
       ${supported.length ? '' : catalogBoardNotice(it)}</div>
@@ -2712,6 +2709,7 @@ if (!('closedBy' in itemDialog)) {
 }
 let item = null, itemVariant;
 function openItem(i, trigger) {
+  trigger.focus({preventScroll: true});
   catalogContext = launchContext(trigger);
   item = shownItems[i];
   itemVariant = undefined;
@@ -3097,6 +3095,10 @@ function openTask({title, content, cleanup, blocked, dirty, after}, context = la
     $('#taskTitle').textContent = title;
     $('#taskSubtitle').textContent = '';
     $('#taskSubtitle').hidden = true;
+    const origin = $(`#mainBar nav button[data-tab="${context.tab}"]`)?.textContent.trim();
+    const backLabel = origin ? `Back to ${origin}` : 'Back';
+    $('#taskBack').setAttribute('aria-label', backLabel);
+    $('#taskBack').title = backLabel;
     $('#taskBack').disabled = !!blocked?.();
     showTab('task');
     $('#taskTitle').focus();
@@ -3193,7 +3195,12 @@ $$('#catalogView button').forEach(button => {
 
 function showTab(name) {
   tab = name;
-  $$('nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === name));
+  $$('#mainBar nav button').forEach(b => {
+    const current = b.dataset.tab === name;
+    b.classList.toggle('on', current);
+    if (current) b.setAttribute('aria-current', 'page');
+    else b.removeAttribute('aria-current');
+  });
   $('#devicesTab').hidden = name !== 'devices';
   $('#catalogTab').hidden = name !== 'catalog';
   $('#developerTab').hidden = name !== 'developer';

@@ -411,6 +411,14 @@ details.boards{margin:8px 0 12px}details.boards summary{cursor:pointer}
 .ed-item-head details.more summary{width:32px;height:32px}
 .ed-item-body{padding:12px;border-top:1px solid var(--line)}
 .ed-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
+.pin-field{min-width:0}
+.pin-field .field:has([aria-invalid="true"]){border-color:var(--bad)}
+.pin-error{display:block;color:var(--bad);font-size:13px;margin:5px 0 0}
+.pin-overview{margin:0 0 10px}
+.pin-overview summary{cursor:pointer;color:var(--primary);padding:7px 2px}
+.pin-overview ul,.review-changes{margin:0;padding-inline-start:22px;line-height:1.5}
+.pin-overview li + li,.review-changes li + li{margin-top:4px}
+.review-changes{margin:12px 0 16px;overflow-wrap:anywhere}
 .chev{width:8px;height:8px;border-right:2px solid var(--mute);border-bottom:2px solid var(--mute);transform:rotate(45deg);margin:0 8px 4px 2px;transition:transform .2s;flex:none}
 .ed-item.open .chev{transform:rotate(-135deg);margin-bottom:0}
 .ed-section{display:flex;align-items:baseline;gap:8px;margin:16px 2px 8px}
@@ -806,7 +814,7 @@ dialog.side{max-width:100vw}
   <form method="dialog" class="dlg">
     <div class="dlg-head"><h2 id="actionTitle"></h2></div>
     <div class="dlg-body">
-      <p id="actionText"></p><label class="field" id="actionField" hidden><span>Device name</span><input id="actionValue" maxlength="32"></label>
+      <p id="actionText"></p><ul id="actionChanges" class="review-changes" hidden></ul><label class="field" id="actionField" hidden><span>Device name</span><input id="actionValue" maxlength="32"></label>
       <div class="actions end"><button type="submit" value="cancel" autofocus>Cancel</button><button class="pri" id="actionConfirm" type="submit" value="confirm"></button></div>
     </div>
   </form>
@@ -949,7 +957,7 @@ const TEXT = {
   optionsHelp: 'These work on the device itself, also when Home Assistant is off.',
   cardPower: m => `at power-on ${m}`, cardOffAfter: n => `off after ${n} s`, cardControls: n => `switches ${n}`,
   yamlHelp: 'The whole configuration. Pins: 0–7, 10, 11, 18–23. Wi-Fi, Thread and passwords are never in here.',
-  oneConnection: 'one connection here', pinTaken: n => `that pin is used by ${n}`, sda: 'SDA',
+  oneConnection: 'one connection here',
   liveOn: 'on', liveOff: 'off', liveTurnOn: 'Turn on', liveTurnOff: 'Turn off', liveClosed: 'closed', liveOpen: 'open',
   liveMotion: 'motion', liveNoMotion: 'no motion', livePressed: 'pressed', liveReleased: 'released', liveWaiting: 'waiting for a reading',
   typeHelp: {relay: 'An output: on or off. Appears as a plug in Home Assistant and Apple Home.',
@@ -969,7 +977,6 @@ const TEXT = {
   configRunning: 'Loaded from the linked device.',
   configUnavailable: 'The device configuration could not be loaded. Check that the device is online and open Configuration again.',
   applyConfigTitle: n => `Apply configuration to ${n}?`,
-  applyConfigHelp: 'This sends your changes to this device. It may restart. Changes to connections must be kept after restart.',
   applyTrialMissing: 'A configuration trial could not be confirmed. Check the device and its running configuration before trying again.',
   configSent: 'Configuration sent to this device.',
   slot: 'Connection', type: 'Type', pin: 'Pin', scl: 'SCL', inverted: 'Inverted', remove: 'Remove', name: 'Name',
@@ -1542,6 +1549,7 @@ class ConfigEditor {
     this.yaml = specYaml(name, this.rows, this.components, this.drivers, this.rules, this.ble, this.specDevice); this.error = ''; this.open.clear(); this.cardYaml = {}; this.picking = false;
     this.originalYaml = this.yaml;
     this.grouping = this.rows.some(r => r.group);
+    this.pinsOpen = false;
     this.render();
   }
   // A YAML text (a config or recipe): shown as it is in the YAML mode
@@ -1580,6 +1588,7 @@ class ConfigEditor {
       this.name = s.name; this.rows = s.rows; this.components = s.components; this.drivers = s.drivers; this.rules = s.rules; this.ble = s.ble; this.error = '';
       return s;
     }
+    this.checkPins();
     const rows = this.rows.map(r => ({...r, name: (r.name || '').trim() || this.title(r.type),
       code: isIr(r.type) ? normalCode(r.code) : '', mac: isBle(r.type) ? (r.mac || '').trim().toUpperCase() : '',
       pin: isBle(r.type) ? 0 : r.pin}));
@@ -1953,11 +1962,57 @@ class ConfigEditor {
   }
 
   // Who else uses a pin; IR codes of the same kind share their LED or receiver
-  usedBy(pin, slot) {
-    const me = this.row(slot), type = me ? me.type : null;
+  usedBy(pin, slot, type = this.row(slot)?.type) {
     const r = this.rows.find(x => x.slot !== slot && this.pinCount(x.type) > 0 && !(isIr(type) && x.type === type) &&
       (x.pin === pin || (this.pinCount(x.type) === 2 && x.pin2 === pin)));
-    return r ? (r.name || this.title(r.type)) : null;
+    return r ? ((r.name || '').trim() || this.title(r.type)) : null;
+  }
+  pinKeys(r) { return ['pin', 'pin2'].slice(0, this.pinCount(r.type)); }
+  pinRole(r, key) {
+    if (['sht4x', 'scd4x'].includes(r.type)) return key === 'pin' ? 'SDA (data)' : 'SCL (clock)';
+    if (this.pinCount(r.type) === 2) return key === 'pin' ? 'Pin 1' : 'Pin 2';
+    const role = roleOf(r, this.driver(r.type));
+    if (role === 'output') return 'Output';
+    if (['input', 'button'].includes(role) || r.type === 'pulse_meter') return 'Input';
+    return 'Pin';
+  }
+  pinTakenBy(r, key, pin) {
+    if (this.pinCount(r.type) === 2) {
+      const other = key === 'pin' ? 'pin2' : 'pin';
+      if (pin === r[other]) return this.pinRole(r, other);
+    }
+    return this.usedBy(pin, r.slot, r.type);
+  }
+  pinIssue(r, key) {
+    const pin = r[key];
+    if (pin == null) return 'Choose a pin.';
+    if (!this.pins.includes(pin)) return `GPIO ${pin} is unavailable on this board.`;
+    const by = this.pinTakenBy(r, key, pin);
+    return by ? `GPIO ${pin} is already used by ${by}.` : '';
+  }
+  checkPins() {
+    if (this.mode !== 'visual') return;
+    const conflicts = this.rows.filter(r => this.pinKeys(r).some(key => this.pinIssue(r, key)));
+    if (!conflicts.length) return;
+    conflicts.forEach(r => this.open.add(r.slot));
+    this.render();
+    this.host?.querySelector('.pin-field select[aria-invalid="true"]')?.focus();
+    throw new Error('Check the highlighted pins before continuing.');
+  }
+  pinSummary(r) {
+    return this.pinKeys(r).map(key => {
+      const pin = r[key], role = this.pinRole(r, key);
+      return [pin == null ? 'Choose a pin' : `GPIO ${pin}`, role === 'Pin' ? '' : role].filter(Boolean).join(' · ');
+    }).join(' / ');
+  }
+  pinOverview() {
+    const assignments = this.rows.filter(r => this.pinCount(r.type) > 0);
+    if (!assignments.length) return '';
+    return `<details class="pin-overview" ${this.pinsOpen ? 'open' : ''} ontoggle="${this.ref}.pinsOpen = this.open">
+      <summary>Pin assignments</summary>
+      <p class="sub">The pin list follows the board and firmware. Check the labels on your board before wiring.</p>
+      <ul>${assignments.map(r => `<li><strong>${esc((r.name || '').trim() || this.title(r.type))}</strong> · ${esc(this.pinSummary(r))}</li>`).join('')}</ul>
+    </details>`;
   }
   freePin(slot, not) { return this.pins.find(p => p !== not && !this.usedBy(p, slot)); }
   row(slot) { return this.rows.find(r => r.slot === slot); }
@@ -2091,8 +2146,8 @@ class ConfigEditor {
       const s = await parseSpec(text);
       if (s.rows.length !== 1) throw new Error(t('oneConnection'));
       const r = {...s.rows[0], slot, number: s.rows[0].number || 0};
-      const clash = [r.pin, this.pinCount(r.type) === 2 ? r.pin2 : null].map(p => p !== null && this.usedBy(p, slot)).find(Boolean);
-      if (clash) throw new Error(t('pinTaken', clash));
+      const issue = this.pinKeys(r).map(key => this.pinIssue(r, key)).find(Boolean);
+      if (issue) throw new Error(issue);
       this.rows = this.rows.map(x => x.slot === slot ? r : x);
       delete this.cardYaml[slot]; this.error = '';
       this.changed();
@@ -2115,17 +2170,25 @@ class ConfigEditor {
     return l.on ? t('liveOn') : t('liveOff');
   }
 
-  pinSelect(slot, key, value) {
-    return `<select onchange="${this.ref}.set(${slot}, '${key}', +this.value)">${this.pins.map(p => {
-      const by = this.usedBy(p, slot) || (key === 'pin2' && p === this.row(slot).pin ? t('sda') : null) || (key === 'pin' && this.pinCount(this.row(slot).type) === 2 && p === this.row(slot).pin2 ? 'Second pin' : null);
-      return `<option value="${p}" ${p === value ? 'selected' : ''} ${by && p !== value ? 'disabled' : ''}>GPIO ${p}${by && p !== value ? ` · ${esc(by)}` : ''}</option>`;
-    }).join('')}</select>`;
+  pinField(r, key) {
+    const id = `${this.id}-${r.slot}-${key}`;
+    const issue = this.pinIssue(r, key), value = r[key], role = this.pinRole(r, key);
+    const label = ['Input', 'Output'].includes(role) ? `${role} pin` : role;
+    return `<div class="pin-field"><label class="field" for="${id}"><span id="${id}-label">${esc(label)}</span>
+      <select id="${id}" aria-labelledby="${id}-label" ${issue ? `aria-invalid="true" aria-describedby="${id}-error"` : ''}
+        onchange="${this.ref}.set(${r.slot}, '${key}', +this.value); document.getElementById('${id}').focus({preventScroll:true})">
+        ${this.pins.includes(value) ? '' : `<option selected disabled>${value == null ? 'Choose a pin' : `GPIO ${esc(value)} · unavailable`}</option>`}
+        ${this.pins.map(pin => {
+          const by = this.pinTakenBy(r, key, pin);
+          return `<option value="${pin}" ${pin === value ? 'selected' : ''} ${by && pin !== value ? 'disabled' : ''}>GPIO ${pin}${by && pin !== value ? ` · Used by ${esc(by)}` : ''}</option>`;
+        }).join('')}
+      </select></label>${issue ? `<span id="${id}-error" class="pin-error">${esc(issue)}</span>` : ''}</div>`;
   }
 
   card(r) {
     const open = this.open.has(r.slot), live = this.liveText(r), ref = this.ref;
-    const pins = isBle(r.type) ? (r.mac || '–') : r.type === 'sht4x' ? `SDA ${r.pin} · SCL ${r.pin2}`
-      : isIr(r.type) ? `GPIO ${r.pin} · ${r.code || '–'}` : `GPIO ${r.pin}`;
+    const pins = this.pinSummary(r) || (isBle(r.type) ? 'Bluetooth' : '');
+    const pinIssue = this.pinKeys(r).some(key => this.pinIssue(r, key));
     const l = this.live && this.live[r.slot];
     const canTest = this.tester && (isOutputType(r.type) || r.type === 'ir_send') && l && l.type === r.type && l.pin === r.pin;
     const body = this.cardYaml[r.slot] !== undefined
@@ -2135,10 +2198,8 @@ class ConfigEditor {
       : `<div class="ed-fields">
           <label class="field"><span>${t('type')}</span><select onchange="${ref}.set(${r.slot}, 'type', this.value)">
             ${this.types().map(x => `<option value="${x}" ${x === r.type ? 'selected' : ''}>${esc(this.title(x))}</option>`).join('')}</select></label>
-          ${this.driver(r.type) && this.pinCount(r.type) === 0 ? '' : isBle(r.type) ? `<label class="field"><span>${t('mac')}</span><input value="${esc(r.mac)}" placeholder="${t('macHint')}" maxlength="17" spellcheck="false" oninput="${ref}.setQuiet(${r.slot}, 'mac', this.value)"></label>`
-            : `<label class="field"><span>${r.type === 'sht4x' ? 'SDA' : t('pin')}</span>${this.pinSelect(r.slot, 'pin', r.pin)}</label>`}
-          ${r.type === 'sht4x' ? `<label class="field"><span>SCL</span>${this.pinSelect(r.slot, 'pin2', r.pin2)}</label>` : ''}
-          ${this.driver(r.type) && this.pinCount(r.type) === 2 ? `<label class="field"><span>${t('pin')} 2</span>${this.pinSelect(r.slot, 'pin2', r.pin2)}</label>` : ''}
+          ${isBle(r.type) ? `<label class="field"><span>${t('mac')}</span><input value="${esc(r.mac)}" placeholder="${t('macHint')}" maxlength="17" spellcheck="false" oninput="${ref}.setQuiet(${r.slot}, 'mac', this.value)"></label>`
+            : this.pinKeys(r).map(key => this.pinField(r, key)).join('')}
           ${this.driver(r.type) && this.driver(r.type).number ? `<label class="field"><span>${esc(this.driver(r.type).number)}</span><input type="number" min="0" max="65535" value="${r.number || 0}" oninput="${ref}.setQuiet(${r.slot}, 'number', +this.value)"></label>` : ''}
           ${isIr(r.type) ? `<label class="field"><span>${t('irCode')}</span><input value="${esc(r.code)}" placeholder="${t('irCodeHint')}" maxlength="13" spellcheck="false" oninput="${ref}.setQuiet(${r.slot}, 'code', this.value)"></label>` : ''}
           <label class="field"><span>${t('name')}</span><input maxlength="23" value="${esc(r.name)}" placeholder="${esc(this.title(r.type))}" oninput="${ref}.setQuiet(${r.slot}, 'name', this.value)"></label>
@@ -2161,7 +2222,7 @@ class ConfigEditor {
     return `<div class="ed-item ${open ? 'open' : ''}" ${this.grouping ? `draggable="true" ondragstart="event.dataTransfer.setData('text/plain', '${r.slot}'); event.dataTransfer.effectAllowed = 'move'"` : ''}>
       <div class="ed-item-head" onclick="if (!event.target.closest('details,button')) ${ref}.toggle(${r.slot})">
         <span class="ico">${typeIcon(r.type, this.driver(r.type))}</span>
-        <div class="info"><b>${esc(r.name || this.title(r.type))}</b><div class="sub">${esc(this.title(r.type))} · ${pins}${r.inverted ? ' · ' + t('invertedShort') : ''}${esc(this.optionsText(r))}</div></div>
+        <div class="info"><b>${esc(r.name || this.title(r.type))}</b><div class="sub">${esc(this.title(r.type))}${pins ? ' · ' + esc(pins) : ''}${isIr(r.type) && r.code ? ' · ' + esc(r.code) : ''}${r.inverted ? ' · ' + t('invertedShort') : ''}${esc(this.optionsText(r))}</div>${pinIssue && !open ? '<span class="pin-error">Check pin assignment</span>' : ''}</div>
         ${live ? `<span class="chip">${esc(live)}</span>` : ''}
         ${canTest ? (r.type === 'ir_send' ? `<button class="plain" onclick="${ref}.tester(${r.slot}, true)">${t('liveSend')}</button>`
           : `<button class="plain" onclick="${ref}.tester(${r.slot}, ${!l.on})">${l.on ? t('liveTurnOff') : t('liveTurnOn')}</button>`) : ''}
@@ -2200,6 +2261,7 @@ class ConfigEditor {
       ${section(`<div class="ed-section"><h3>${t('connections')}</h3><span class="sub">${t('ofEight', this.rows.length)}</span><span class="grow"></span>
         ${this.rows.length > 1 || this.grouping ? `<label class="switch" title="${esc(t('groupsHelp'))}"><input type="checkbox" ${this.grouping ? 'checked' : ''} onchange="${ref}.setGrouping(this.checked)"><span class="sub">${t('groups')}</span></label>` : ''}</div>
       ${this.grouping ? `<div class="sub" style="margin:-4px 2px 8px">${t('groupsHelp')}</div>` : ''}
+      ${this.pinOverview()}
       ${!this.rows.length ? `<div class="sub" style="margin:4px 2px 8px">${t('nothingConnected')}</div>`
         : this.grouping ? this.groupedCards() : this.rows.map(r => this.card(r)).join('')}
       ${this.picking ? `<div class="ed-item open"><div class="ed-item-head" style="cursor:default"><b style="flex:1;font-weight:500">${t('addConnection')}</b>
@@ -2950,9 +3012,10 @@ function newSpec() {
   openSpecEditor(true);
 }
 async function postSpec(checkOnly) {
-  const text = specEditor.text();
   $('#specCheck').disabled = $('#specSave').disabled = true;
   try {
+    specEditor.checkPins();
+    const text = specEditor.text();
     const r = await api('api/specs', {text, check_only: checkOnly});
     if (r.error) { specMessage(r.error); return; }
     specMessage(null, checkOnly ? t('specOk', r.spec) : t('specSaved'));
@@ -3082,12 +3145,19 @@ document.addEventListener('keydown', event => {
   leaveTask();
 });
 
-function actionDialog(title, message, action, initial = null) {
+function actionDialog(title, message, action, initial = null, changes = []) {
   const dialog = $('#actionDlg');
   if (dialog.open) return Promise.resolve(null);
   $('#actionTitle').textContent = title;
   $('#actionText').textContent = message;
   $('#actionText').hidden = !message;
+  const list = $('#actionChanges');
+  list.hidden = !changes.length;
+  list.replaceChildren(...changes.map(change => {
+    const item = document.createElement('li');
+    item.textContent = change;
+    return item;
+  }));
   $('#actionField').hidden = initial === null;
   $('#actionValue').value = initial ?? '';
   $('#actionConfirm').textContent = action;
@@ -3365,8 +3435,16 @@ class SettingsEditor {
     catch (e) { this.error = e.message; this.render(); return; }
     this.busy = true;
     bridgeEditor?.sync();
-    if (!await confirmAction(t('applyConfigTitle', this.device.name),
-      'This updates the settings of this device and may restart it.', 'Apply to device')) {
+    const changed = Object.keys(values).filter(k => String(values[k]) !== String(this.saved[k] ?? this.schema[k].default));
+    const changes = changed.map(k => {
+      const field = this.schema[k], old = this.saved[k] ?? field.default;
+      const show = v => field.type === 'bool' ? (v ? 'On' : 'Off') : String(v);
+      return ['bool', 'int'].includes(field.type)
+        ? `${field.title || k} · ${show(old)} → ${show(values[k])}`
+        : `Update ${field.title || k}`;
+    });
+    if (!await actionDialog(t('applyConfigTitle', this.device.name),
+      'The device may restart briefly when these settings are applied.', 'Apply to device', null, changes)) {
       this.busy = false;
       bridgeEditor?.sync();
       return;
@@ -3374,7 +3452,6 @@ class SettingsEditor {
     this.error = this.notice = '';
     this.render();
     try {
-      const changed = Object.keys(values).filter(k => String(values[k]) !== String(this.saved[k]));
       for (const k of changed) {
         const reply = (await proxyCommand(this.proxy, `settings set ${k} ${values[k]}`)).trim();
         if (/^error/i.test(reply)) throw new Error(reply.replace(/^error:\s*/i, ''));
@@ -4090,8 +4167,8 @@ async function copyToken(id) {
   try { await navigator.clipboard.writeText(shownTokens[id]); } catch (e) {}
 }
 
-function rowsFromIo(io) {
-  return io.draft.filter(d => d.type !== 'none')
+function rowsFromIo(io, connections = io.draft) {
+  return connections.filter(d => d.type !== 'none')
     .map(d => ({slot: d.index, type: d.type, pin: isBle(d.type) ? 0 : d.pin, pin2: d.pin2, inverted: d.inverted, name: d.name,
       code: d.code || '', mac: d.mac || '', number: d.number || 0, power: d.power || 'off', off_after: d.off_after || 0,
       controls: d.controls === undefined ? null : d.controls,
@@ -4257,6 +4334,58 @@ function bleLines(before, after) {
   return lines;
 }
 
+function connectionPins(row, drivers) {
+  const count = drivers.find(d => d.type === row.type)?.pins ?? (isBle(row.type) ? 0 : row.type === 'sht4x' ? 2 : 1);
+  return [row.pin, row.pin2].slice(0, count);
+}
+
+function sameConnectionPins(before, after, drivers) {
+  return connectionPins(before, drivers).join(',') === connectionPins(after, drivers).join(',');
+}
+
+function sameConnection(before, after, drivers) {
+  return sameConnectionPins(before, after, drivers) &&
+    ['type', 'name', 'inverted', 'code', 'mac', 'number', 'power', 'off_after', 'controls', 'group']
+      .every(key => before[key] === after[key]);
+}
+
+function configurationReview(io, rows, name, drivers, connections, bluetooth = [], rules = []) {
+  const before = rowsFromIo(io, io.slots || io.draft);
+  const after = new Map(rows.map(r => [r.slot, r]));
+  const previous = new Map(before.map(r => [r.slot, r]));
+  const label = r => r.name || drivers.find(d => d.type === r.type)?.title || TEXT.types[r.type] || r.type;
+  const pins = r => connectionPins(r, drivers).map(pin => `GPIO ${pin}`).join(' and ');
+  const changes = [];
+  for (const row of rows) {
+    const old = previous.get(row.slot);
+    const where = pins(row);
+    if (!old) changes.push(`Add ${label(row)}${where ? ` on ${where}` : ''}`);
+    else if (old.type !== row.type) changes.push(`Replace ${label(old)} with ${label(row)}${where ? ` on ${where}` : ''}`);
+    else {
+      if (!sameConnectionPins(old, row, drivers)) changes.push(`Move ${label(old)} from ${pins(old)} to ${where}`);
+      if (old.name !== row.name) changes.push(`Rename ${label(old)} to ${label(row)}`);
+      if (!sameConnection({...old, pin: row.pin, pin2: row.pin2, name: row.name}, row, drivers)) changes.push(`Update settings for ${label(row)}`);
+    }
+  }
+  for (const old of before) if (!after.has(old.slot)) changes.push(`Remove ${label(old)}`);
+  const pending = connections.some(line => line.startsWith('io '));
+  const restart = pending && io.slots ? changes.length > 0 : io.changed || pending;
+  if (!changes.length && (pending || restart)) {
+    changes.push(restart ? 'Apply saved connection changes' : 'Update the saved draft to match the running connections');
+  }
+  if (name && name !== io.name) changes.push(`Rename device to ${name}`);
+  if (bluetooth.length) changes.push('Update Bluetooth device settings or commands');
+  if (rules.length) changes.push('Update automation rules');
+  return {changes, restart};
+}
+
+function reviewConfiguration(name, changes, restart) {
+  const message = restart
+    ? 'The device will restart briefly. Choose Keep after it reconnects to finish applying the connection changes.'
+    : 'These changes take effect on the linked device.';
+  return actionDialog(t('applyConfigTitle', name), message, 'Apply to device', null, changes);
+}
+
 // The commands that turn a device's draft into these connections and name
 function diffLines(io, rows, name, drivers = []) {
   const before = new Map(rowsFromIo(io).map(r => [r.slot, r]));
@@ -4264,11 +4393,11 @@ function diffLines(io, rows, name, drivers = []) {
   const after = new Map(rows.map(r => [r.slot, r]));
   for (const [slot, old] of before) {
     const next = after.get(slot);
-    if (!next || old.type !== next.type || old.pin !== next.pin || old.pin2 !== next.pin2) lines.push(`io clear ${slot}`);
+    if (!next || old.type !== next.type || !sameConnectionPins(old, next, drivers)) lines.push(`io clear ${slot}`);
   }
   for (const r of rows) {
     const old = before.get(r.slot);
-    if (old && JSON.stringify(old) === JSON.stringify(r)) continue;
+    if (old && sameConnection(old, r, drivers)) continue;
     const d = drivers.find(x => x.type === r.type);
     const where = d ? [d.pins > 0 ? r.pin : null, d.pins > 1 ? r.pin2 : null, d.number ? `n=${r.number || 0}` : null].filter(x => x !== null).join(' ')
       : isBle(r.type) ? r.mac : r.type === 'sht4x' ? `${r.pin} ${r.pin2}` : isIr(r.type) ? `${r.pin} ${r.code}` : `${r.pin}`;
@@ -4310,11 +4439,11 @@ async function saveManage() {
   catch (e) { $('#mError').textContent = e.message; $('#mError').hidden = false; }
   finally { deviceBusy = false; }
 }
-async function saveManageNow() {
+async function saveManageNow(review = false) {
   $('#mError').hidden = true;
   let spec;
   try { spec = await devEditor.get(); }
-  catch (e) { $('#mError').textContent = t('yamlError', e.message); $('#mError').hidden = false; return; }
+  catch (e) { $('#mError').textContent = e.message; $('#mError').hidden = false; return; }
   const missing = missingType(spec.rows, managed.io.drivers);
   if (missing) { $('#mError').textContent = t('missingComponent', missing); $('#mError').hidden = false; return; }
   if (tooOld(running(statuses[managed.id]), spec.rows)) {
@@ -4335,8 +4464,16 @@ async function saveManageNow() {
   }
   if (managed.rules) managed.rules = JSON.parse(await proxyCommand(managed.id, 'rule json'));
   // The Bluetooth device first: its commands must be there for the connections that use them
-  const lines = bleLines(managed.ble, spec.ble).concat(diffLines(managed.io, spec.rows, spec.name, devEditor.drivers))
-    .concat(managed.rules ? ruleLines(managed.rules.rules, spec.rules || []) : []);
+  const io = managed.io, drivers = devEditor.drivers;
+  const bluetooth = bleLines(managed.ble, spec.ble);
+  const connections = diffLines(io, spec.rows, spec.name, drivers);
+  const rules = managed.rules ? ruleLines(managed.rules.rules, spec.rules || []) : [];
+  const lines = [...bluetooth, ...connections, ...rules];
+  if (review && (lines.length || io.changed)) {
+    const name = state.proxies.find(p => p.id === managed.id)?.name || io.name;
+    const {changes, restart} = configurationReview(io, spec.rows, spec.name, drivers, connections, bluetooth, rules);
+    if (!await reviewConfiguration(name, changes, restart)) return;
+  }
   try { await sendLines(managed.id, lines); }
   catch (e) { $('#mError').textContent = e.message; $('#mError').hidden = false; return; }
   managed.io = JSON.parse(await proxyCommand(managed.id, 'io json')).io;
@@ -4366,19 +4503,26 @@ async function saveAsConfig() {
 // A recipe in one go: into the draft, then a restart with it on trial
 async function saveAndApply() {
   if (deviceBusy || !managed?.io || managed.io.trial > 0) return;
-  const device = managed;
-  const name = state.proxies.find(p => p.id === device.id)?.name || '';
-  if (!await confirmAction(t('applyConfigTitle', name), t('applyConfigHelp'), 'Apply to device')) return;
-  if (managed !== device || !await saveManage()) return;
-  if (device.io.changed) await applyManage();
-  else note(t('configSent'));
+  deviceBusy = true;
+  try {
+    if (!await saveManageNow(true)) return;
+    if (managed.io.changed) await applyManageNow();
+    else note(t('configSent'));
+  } catch (e) { $('#mError').textContent = e.message; $('#mError').hidden = false; }
+  finally { deviceBusy = false; if (managed?.io) showManageState(); }
 }
 
 // After "apply" the device restarts: wait until it answers, then show the trial
 async function applyManage() {
   if (deviceBusy || !managed?.io) return;
   deviceBusy = true;
-  try { await applyManageNow(); }
+  try {
+    const io = JSON.parse(await proxyCommand(managed.id, 'io json')).io;
+    if (io.trial > 0 || !io.changed) { managed.io = io; showManageState(); return; }
+    const name = state.proxies.find(p => p.id === managed.id)?.name || io.name;
+    const {changes} = configurationReview(io, rowsFromIo(io), io.name, io.drivers || [], []);
+    if (await reviewConfiguration(name, changes, true)) await applyManageNow();
+  } catch (e) { $('#mError').textContent = e.message; $('#mError').hidden = false; }
   finally { deviceBusy = false; }
 }
 async function applyManageNow() {
@@ -4792,11 +4936,14 @@ function renderWizard() {
       ${wiz.defaultWifi === true ? '<p class="sub">The default Wi-Fi was saved on this device. If it uses Matter over Wi-Fi, it can switch to this network after a restart.</p>' : ''}
       ${wiz.defaultWifi === false ? '<p class="error">Could not save the default configuration Wi-Fi. You can retry from Settings.</p>' : ''}
       ${a.state === 'applying' ? `<p class="notice">${t('applyingConfig')}</p>` : ''}
+      ${a.state === 'review' ? '<p class="sub">Review your configuration before sending it to the linked device.</p>' : ''}
       ${a.state === 'trial' ? `<p class="notice">${t('configOnTrial', a.trial)}</p>` : ''}
       ${a.state === 'kept' ? `<p class="notice">${t('configKept')}</p>` : ''}
+      ${a.state === 'applied' ? '<p class="notice">Configuration applied. The device is ready.</p>' : ''}
       ${a.state === 'error' ? `<div class="error">${esc(t('configFailed', a.error))}</div>` : ''}
-      <div class="actions end">${a.state === 'trial' ? `<button class="pri" onclick="keepConfig()">${t('keep')}</button>` : `<button class="plain" onclick="completeWizard()">${t('done')}</button>`}
-        ${wiz.linkedId && a.state !== 'trial' && a.state !== 'applying' ? `<button class="${a.state === 'kept' ? 'plain' : 'pri'}" onclick="const w = wiz; completeWizard(() => openDevice(w.linkedId, 'connections'))">${a.state === 'kept' ? t('openDevice') : t('setUpConnections')}</button>` : ''}</div>`;
+      <div class="actions end">${a.state === 'trial' ? `<button class="pri" onclick="keepConfig()">${t('keep')}</button>` : `<button class="plain" onclick="completeWizard()" ${a.state === 'applying' ? 'disabled' : ''}>${t('done')}</button>`}
+        ${a.state === 'review' ? '<button class="pri" id="wReviewChanges" onclick="applyConfig()">Review changes</button>' : ''}
+        ${wiz.linkedId && a.state !== 'trial' && a.state !== 'applying' && a.state !== 'review' ? `<button class="${['kept', 'applied'].includes(a.state) ? 'plain' : 'pri'}" onclick="const w = wiz; completeWizard(() => openDevice(w.linkedId, 'connections'))">${['kept', 'applied'].includes(a.state) ? t('openDevice') : t('setUpConnections')}</button>` : ''}</div>`;
   }
   $('#wTitle').textContent = title;
   $('#taskTitle').textContent = progress ? `${title} · ${progress}` : title;
@@ -4833,7 +4980,12 @@ wizEditor.onChange = () => { if (wiz) wiz.editorDirty = true; };
 
 async function configureNext() {
   try { wiz.configSpec = await wizEditor.get(); }
-  catch (e) { wiz.error = t('yamlError', e.message); renderWizard(); return; }
+  catch (e) {
+    wiz.error = wizEditor.mode === 'yaml' ? t('yamlError', e.message) : e.message;
+    renderWizard();
+    wizEditor.host?.querySelector('.pin-field select[aria-invalid="true"]')?.focus();
+    return;
+  }
   if (wizEditor.noBluetooth() && wizEditor.usesBluetooth()) { wiz.error = t('boardNoBluetooth', BOARDS[wiz.chip].name); renderWizard(); return; }
   // Components are code: only firmware built from a config has them
   if (wizEditor.components.length && !(specs || []).some(sp => sp.factory.includes(wiz.file))) {
@@ -4860,16 +5012,31 @@ async function applyConfig() {
     if (tooOld(running(st), spec.rows)) throw new Error(t('firmwareTooOld', MIN_NEW_TYPES));
     const missing = missingType(spec.rows, io.drivers);
     if (missing) throw new Error(t('missingComponent', missing));
+    const drivers = (io.drivers || []).concat(spec.drivers || []);
+    let bluetooth = [], rules = [];
     if (spec.ble) {
       const deviceBle = JSON.parse(await proxyCommand(id, 'bledev json')).bledev;
       requireBedFirmware(deviceBle, spec.ble);
-      await sendLines(id, bleLines(bleFromDevice(deviceBle), spec.ble));
+      bluetooth = bleLines(bleFromDevice(deviceBle), spec.ble);
     }
-    await sendLines(id, diffLines(io, spec.rows, spec.name, (io.drivers || []).concat(spec.drivers || [])));
+    const connections = diffLines(io, spec.rows, spec.name, drivers);
     if (spec.rules && spec.rules.length) {
       let have = null;
       try { have = JSON.parse(await proxyCommand(id, 'rule json')).rules; } catch (e) {}
-      if (have) await sendLines(id, ruleLines(have, spec.rules));
+      if (have) rules = ruleLines(have, spec.rules);
+    }
+    if (io.trial > 0) throw new Error('Keep or revert the current connection changes on the device before applying this configuration.');
+    const {changes, restart} = configurationReview(io, spec.rows, spec.name, drivers, connections, bluetooth, rules);
+    const lines = [...bluetooth, ...connections, ...rules];
+    if ((lines.length || io.changed) && !await reviewConfiguration(wiz.linkedName, changes, restart)) {
+      wiz.apply = {state: 'review'};
+      renderWizard();
+      $('#wReviewChanges')?.focus();
+      return;
+    }
+    await sendLines(id, lines);
+    if (!JSON.parse(await proxyCommand(id, 'io json')).io.changed) {
+      wiz.apply = {state: 'applied'}; renderWizard(); return;
     }
     try { await proxyCommand(id, 'io apply'); } catch (e) {}
     for (let i = 0; i < 40; i++) {
@@ -5009,7 +5176,7 @@ async function startLink() {
       wiz.linkedName = added ? added.name : host;
       go('done');
       loadStatuses();
-      if (wiz.configSpec && wiz.linkedId) applyConfig();
+      if (wiz.configSpec && wiz.linkedId) { wiz.apply = {state: 'review'}; renderWizard(); }
       return;
     }
     if (s.state !== 'waiting') { wiz.waiting = false; wiz.error = t('notLinked'); renderWizard(); return; }

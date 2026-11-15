@@ -10,6 +10,7 @@
 
 #include "commands.h"
 #include "config_mode.h"
+#include "fabric_health.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
 #include "esp_timer.h"
@@ -100,6 +101,7 @@ bool led_level(int64_t ms) {
 }
 
 void poll_matter(intptr_t) {
+    fabric_health::poll();  // controllers that went away (once a minute)
     const int64_t now = esp_timer_get_time();
     auto* engine = chip::app::InteractionModelEngine::GetInstance();
     int fabrics = 0, connected = 0;

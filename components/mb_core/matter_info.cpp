@@ -8,6 +8,7 @@
 #include <app/reporting/reporting.h>
 #include <nvs.h>
 #include <crypto/CHIPCryptoPAL.h>
+#include <esp_matter.h>
 #include <platform/CHIPDeviceLayer.h>
 #include <setup_payload/OnboardingCodesUtil.h>
 #include <setup_payload/SetupPayload.h>
@@ -18,6 +19,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "device_status.h"
+#include "fabric_health.h"
 #include "matter_thread.h"
 #include "freertos/task.h"
 #include "mb_core.h"
@@ -182,6 +184,14 @@ std::string fabrics_text() {
                           fabric.GetFabricIndex(), chip::to_underlying(fabric.GetVendorId()), fabric.GetFabricId(),
                           static_cast<int>(label.size()), label.data());
             out += line;
+            // Appended after the line above, which the add-on reads as it is
+            const fabric_health::Info health = fabric_health::info(fabric.GetFabricIndex());
+            if (health.offline_s >= 3600) {
+                out.pop_back();
+                std::snprintf(line, sizeof(line), ", no contact for %ld h%s\n", health.offline_s / 3600,
+                              health.stale ? " (stale: probably removed in its app)" : "");
+                out += line;
+            }
         }
     });
     if (!ran) return BUSY;
@@ -245,7 +255,10 @@ std::string matter_json() {
             // Connected now (it holds a subscription), since when, or when last
             const device_status::Controller c = device_status::controller(fabric.GetFabricIndex());
             fabrics += std::string(",\"connected\":") + (c.connected ? "true" : "false") + ",\"since\":" + std::to_string(c.since_s) +
-                       ",\"last_seen\":" + std::to_string(c.last_seen_s) + "}";
+                       ",\"last_seen\":" + std::to_string(c.last_seen_s);
+            // Without contact, also across restarts, and stale after 30 days (fabric_health.h)
+            const fabric_health::Info health = fabric_health::info(fabric.GetFabricIndex());
+            fabrics += ",\"offline\":" + std::to_string(health.offline_s) + ",\"stale\":" + (health.stale ? "true" : "false") + "}";
         }
     });
 
@@ -284,6 +297,15 @@ void note_structure(uint32_t signature) {
         nvs_commit(nvs);
     }
     nvs_close(nvs);
+}
+
+void complete_root() {
+    using namespace esp_matter;
+    namespace GD = chip::app::Clusters::GeneralDiagnostics;
+    cluster_t* diagnostics = cluster::get(static_cast<uint16_t>(0), GD::Id);
+    if (diagnostics != nullptr && attribute::get(diagnostics, GD::Attributes::TotalOperationalHours::Id) == nullptr) {
+        cluster::general_diagnostics::attribute::create_total_operational_hours(diagnostics, 0);
+    }
 }
 
 }  // namespace matter_info

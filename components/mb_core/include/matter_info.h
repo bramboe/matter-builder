@@ -37,4 +37,9 @@ std::string matter_json();
 // it in the Matter thread once Matter runs.
 void note_structure(uint32_t signature);
 
+// Optional root attributes controllers read: General Diagnostics
+// TotalOperationalHours (kept by the Matter stack), which otherwise answers
+// "unsupported attribute". Call after node::create, before esp_matter::start.
+void complete_root();
+
 }  // namespace matter_info

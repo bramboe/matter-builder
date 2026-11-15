@@ -731,6 +731,7 @@ std::string endpoints_text() {
 void start() {
     node::config_t node_config;
     node = node::create(&node_config, on_attribute, on_identify);
+    matter_info::complete_root();
     io::Listener listener = {};
     listener.input = on_input;
     listener.button = on_button;

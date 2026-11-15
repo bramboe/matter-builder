@@ -771,6 +771,7 @@ void on_calibrated(int index, bed_link::Part part, float) {
 void start() {
     node::config_t node_config;
     node_t* node = node::create(&node_config, on_attribute, on_identify);
+    matter_info::complete_root();
     endpoint::aggregator::config_t aggregator_config;
     endpoint_t* aggregator = endpoint::aggregator::create(node, &aggregator_config, ENDPOINT_FLAG_NONE, nullptr);
     load_language();

@@ -8,3 +8,8 @@ ${CXX:-c++} -std=c++17 -Wall -Wextra -Werror -O1 -fsanitize=address,undefined \
     ../../components/octo_protocol/octo_protocol.cpp test_protocol.cpp \
     -o build/test_protocol
 ./build/test_protocol
+${CXX:-c++} -std=c++17 -Wall -Wextra -Werror -O1 -fsanitize=address,undefined \
+    -I ../../components/mb_core/include \
+    test_fabric_health.cpp \
+    -o build/test_fabric_health
+./build/test_fabric_health

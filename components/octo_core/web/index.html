@@ -386,6 +386,8 @@ const TEXT = {
   en: {
     tryPassword: 'The Wi-Fi network refused the password. Nothing was saved.', tryNotFound: 'That Wi-Fi network was not found. Nothing was saved.', tryNoConnect: 'Could not get on that Wi-Fi network. Nothing was saved.',
     ctlConnected: d => `connected for ${d}`, ctlLast: d => `not connected · last seen ${d} ago`, ctlNever: 'not connected since the device started',
+    ctlOffline: d => `not connected · no contact for ${d}`,
+    ctlStale: 'Probably removed in that app. Disconnect it here if you no longer use it.',
     valConnected: (c, n) => `${c} of ${n} connected`, statusLed: 'Status LED', statusLedHelp: 'A LED that shows the state: two quick blinks = setup network open, slow blinking = joining the network, two blinks every 3 s = not paired, on with two dips = paired but no controller connected, on = connected.',
     ledPin: 'Pin (empty: none)', ledInverted: 'Lights when low', ledQuiet: 'Off when all is well', ledSaved: 'Saved',
     configInfoAp: s => `Setup network “${s}”. Set your own Wi-Fi and the Thread network below; the beds can be added already.`, configApGo: 'Continue on my Wi-Fi', configApMoved: h => `The bridge restarts on your Wi-Fi. Connect this phone to your own Wi-Fi again and open http://${h}/`, configApDone: h => `The bridge goes to Thread. Connect this phone to your own Wi-Fi again; the page is then at http://${h}/`,
@@ -1131,7 +1133,8 @@ async function loadMatter() {
   $('#pairHelp').textContent = m.config_mode ? '' : m.fabrics.length ? t('pairExtra') : t('pairFirst');
   $('#fabrics').innerHTML = m.fabrics.map(f => `<div class="row"><div class="label">${esc(f.vendor)}
       <div class="sub">Controller ${f.index}${f.label ? ' · ' + esc(f.label) : ''}</div>
-      ${f.connected === undefined ? '' : `<div class="sub" style="color:${f.connected ? 'var(--ok, #43a047)' : 'var(--warn, #e68a00)'}">${f.connected ? t('ctlConnected', span(f.since)) : f.last_seen >= 0 ? t('ctlLast', span(f.last_seen)) : t('ctlNever')}</div>`}</div>
+      ${f.connected === undefined ? '' : `<div class="sub" style="color:${f.connected ? 'var(--ok, #43a047)' : 'var(--warn, #e68a00)'}">${f.connected ? t('ctlConnected', span(f.since)) : f.last_seen >= 0 ? t('ctlLast', span(f.last_seen)) : f.offline >= 3600 ? t('ctlOffline', span(f.offline)) : t('ctlNever')}</div>`}
+      ${f.stale ? `<div class="sub" style="color:var(--bad, #db4437)">${t('ctlStale')}</div>` : ''}</div>
       <button class="warn" onclick="removeFabric(${f.index}, '${quote(f.vendor)}')">${t('disconnect')}</button></div>`).join('');
   $('#product').textContent = `${m.product} ${m.version}`;
   $('#ids').textContent = `${m.vid} / ${m.pid}`;

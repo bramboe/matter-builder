@@ -9,10 +9,10 @@
 <style>
 /* Colours, radii and spacing follow the Home Assistant frontend */
 :root{color-scheme:light;--primary:#006985;--on-primary:#fff;--bg:#edf0f2;--card:#fff;--fg:#141414;--mute:#505b64;--line:#d7dfe4;--fill:#eef2f5;--control:#677680;
---card-hover:#aebec8;--ok:#237038;--bad:#a52229;--warn:#815000;--chip:rgba(0,154,199,.12);--okchip:rgba(67,160,71,.14);--badchip:rgba(219,68,55,.12);
+--hover-border:#aebec8;--ok:#237038;--bad:#a52229;--warn:#815000;--chip:rgba(0,154,199,.12);--okchip:rgba(67,160,71,.14);--badchip:rgba(219,68,55,.12);
 --warnchip:rgba(255,152,0,.16);--radius:12px;--shadow:0 2px 12px rgba(0,0,0,.18)}
 @media (prefers-color-scheme:dark){:root{color-scheme:dark;--primary:#82d8ef;--on-primary:#10262e;--bg:#14181c;--card:#20262c;--fg:#f1f3f5;--mute:#bfc9d0;--line:#414c54;--fill:#2b343b;--control:#9baab4;
---card-hover:#687984;--ok:#8dd6a1;--bad:#ff9a9e;--warn:#ffca79;
+--hover-border:#687984;--ok:#8dd6a1;--bad:#ff9a9e;--warn:#ffca79;
 --chip:rgba(0,154,199,.22);--okchip:rgba(67,160,71,.22);--badchip:rgba(219,68,55,.22);--warnchip:rgba(255,152,0,.22);--shadow:0 2px 16px rgba(0,0,0,.6)}}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
@@ -67,9 +67,6 @@ a:not(.button){color:var(--primary)}
 .card .acts details.more{margin-left:auto}
 #catalogBody[data-view="list"] .grid{grid-template-columns:minmax(0,1fr);gap:8px}
 #catalogBody .card{cursor:pointer}
-@media (hover:hover){
-  #catalogBody .card:hover,.new:hover,.choice:enabled:not(.on):hover{border-color:var(--card-hover)}
-}
 button.catalog-open{display:inline;min-height:0;padding:0;border-radius:2px;background:transparent;color:inherit;text-align:start;white-space:normal}
 #catalogBody .card .acts{margin:auto 0 0}
 #catalogBody .needs,.catalog-detail .needs{align-items:center}
@@ -122,9 +119,6 @@ button.catalog-tip-trigger.optional{background:var(--fill);color:var(--mute);bor
 .bed-family-entry .sub{margin-top:2px}
 .bed-family-entry .chev{transform:rotate(-45deg);margin:0 4px}
 .bed-recipes{margin-top:16px}
-@media (hover:hover){
-  .bed-family-entry:hover{box-shadow:inset 0 0 0 1px var(--card-hover)}
-}
 @media (min-width:760px){
   #catalogBody[data-view="cards"] .bed-family-list{
     display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,240px),1fr));gap:12px;
@@ -177,9 +171,6 @@ button.catalog-tip-trigger.optional{background:var(--fill);color:var(--mute);bor
   #catalogBody[data-view="list"] .card+.card{border-top:1px solid var(--line)}
   #catalogBody[data-view="list"] .card:first-child{border-radius:var(--radius) var(--radius) 0 0}
   #catalogBody[data-view="list"] .card:last-child{border-end-start-radius:var(--radius);border-end-end-radius:var(--radius)}
-  @media (hover:hover){
-    #catalogBody[data-view="list"] .card:hover{box-shadow:inset 0 0 0 1px var(--card-hover)}
-  }
   #catalogBody[data-view="list"] .head{grid-column:1/-1}
   #catalogBody[data-view="list"] .head>.ico{width:28px;height:28px}
   #catalogBody[data-view="list"] .needs{margin-top:0}
@@ -214,7 +205,6 @@ button.spec-name{min-width:0;flex:1 1 160px;justify-content:flex-start;text-alig
 .device-config-page .tabs button.on{color:var(--editor-action);border-bottom-color:var(--editor-action)}
 .device-config-page .seg button.on{color:var(--editor-action)}
 .device-config-page .ed-add{background:var(--fill);border:0;color:var(--editor-action)}
-.device-config-page .ed-add:hover{background:var(--chip)}
 .device-config-page .ed-section:first-child{margin-top:0}
 .device-settings-card{background:var(--card);border-radius:var(--radius);padding:16px;margin-bottom:12px}
 .device-settings-card h3{margin:0 0 8px}
@@ -256,7 +246,6 @@ button.spec-name{min-width:0;flex:1 1 160px;justify-content:flex-start;text-alig
 #specEditor .spec-editor-section{background:var(--card);border-radius:var(--radius);padding:16px;margin-top:12px}
 #specEditor .spec-editor-section .ed-section:first-child{margin-top:0}
 #specEditor .ed-add{background:var(--fill);border:0;color:var(--editor-action)}
-#specEditor .ed-add:hover{background:var(--chip)}
 #specEditor .seg button.on{color:var(--editor-action)}
 .spec-editor-bar button.pri{background:var(--editor-action);color:var(--on-primary)}
 /* Labelled inputs and selects already show focus on the enclosing field. */
@@ -327,7 +316,6 @@ details.more .pop{position:absolute;right:0;bottom:40px;z-index:3;background:var
 .steps{display:flex;flex-direction:column;gap:8px;margin-top:8px}.step{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end}
 @media (max-width:560px){.step{grid-template-columns:1fr auto}.step .field:nth-child(2){grid-column:1}}
 details.more .pop button,details.more .pop a.button{display:flex;align-items:center;padding:0 16px;box-sizing:border-box;text-decoration:none;width:100%;justify-content:flex-start;border-radius:0;background:none;color:var(--fg);font-weight:400;min-height:40px}
-details.more .pop button:hover,details.more .pop a.button:hover{background:var(--fill)}
 details.more .pop button.warn{color:var(--bad)}
 
 /* Dialogs */
@@ -358,7 +346,6 @@ dialog.side{margin:0 0 0 auto;height:100vh;max-height:100vh;border-radius:16px 0
 /* An eye on password fields: show what is typed */
 .field.has-eye{position:relative;padding-right:44px}
 .eye{position:absolute;right:4px;bottom:2px;width:36px;height:36px;min-height:0;display:grid;place-items:center;border:0;padding:0;border-radius:18px;background:none;color:var(--mute);cursor:pointer}
-.eye:hover{color:var(--fg)}
 .eye svg{width:20px;height:20px;fill:currentColor}
 .check{display:flex;align-items:center;gap:8px;cursor:pointer}
 .notice{color:var(--primary);margin-top:10px}
@@ -439,7 +426,6 @@ details.boards{margin:8px 0 12px}details.boards summary{cursor:pointer}
 .ed-drop{display:flex;align-items:center;justify-content:center;min-height:44px;margin-bottom:8px;color:var(--mute);font-size:13px;text-align:center}
 .ed-item[draggable=true] .ed-item-head{cursor:grab}
 .ed-add{width:100%;justify-content:flex-start;background:none;border:1.5px dashed var(--line);border-radius:var(--radius);min-height:48px;color:var(--primary)}
-.ed-add:hover{border-color:var(--primary)}
 .taskbar{position:sticky;bottom:0;z-index:4;background:var(--card);border-top:1px solid var(--line);box-shadow:0 -2px 8px rgba(0,0,0,.06)}
 .taskbar .bar{min-height:52px}
 .taskbar .progress{width:120px;margin:0}
@@ -532,6 +518,34 @@ dialog.side{max-width:100vw}
   .taskbar .bar button+button{margin-left:0}
   .actions button{min-height:40px}
   .hscale{font-size:12px}
+}
+
+/* Pointer hover gives interactive items an edge without shifting the layout. */
+@media (hover:hover){
+  :is(.card:not(.ghost, :where(#authForm)), .spec-row, .choice:enabled:not(.on), .day):hover{
+    border-color:var(--hover-border);
+  }
+  :is(button:enabled:not(.catalog-open, .card, .choice:not(.on)),
+      a[href]:not([aria-disabled=true]), summary, .ed-item-head[onclick], .check, .switch):hover,
+  #clearCatalogFilters:enabled:hover{
+    box-shadow:inset 0 0 0 1px var(--hover-border);
+  }
+  :is(summary, .ed-item-head[onclick], .check, .switch):hover{
+    border-radius:8px;
+  }
+  :is(.more > summary, .ble-presets > summary):hover{border-radius:18px}
+  :is(button.pri, #catalogView button.on):enabled:hover{
+    box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--on-primary) 60%, transparent);
+  }
+  :is(.field, .search):hover:not(:focus-within):has(:is(input, select, textarea):enabled){
+    box-shadow:inset 0 0 0 1px var(--hover-border);
+  }
+}
+@media (max-width:759px) and (hover:hover){
+  #catalogBody[data-view="list"] .card:hover{
+    border-color:var(--line);
+    box-shadow:inset 0 0 0 1px var(--hover-border);
+  }
 }
 </style>
 </head>

@@ -78,34 +78,109 @@ void forget(unsigned index) {
     nvs_close(nvs);
 }
 
-// The controller's stored subscriptions (that the device resumes after a
-// restart), dropped when there are any
-void drop_resumption(chip::FabricIndex index, uint32_t offline_s) {
+// Stored subscriptions whose node has no session: since when (uptime), by
+// subscription. Kept in RAM only: the Matter stack keeps the failed attempts
+// across restarts itself.
+struct Orphan {
+    bool used = false;
+    chip::FabricIndex fabric = 0;
+    chip::NodeId node = 0;
+    chip::SubscriptionId id = 0;
+    int64_t since_us = 0;
+    bool seen = false;
+};
+constexpr int MAX_ORPHANS = 16;
+Orphan orphans[MAX_ORPHANS];
+
+Orphan* orphan_for(chip::FabricIndex fabric, chip::NodeId node, chip::SubscriptionId id, int64_t now) {
+    Orphan* free_slot = nullptr;
+    for (Orphan& o : orphans) {
+        if (o.used && o.fabric == fabric && o.node == node && o.id == id) return &o;
+        if (!o.used && free_slot == nullptr) free_slot = &o;
+    }
+    if (free_slot == nullptr) return nullptr;
+    *free_slot = Orphan();
+    free_slot->used = true;
+    free_slot->fabric = fabric;
+    free_slot->node = node;
+    free_slot->id = id;
+    free_slot->since_us = now;
+    return free_slot;
+}
+
+// Has the node a CASE session with the device (it holds or makes a
+// subscription, or talks to it in any other way)?
+bool reachable(chip::FabricIndex fabric, chip::NodeId node) {
+    auto session = chip::Server::GetInstance().GetSecureSessionManager().FindSecureSessionForNode(
+        chip::ScopedNodeId(node, fabric), chip::MakeOptional(chip::Transport::SecureSession::Type::kCASE));
+    return session.HasValue();
+}
+
+// Drops the stored subscriptions of nodes that are gone (drop_orphan)
+void prune_subscriptions(int64_t now, bool counting, uint32_t elapsed_s) {
 #if CHIP_CONFIG_PERSIST_SUBSCRIPTIONS
+    // Off the network itself: nobody could reach the device, so that time
+    // does not count, and nothing is dropped
+    if (!counting) {
+        for (Orphan& o : orphans) {
+            if (o.used) o.since_us += int64_t(elapsed_s) * 1000000;
+        }
+        return;
+    }
     auto* storage = chip::Server::GetInstance().GetSubscriptionResumptionStorage();
     if (storage == nullptr) return;
     auto* iterator = storage->IterateSubscriptions();
     if (iterator == nullptr) return;  // busy resuming: next time
+    struct Drop {
+        chip::FabricIndex fabric;
+        chip::NodeId node;
+        chip::SubscriptionId id;
+        uint32_t failed;
+        uint32_t orphan_s;
+    };
+    Drop drops[MAX_ORPHANS];
+    int count = 0;
+    for (Orphan& o : orphans) o.seen = false;
     chip::app::SubscriptionResumptionStorage::SubscriptionInfo subscription;
-    bool any = false;
     while (iterator->Next(subscription)) {
-        if (subscription.mFabricIndex == index) {
-            any = true;
-            break;
+        if (reachable(subscription.mFabricIndex, subscription.mNodeId)) continue;
+        Orphan* o = orphan_for(subscription.mFabricIndex, subscription.mNodeId, subscription.mSubscriptionId, now);
+        if (o == nullptr) continue;
+        o->seen = true;
+        uint32_t failed = 0;
+#if CHIP_CONFIG_SUBSCRIPTION_TIMEOUT_RESUMPTION
+        failed = subscription.mResumptionRetries;
+#endif
+        const uint32_t orphan_s = static_cast<uint32_t>((now - o->since_us) / 1000000);
+        if (drop_orphan(false, orphan_s, failed) && count < MAX_ORPHANS) {
+            drops[count++] = {subscription.mFabricIndex, subscription.mNodeId, subscription.mSubscriptionId, failed, orphan_s};
         }
     }
     iterator->Release();
-    if (!any) return;
-    const CHIP_ERROR err = storage->DeleteAll(index);
-    if (err == CHIP_NO_ERROR) {
-        ESP_LOGW(TAG, "Controller %u: no contact for %" PRIu32 " h, its stored subscription is dropped (no more attempts to reach it)",
-                 static_cast<unsigned>(index), offline_s / 3600);
-    } else {
-        ESP_LOGE(TAG, "Controller %u: could not drop its stored subscription: %" CHIP_ERROR_FORMAT, static_cast<unsigned>(index), err.Format());
+    // Reachable again, or gone from the storage: forget it
+    for (Orphan& o : orphans) {
+        if (o.used && !o.seen) o = Orphan();
+    }
+    for (int i = 0; i < count; ++i) {
+        const Drop& d = drops[i];
+        const CHIP_ERROR err = storage->Delete(d.node, d.fabric, d.id);
+        if (err == CHIP_NO_ERROR) {
+            ESP_LOGW(TAG, "Controller %u, node %08" PRIX32 "%08" PRIX32 ": unreachable (%" PRIu32 " failed attempts, %" PRIu32
+                     " min without a session), its stored subscription is dropped: no more attempts to reach it",
+                     static_cast<unsigned>(d.fabric), static_cast<uint32_t>(d.node >> 32), static_cast<uint32_t>(d.node), d.failed,
+                     d.orphan_s / 60);
+        } else {
+            ESP_LOGE(TAG, "Controller %u: could not drop a stored subscription: %" CHIP_ERROR_FORMAT,
+                     static_cast<unsigned>(d.fabric), err.Format());
+        }
+        for (Orphan& o : orphans) {
+            if (o.used && o.fabric == d.fabric && o.node == d.node && o.id == d.id) o = Orphan();
+        }
     }
 #else
-    (void) index;
-    (void) offline_s;
+    (void) now;
+    (void) counting;
+    (void) elapsed_s;
 #endif
 }
 
@@ -124,9 +199,6 @@ void poll() {
     auto* engine = chip::app::InteractionModelEngine::GetInstance();
     const bool counting = net::up();
     bool seen[MAX_FABRICS + 1] = {};
-    chip::FabricIndex drop[MAX_FABRICS];
-    uint32_t drop_offline[MAX_FABRICS];
-    int drops = 0;
     {
         std::lock_guard<std::mutex> guard(lock);
         if (!loaded) {
@@ -143,10 +215,6 @@ void poll() {
             slot.present = true;
             const Step step = advance(slot.record, fabric.GetCompressedFabricId(), live, counting, elapsed);
             if (step.save) save(index, slot.record);
-            if (step.drop_resumption && drops < MAX_FABRICS) {
-                drop[drops] = fabric.GetFabricIndex();
-                drop_offline[drops++] = slot.record.offline_s;
-            }
             if (step.note_stale) {
                 ESP_LOGW(TAG, "Controller %u (vendor 0x%04X): no contact for %" PRIu32 " days. Probably removed in its app; "
                          "disconnect it on the settings page or with \"matter remove %u\" if it is no longer used",
@@ -161,7 +229,7 @@ void poll() {
             }
         }
     }
-    for (int i = 0; i < drops; ++i) drop_resumption(drop[i], drop_offline[i]);
+    prune_subscriptions(now, counting, elapsed);
 }
 
 Info info(unsigned fabric_index) {

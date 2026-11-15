@@ -22,7 +22,6 @@ struct Record {
 
 struct Step {
     bool save = false;               // store the record
-    bool drop_resumption = false;    // drop the controller's stored subscriptions
     bool note_stale = false;         // log that it is stale (once per start)
 };
 
@@ -51,14 +50,18 @@ inline Step advance(Record& r, uint64_t id, bool live, bool counting, uint32_t e
             step.save = true;
         }
     }
-    // Every time, not once: an attempt that was under way when the
-    // subscription was dropped stores it again when it fails
-    step.drop_resumption = r.offline_s >= RESUMPTION_GIVE_UP_S;
     if (r.offline_s >= STALE_S && !r.stale_noted) {
         r.stale_noted = true;
         step.note_stale = true;
     }
     return step;
+}
+
+// A stored subscription whose node has no session with the device: dropped
+// after ORPHAN_RETRIES failed attempts to reach it (counted by the Matter
+// stack, also across restarts), or after ORPHAN_S without a session
+inline bool drop_orphan(bool reachable, uint32_t orphan_s, uint32_t failed_attempts) {
+    return !reachable && (orphan_s >= ORPHAN_S || failed_attempts >= ORPHAN_RETRIES);
 }
 
 }  // namespace fabric_health

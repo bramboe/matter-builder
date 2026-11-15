@@ -18,15 +18,15 @@ void check(bool ok, const char* what) {
     }
 }
 
-// `seconds` without contact in steps of a minute; how many steps asked to drop
+// `seconds` without contact in steps of a minute
 int run_offline(Record& r, uint64_t id, uint32_t seconds, bool counting, int* stale_notes = nullptr) {
-    int drops = 0;
+    int saves = 0;
     for (uint32_t t = 0; t < seconds; t += 60) {
         const Step s = advance(r, id, false, counting, 60);
-        drops += s.drop_resumption ? 1 : 0;
+        saves += s.save ? 1 : 0;
         if (stale_notes != nullptr && s.note_stale) ++*stale_notes;
     }
-    return drops;
+    return saves;
 }
 
 }  // namespace
@@ -37,21 +37,15 @@ int main() {
     {  // A new controller: stored once, nothing dropped while connected
         Record r;
         const Step first = advance(r, ID, true, true, 0);
-        check(first.save && !first.drop_resumption, "new record is saved");
+        check(first.save, "new record is saved");
         const Step again = advance(r, ID, true, true, 60);
-        check(!again.save && !again.drop_resumption, "connected: no writes");
-    }
-    {  // Gone: nothing dropped before 24 h, every minute after
-        Record r;
-        advance(r, ID, true, true, 0);
-        check(run_offline(r, ID, RESUMPTION_GIVE_UP_S - 60, true) == 0, "no drop before 24 h");
-        check(advance(r, ID, false, true, 60).drop_resumption, "drop at 24 h");
-        check(advance(r, ID, false, true, 60).drop_resumption, "drop keeps going (an attempt may store it again)");
+        check(!again.save, "connected: no writes");
     }
     {  // Off the network itself: that time does not count
         Record r;
         advance(r, ID, true, true, 0);
-        check(run_offline(r, ID, 3 * RESUMPTION_GIVE_UP_S, false) == 0 && r.offline_s == 0, "not counted while off the network");
+        run_offline(r, ID, 3 * STALE_S, false);
+        check(r.offline_s == 0, "not counted while off the network");
     }
     {  // Coming back resets the count, and is stored
         Record r;
@@ -76,18 +70,18 @@ int main() {
         run_offline(r, ID, 3600, true, &notes);
         check(notes == 1 && r.offline_s >= STALE_S, "stale noted once");
     }
-    {  // After a restart (count loaded from NVS) over 24 h: dropped right away
-        Record r;
-        r.id = ID;
-        r.offline_s = RESUMPTION_GIVE_UP_S + 10;
-        check(advance(r, ID, false, true, 0).drop_resumption, "loaded over 24 h: drop at once");
+    {  // Stored subscriptions of nodes that are gone
+        check(!drop_orphan(true, ORPHAN_S * 10, 100), "reachable node: never dropped");
+        check(!drop_orphan(false, ORPHAN_S - 1, ORPHAN_RETRIES - 1), "unreachable briefly: kept");
+        check(drop_orphan(false, ORPHAN_S, 0), "unreachable for ORPHAN_S: dropped");
+        check(drop_orphan(false, 0, ORPHAN_RETRIES), "failed attempts (kept across restarts): dropped at once");
     }
     {  // A reused fabric index is another controller: count starts over
         Record r;
         r.id = ID;
         r.offline_s = STALE_S;
         const Step s = advance(r, ID + 1, false, true, 0);
-        check(s.save && !s.drop_resumption && r.offline_s == 0, "other fabric id: fresh record");
+        check(s.save && r.offline_s == 0, "other fabric id: fresh record");
     }
     {  // No overflow
         Record r;

@@ -97,27 +97,32 @@ button.catalog-tip-trigger.optional{background:var(--fill);color:var(--mute);bor
 @media (min-width:760px){
   #catalogBody[data-view="list"] .card{display:grid;grid-template-columns:minmax(150px,1fr) minmax(0,2fr) auto;align-items:center;gap:20px}
 }
-.catalog-toolbar{display:flex;align-items:flex-end;gap:10px 20px;flex-wrap:wrap;margin-bottom:12px}
+.catalog-toolbar{display:flex;align-items:flex-end;gap:8px 20px;flex-wrap:wrap;margin-bottom:12px}
+.catalog-filter-strip{display:flex;gap:10px 20px;flex-wrap:wrap;min-width:0}
 .catalog-filter{display:grid;justify-items:start;gap:4px;min-width:0}
 .catalog-filter .sub{margin-inline-start:8px;font-weight:500}
 .catalog-filter .seg{flex-wrap:wrap;max-width:100%;margin:0;border:1px solid var(--line)}
 .catalog-filter .seg button.on{background:var(--chip)}
 #recipeCategories{margin:0 2px 14px}
 @media (max-width:759px){
-  #catalogTab .catalog-toolbar,#catalogTab #recipeCategories{
+  .catalog-filter-strip,#recipeCategories{
     flex-wrap:nowrap;max-width:100%;overflow-x:auto;padding:4px;
   }
-  #catalogTab .catalog-toolbar > *{flex:none}
-  #catalogTab .catalog-toolbar :is(.seg,.filters){flex-wrap:nowrap;max-width:none}
-  #catalogTab .catalog-toolbar button,#catalogTab #recipeCategories button{flex:none;min-height:36px}
+  .catalog-filter-strip{flex-basis:100%}
+  .catalog-filter-strip .catalog-filter{flex:none}
+  .catalog-filter-strip .seg{flex-wrap:nowrap;max-width:none}
+  .catalog-filter-strip button,#recipeCategories button{flex:none;min-height:36px}
+  #catalogBody .catalog-description{display:none}
+  #catalogBody[data-view="list"] .grid{gap:0;background:var(--card);border-radius:var(--radius)}
   #catalogBody[data-view="list"] .card{
     display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;
-    gap:4px 8px;padding:8px 12px;
+    gap:2px 8px;padding:8px 12px;border:0;border-radius:0;background:transparent;transform:none;
   }
-  #catalogBody[data-view="list"] .card .head{grid-column:1/-1}
-  #catalogBody[data-view="list"] .card .head>.ico{width:32px;height:32px}
-  #catalogBody[data-view="list"] .catalog-description{display:none}
-  #catalogBody[data-view="list"] .acts{justify-content:flex-end;padding:0}
+  #catalogBody[data-view="list"] .card+.card{border-top:1px solid var(--line)}
+  #catalogBody[data-view="list"] .head{grid-column:1/-1}
+  #catalogBody[data-view="list"] .head>.ico{width:28px;height:28px}
+  #catalogBody[data-view="list"] .needs{margin-top:0}
+  #catalogBody[data-view="list"] .acts{justify-content:flex-end}
   #catalogBody[data-view="list"] .acts .grow{display:none}
 }
 #recipeCategories .recipe-count{font-size:11px;font-variant-numeric:tabular-nums;color:var(--mute);background:var(--card);border-radius:20px;padding:1px 6px}
@@ -197,7 +202,6 @@ button.spec-name{min-width:0;flex:1 1 160px;justify-content:flex-start;text-alig
 :is(#specEditor,.spec-editor-bar,.device-config-page) :is(button,summary,input,select,textarea):not(:where(.field input,.field select)):focus-visible{outline:2px solid var(--editor-action);outline-offset:2px}
 
 #catalogView{margin-inline-start:auto}
-@media (max-width:599px){#catalogView{margin-inline-start:0}}
 .ico{display:grid;place-items:center;width:38px;height:38px;border-radius:50%;background:var(--chip);color:var(--primary);flex:none}
 .chip{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:500;padding:2px 10px;border-radius:10px;background:var(--fill);color:var(--mute);white-space:nowrap}
 .chip.ok{background:var(--okchip);color:var(--ok)}
@@ -531,20 +535,22 @@ dialog.side{max-width:100vw}
 <!-- Catalog -->
 <section id="catalogTab" hidden>
   <div class="catalog-toolbar">
-    <div class="catalog-filter">
-      <span class="sub" id="catalogTypeLabel" data-t="catalogType"></span>
-      <div class="seg" id="catalogFilters" role="group" aria-labelledby="catalogTypeLabel">
-        <button type="button" data-filter="all" class="on" aria-pressed="true" data-t="filterAll"></button>
-        <button type="button" data-filter="firmware" aria-pressed="false" data-t="filterFirmware"></button>
-        <button type="button" data-filter="recipe" aria-pressed="false" data-t="filterRecipes"></button>
+    <div class="catalog-filter-strip">
+      <div class="catalog-filter">
+        <span class="sub" id="catalogTypeLabel" data-t="catalogType"></span>
+        <div class="seg" id="catalogFilters" role="group" aria-labelledby="catalogTypeLabel">
+          <button type="button" data-filter="all" class="on" aria-pressed="true" data-t="filterAll"></button>
+          <button type="button" data-filter="firmware" aria-pressed="false" data-t="filterFirmware"></button>
+          <button type="button" data-filter="recipe" aria-pressed="false" data-t="filterRecipes"></button>
+        </div>
       </div>
-    </div>
-    <div class="catalog-filter">
-      <span class="sub" id="catalogSourceLabel" data-t="source"></span>
-      <div class="seg" id="sourceFilters" role="group" aria-labelledby="catalogSourceLabel">
-        <button type="button" data-source="any" class="on" aria-pressed="true" data-t="anySource"></button>
-        <button type="button" data-source="official" aria-pressed="false" data-t="official"></button>
-        <button type="button" data-source="community" aria-pressed="false" data-t="community"></button>
+      <div class="catalog-filter">
+        <span class="sub" id="catalogSourceLabel" data-t="source"></span>
+        <div class="seg" id="sourceFilters" role="group" aria-labelledby="catalogSourceLabel">
+          <button type="button" data-source="any" class="on" aria-pressed="true" data-t="anySource"></button>
+          <button type="button" data-source="official" aria-pressed="false" data-t="official"></button>
+          <button type="button" data-source="community" aria-pressed="false" data-t="community"></button>
+        </div>
       </div>
     </div>
     <div class="filters" id="catalogView" role="group" aria-label="Catalog view">

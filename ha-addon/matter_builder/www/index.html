@@ -106,12 +106,12 @@ button.catalog-tip-trigger.optional{background:var(--fill);color:var(--mute);bor
 #recipeCategories{margin:0 2px 14px}
 #openCatalogFilters,#catalogResultCount{display:none}
 @media (max-width:759px){
-  .catalog-toolbar{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:14px 8px}
+  .catalog-toolbar{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px}
   .catalog-toolbar .catalog-filter-strip,#catalogBody #recipeCategories{display:none}
-  #openCatalogFilters{display:inline-flex;grid-column:1/-1;justify-self:start;min-height:36px}
-  #catalogResultCount{display:block}
+  #openCatalogFilters{display:inline-flex;justify-self:start;min-height:36px;padding-inline:10px}
+  #catalogResultCount{display:block;grid-column:1/-1}
   #catalogFilterDialog{
-    position:fixed;inset:auto 0 0;margin:0;width:100%;height:min(720px,calc(100dvh - 40px));
+    position:fixed;inset:auto 0 0;margin:0;width:100%;max-width:none;height:min(720px,calc(100dvh - 40px));
     max-height:calc(100dvh - 40px);border-radius:24px 24px 0 0;
   }
   #catalogFilterDialog .dlg-head{
@@ -577,11 +577,11 @@ dialog.side{max-width:100vw}
         </div>
       </div>
     </div>
-    <span id="catalogResultCount" role="status"></span>
     <div class="filters" id="catalogView" role="group" aria-label="Catalog view">
       <button type="button" data-view="cards" data-t="viewCards" aria-pressed="true" class="on"></button>
       <button type="button" data-view="list" data-t="viewList" aria-pressed="false"></button>
     </div>
+    <span id="catalogResultCount" role="status"></span>
   </div>
   <div id="catalogBody" data-view="cards"></div>
 </section>

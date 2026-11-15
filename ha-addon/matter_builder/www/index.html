@@ -553,11 +553,21 @@ dialog.side{max-width:100vw}
 @media (hover:hover){.settings-toc button:hover{background:var(--fill)}}
 .bed-group{margin-top:12px}
 @media (min-width:760px){#catalogBody[data-view="cards"] .bed-family-list.bed-group{grid-template-columns:repeat(auto-fill,minmax(min(100%,320px),1fr))}}
+#catalogApplied{display:none}
+@media (max-width:759px){
+  #catalogApplied{display:flex;gap:8px;grid-column:1/-1;overflow-x:auto;scrollbar-width:none;margin-top:-4px}
+  #catalogApplied::-webkit-scrollbar{display:none}
+  #catalogApplied button{flex:none;min-height:40px}
+  .applied-filter{background:var(--card);box-shadow:inset 0 0 0 1px var(--control);gap:8px}
+  .applied-filter span{color:var(--mute);font-size:12px}
+  .catalog-sheet-options label [data-count]{margin-inline-start:auto}
+}
 /* Phones: the logo, the tabs and Settings share the first row; search has the second */
 @media (max-width:640px){
+  .settings-toc button{min-height:44px}
   #mainBar>img{width:28px;height:28px;margin-inline-start:4px}
   #mainBar nav{flex:1 1 calc(100% - 96px);min-width:0}
-  #settingsBtn{order:1;width:40px;padding:0;margin-bottom:0}
+  #settingsBtn{order:1;width:44px;min-height:44px;padding:0;margin-bottom:0}
   #settingsBtn .settings-label{display:none}
   #searchBox,#updateAllBtn,#checkReleases{order:2}
   /* A task keeps its title in the header: only the app name gives way */
@@ -661,6 +671,7 @@ dialog.side{max-width:100vw}
       </button>
     </div>
     <span id="catalogResultCount" role="status"></span>
+    <div id="catalogApplied" role="group" aria-label="Applied filters" hidden></div>
   </div>
   <div id="catalogBody" data-view="cards"></div>
 </section>
@@ -2567,7 +2578,10 @@ function updateCatalogSheet() {
       input.checked = filters[key] === input.value;
       if (input.checked) row.querySelector('[data-summary]').textContent = input.nextElementSibling.textContent;
       const count = input.parentElement.querySelector('[data-count]');
-      if (count) count.textContent = categoryCounts.get(input.value) || 0;
+      if (!count) continue;
+      const probe = {...filters, [key]: input.value};
+      if (probe.type === 'firmware') probe.category = 'all';
+      count.textContent = key === 'category' ? categoryCounts.get(input.value) || 0 : catalogMatches(items, probe, query).length;
     }
   }
   const count = catalogMatches(items, filters, query).length;
@@ -2588,13 +2602,20 @@ $('#openCatalogFilters').onclick = () => {
     <summary><span><b>${title}</b><span class="sub" data-summary></span></span><span class="chev" aria-hidden="true"></span></summary>
     <div class="catalog-sheet-options" role="group" aria-label="${title}">
       ${options.map(([value, label]) => `<label><input type="radio" name="${key}" value="${value}"><span>${esc(label)}</span>
-        ${key === 'category' && value !== 'all' ? '<span class="sub" data-count></span>' : ''}</label>`).join('')}
+        ${key !== 'sort' && !['all', 'any'].includes(value) ? '<span class="sub" data-count></span>' : ''}</label>`).join('')}
     </div></details>`).join('');
   updateCatalogSheet();
   catalogFilterDialog.showModal();
   $('#catalogFilterGroups').scrollTop = 0;
 };
 $('#closeCatalogFilters').onclick = () => catalogFilterDialog.close();
+$('#catalogApplied').onclick = event => {
+  const key = event.target.closest('button')?.dataset.clear;
+  if (!key) return;
+  if (key === 'family') { selectedBedFamily = ''; renderCatalog(); noteCatalogStep(); }
+  else setCatalogFilters(key === 'all' ? {...defaultCatalogFilters} : {[key]: defaultCatalogFilters[key]});
+  $('#openCatalogFilters').focus();
+};
 $('#clearCatalogFilters').onclick = () => {
   draftCatalogFilters = {...defaultCatalogFilters};
   updateCatalogSheet();
@@ -2619,6 +2640,7 @@ $('#catalogBody').addEventListener('click', event => {
     const previousFamily = selectedBedFamily;
     selectedBedFamily = familyButton.dataset.bedFamily;
     renderCatalog();
+    noteCatalogStep();
     const target = selectedBedFamily ? $('#bedFamilyHeading') :
       $(`[data-bed-family="${CSS.escape(previousFamily)}"]`) || $('#bedFamilyHeading');
     target?.focus();
@@ -2703,6 +2725,17 @@ function renderCatalog() {
     const active = Object.keys(defaultCatalogFilters).filter(key => filters[key] !== defaultCatalogFilters[key]).length;
     $('#catalogFilterLabel').textContent = active ? `Filter and sort (${active})` : 'Filter and sort';
     if (catalogFilterDialog.open) updateCatalogSheet();
+    const applied = [
+      ['sort', filters.sort !== 'recommended' && `Sort: ${sortOptions.find(([key]) => key === filters.sort)[1]}`],
+      ['type', {firmware: 'Firmware', recipe: 'Recipes'}[filters.type]],
+      ['source', {official: 'Official', community: 'Community'}[filters.source]],
+      ['category', recipeCategories.get(filters.category)],
+      ['family', selectedBedFamily && (bedRecipeFamilies.get(selectedBedFamily) || 'Other beds')],
+    ].filter(([, text]) => text);
+    $('#catalogApplied').hidden = !applied.length;
+    setHtml($('#catalogApplied'), applied.map(([key, text]) => `<button type="button" class="applied-filter" data-clear="${key}"
+      aria-label="Remove filter: ${esc(text)}">${esc(text)}<span aria-hidden="true">✕</span></button>`).join('') +
+      (applied.length > 1 ? '<button type="button" class="text" data-clear="all">Clear all</button>' : ''));
   }
   const categories = new Set(items.filter(it => it.kind === 'recipe').map(recipeCategory));
   const counts = new Map();
@@ -3131,6 +3164,47 @@ $('#specSave').onclick = () => postSpec(false);
 $('#buildGenericBtn').onclick = async () => { await api('api/build', {app: 'generic'}); refresh(); };
 
 // ---------------------------------------------------------------- page
+// Every step in the browser history is pushed here. A push made while a step is
+// still being taken back waits for it, so the two never swallow each other.
+let pendingBacks = 0;
+const heldPushes = [];
+function pushHistory(state, url) {
+  if (pendingBacks) heldPushes.push([state, url]);
+  else history.pushState(state, '', url);
+}
+function dropHistoryStep() { pendingBacks++; history.back(); }
+// Browser Back closes the open panel or sheet and stays on the screen under it.
+// A confirmation keeps its own handling: Cancel and the action are its only exits.
+const backDialogs = [];
+const nativeShowModal = HTMLDialogElement.prototype.showModal, nativeDialogClose = HTMLDialogElement.prototype.close;
+function dialogClosed(dialog) {
+  const at = backDialogs.lastIndexOf(dialog);
+  if (at < 0) return;
+  backDialogs.splice(at, 1);
+  dropHistoryStep();
+}
+HTMLDialogElement.prototype.showModal = function () {
+  nativeShowModal.call(this);
+  if (this.id === 'actionDlg' || backDialogs.includes(this)) return;
+  backDialogs.push(this);
+  pushHistory({...history.state, mbDialog: true});
+};
+HTMLDialogElement.prototype.close = function (...args) {
+  nativeDialogClose.apply(this, args);
+  dialogClosed(this);
+};
+document.addEventListener('close', event => dialogClosed(event.target), true);  // Escape, a click beside the panel
+window.addEventListener('popstate', event => {
+  if (pendingBacks) {
+    event.stopImmediatePropagation();
+    if (!--pendingBacks) for (const [state, url] of heldPushes.splice(0)) history.pushState(state, '', url);
+    return;
+  }
+  const dialog = backDialogs.pop();
+  if (!dialog) return;
+  event.stopImmediatePropagation();
+  if (dialog.open) nativeDialogClose.call(dialog);
+});
 let pageTask = null, leavingTask = false, afterTaskBack = null;
 const launchContext = (target = document.activeElement) => {
   const id = target?.id;
@@ -3154,7 +3228,7 @@ function restoreContext(context) {
 function openTask({title, content, cleanup, blocked, dirty, after}, context = launchContext()) {
   if (pageTask) return;
   pageTask = {context, content, cleanup, blocked, dirty, after};
-  history.pushState({mbTask: true}, '');
+  pushHistory({mbTask: true});
   if (content) {
     $('#taskPage').append(content);
     content.hidden = false;
@@ -3198,14 +3272,14 @@ window.addEventListener('popstate', async () => {
     return;
   }
   if (!pageTask && !leavingTask && !history.state?.mbTask && mainTabs.includes(tab)) {
-    if (tabFromHash() !== tab) showTab(tabFromHash());
+    syncFromAddress();
     return;
   }
   if (!pageTask || history.state?.mbTask || leavingTask) return;
   leavingTask = true;
   try {
     if (await canLeaveTask()) finishTask();
-    else history.pushState({mbTask: true}, '');
+    else pushHistory({mbTask: true});
   } finally { leavingTask = false; }
 });
 $('#taskBack').innerHTML = icon('back');
@@ -3287,29 +3361,81 @@ function showTab(name) {
 }
 // The three tabs are places: each has an address (#catalog) and a step in the browser history
 const mainTabs = ['devices', 'catalog', 'developer'];
-const tabFromHash = () => mainTabs.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'devices';
+const tabFromHash = () => {
+  const name = location.hash.slice(1).split('?')[0];
+  return mainTabs.includes(name) ? name : 'devices';
+};
 function goTab(name) {
   if (name === tab) return;
-  history.pushState({mbTab: name}, '', '#' + name);
+  pushHistory({mbTab: name}, name === 'catalog' ? (catalogAddress = catalogHash()) : '#' + name);
   showTab(name);
+}
+// The catalog's filters, sorting, bed brand and search are part of its address:
+// Back undoes the last change, and a reload or a link keeps them.
+const catalogChoices = {sort: sortOptions.map(([key]) => key), category: ['all', ...recipeCategories.keys()],
+  type: ['all', 'firmware', 'recipe'], source: ['any', 'official', 'community']};
+let catalogAddress = '#catalog';
+function catalogHash() {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(catalogFilters)) if (value !== defaultCatalogFilters[key]) params.set(key, value);
+  if (selectedBedFamily) params.set('family', selectedBedFamily);
+  if (catalogQuery.trim()) params.set('q', catalogQuery.trim());
+  const text = params.toString();
+  return '#catalog' + (text ? '?' + text : '');
+}
+function noteCatalogStep() {
+  if (tab !== 'catalog' || catalogHash() === catalogAddress) return;
+  catalogAddress = catalogHash();
+  pushHistory({mbTab: 'catalog'}, catalogAddress);
+}
+function adoptCatalogAddress(render) {
+  const params = new URLSearchParams(location.hash.split('?')[1] || '');
+  const filters = {...defaultCatalogFilters};
+  for (const key of Object.keys(filters)) if (catalogChoices[key].includes(params.get(key))) filters[key] = params.get(key);
+  if (filters.type === 'firmware') filters.category = 'all';
+  const family = filters.category === 'beds' ? params.get('family') || '' : '', q = params.get('q') || '';
+  const same = JSON.stringify([filters, family, q]) === JSON.stringify([catalogFilters, selectedBedFamily, catalogQuery.trim()]);
+  if (!same) {
+    Object.assign(catalogFilters, filters);
+    selectedBedFamily = family;
+    catalogQuery = q;
+    markCatalogFilters();
+    if (render) {
+      if (tab === 'catalog') $('#search').value = catalogQuery;
+      renderCatalog();
+    }
+  }
+  catalogAddress = catalogHash();
+}
+function syncFromAddress() {
+  const next = tabFromHash();
+  if (next === 'catalog') adoptCatalogAddress(true);
+  if (next !== tab) showTab(next);
 }
 $$('#mainBar nav button').forEach(b => { b.onclick = () => goTab(b.dataset.tab); });
 $('#search').oninput = () => {
-  if (tab === 'catalog') catalogQuery = $('#search').value;
-  else if (tab === 'developer') specQuery = $('#search').value;
+  if (tab === 'catalog') {
+    catalogQuery = $('#search').value;
+    catalogAddress = catalogHash();
+    history.replaceState(history.state, '', catalogAddress);  // typing is one step, not one per letter
+  } else if (tab === 'developer') specQuery = $('#search').value;
   else query = $('#search').value;
   render();
 };
-function setCatalogFilters(changes) {
-  Object.assign(catalogFilters, changes);
-  if (catalogFilters.type === 'firmware') catalogFilters.category = 'all';
-  if (catalogFilters.category !== 'beds') selectedBedFamily = '';
+function markCatalogFilters() {
   for (const button of $$('#catalogFilters button, #sourceFilters button')) {
     const active = button.dataset.filter === catalogFilters.type || button.dataset.source === catalogFilters.source;
     button.classList.toggle('on', active);
     button.setAttribute('aria-pressed', String(active));
   }
+}
+function setCatalogFilters(changes) {
+  Object.assign(catalogFilters, changes);
+  if (catalogFilters.type === 'firmware') catalogFilters.category = 'all';
+  if (catalogFilters.category !== 'beds') selectedBedFamily = '';
+  markCatalogFilters();
   renderCatalog();
+  noteCatalogStep();
 }
 $$('#catalogFilters button').forEach(button => {
   button.onclick = () => setCatalogFilters({type: button.dataset.filter});
@@ -5510,6 +5636,7 @@ $('#passwordForm').onsubmit = async e => {
 };
 
 applyTexts();
+if (tabFromHash() === 'catalog') adoptCatalogAddress(false);
 showTab(tabFromHash());
 requestAnimationFrame(() => document.body.classList.add('ready'));  // texts in place: fade in
 api('api/auth').then(a => {

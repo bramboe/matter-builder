@@ -103,6 +103,23 @@ button.catalog-tip-trigger.optional{background:var(--fill);color:var(--mute);bor
 .catalog-filter .seg{flex-wrap:wrap;max-width:100%;margin:0;border:1px solid var(--line)}
 .catalog-filter .seg button.on{background:var(--chip)}
 #recipeCategories{margin:0 2px 14px}
+@media (max-width:759px){
+  #catalogTab .catalog-toolbar,#catalogTab #recipeCategories{
+    flex-wrap:nowrap;max-width:100%;overflow-x:auto;padding:4px;
+  }
+  #catalogTab .catalog-toolbar > *{flex:none}
+  #catalogTab .catalog-toolbar :is(.seg,.filters){flex-wrap:nowrap;max-width:none}
+  #catalogTab .catalog-toolbar button,#catalogTab #recipeCategories button{flex:none;min-height:36px}
+  #catalogBody[data-view="list"] .card{
+    display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;
+    gap:4px 8px;padding:8px 12px;
+  }
+  #catalogBody[data-view="list"] .card .head{grid-column:1/-1}
+  #catalogBody[data-view="list"] .card .head>.ico{width:32px;height:32px}
+  #catalogBody[data-view="list"] .catalog-description{display:none}
+  #catalogBody[data-view="list"] .acts{justify-content:flex-end;padding:0}
+  #catalogBody[data-view="list"] .acts .grow{display:none}
+}
 #recipeCategories .recipe-count{font-size:11px;font-variant-numeric:tabular-nums;color:var(--mute);background:var(--card);border-radius:20px;padding:1px 6px}
 .catalog-bed-link{margin-top:12px}
 .spec-list{display:grid;gap:8px}
@@ -2282,7 +2299,7 @@ function catalogCard(it, i) {
     onclick="openItem(${i}, this)" onkeydown="if (event.target === this && ['Enter', ' '].includes(event.key)) { event.preventDefault(); openItem(${i}, this); }">
     <div class="head"><span class="ico">${it.kind === 'firmware' ? appIcon(it.app) : icon('recipe')}</span>
       <div class="info"><h3>${esc(it.title)}</h3><div class="sub">${it.kind === 'firmware' ? esc(it.version || '') : t('recipe')} · ${esc(it.maker || (it.source || '').split('/')[0])}</div></div></div>
-    <div class="meta"><div class="sub">${esc(catalogDescription(it))}</div>
+    <div class="meta"><div class="sub catalog-description">${esc(catalogDescription(it))}</div>
       ${protocolIcons(labels, i, supported.length ? catalogBoardTooltip(supported, i) : '')}
       ${supported.length ? '' : catalogBoardNotice(it)}</div>
     <div class="acts">${badge(it)}<span class="grow"></span>${it.stars ? `<span class="sub">★ ${it.stars}</span>` : ''}</div></div>`;
@@ -2309,25 +2326,30 @@ const officialRecipeCategories = new Map([
 function recipeCategory(item) {
   const declared = String(item.text || '').match(/^# Category:[ \t]*([a-z]+)[ \t]*\r?$/im)?.[1].toLowerCase();
   if (recipeCategories.has(declared)) return declared;
-  if (!item.official) return 'other';
-  const slug = item.id?.split('/').at(-1);
-  if (/^(?:keeson-|leggett-platt-|linak-|motosleep-|octo-bed-|okimat-|reverie-|richmat-|solace(?:-|$))/.test(slug)) return 'beds';
-  return officialRecipeCategories.get(slug) || 'other';
+  if (item.official) {
+    const slug = item.id?.split('/').at(-1);
+    if (/^(?:keeson-|leggett-platt-|linak-|motosleep-|octo-bed-|okimat-|reverie-|richmat-|solace(?:-|$))/.test(slug)) return 'beds';
+    if (officialRecipeCategories.has(slug)) return officialRecipeCategories.get(slug);
+  }
+  const types = (item.connections || []).map(connection => connection.type).filter(type => type !== 'button');
+  if (types.length && types.every(type => ['led', 'led_strip'].includes(type))) return 'lighting';
+  if (types.length && types.every(type => ['motion', 'sht4x', 'scd4x', 'ble_sensor', 'ble_presence'].includes(type))) return 'sensors';
+  if (types.length && types.every(type => type === 'pulse_meter')) return 'energy';
+  return 'other';
 }
 
-let recipeFilter = 'overview';
+let recipeFilter = 'all';
 $('#catalogBody').addEventListener('click', event => {
   const button = event.target.closest('button[data-recipe-category]');
   if (!button || button.dataset.recipeCategory === recipeFilter) return;
   recipeFilter = button.dataset.recipeCategory;
   renderCatalog();
-  $(`#recipeCategories [data-recipe-category="${recipeFilter}"]`)?.focus();
 });
 
 let shownItems = [];
 function renderCatalog() {
   if (!catalogData && !catalogLoading && !recipes) loadCatalog();
-  const q = catalogQuery.toLowerCase();
+  const q = catalogQuery.trim().toLowerCase();
   const items = catalogItems();
   shownItems = items.filter(it => (catalogFilter === 'all' || it.kind === catalogFilter) &&
     (sourceFilter === 'any' || (sourceFilter === 'official') === !!it.official) &&
@@ -2335,37 +2357,40 @@ function renderCatalog() {
   const indexed = shownItems.map((it, i) => [it, i]);
   const fw = indexed.filter(([it]) => it.kind === 'firmware');
   const recipes = indexed.filter(([it]) => it.kind === 'recipe')
-    .sort(([a], [b]) => Number(!!b.official) - Number(!!a.official) || (b.stars || 0) - (a.stars || 0));
+    .map(([it, i]) => ({it, i, category: recipeCategory(it)}))
+    .sort((a, b) => Number(a.category === 'beds') - Number(b.category === 'beds') ||
+      Number(!!b.it.official) - Number(!!a.it.official) || (b.it.stars || 0) - (a.it.stars || 0));
   const categories = new Set(items.filter(it => it.kind === 'recipe').map(recipeCategory));
-  const overview = recipeFilter === 'overview';
-  const groupBeds = overview && !q.trim();
-  const categoryCounts = new Map();
-  for (const [recipe] of recipes) {
-    const category = recipeCategory(recipe);
-    categoryCounts.set(category, (categoryCounts.get(category) || 0) + 1);
-  }
-  const bedCount = categoryCounts.get('beds') || 0;
-  const visibleRecipes = recipes.filter(([it]) => overview
-    ? !groupBeds || recipeCategory(it) !== 'beds'
-    : recipeCategory(it) === recipeFilter);
-  const showRecipes = catalogFilter !== 'firmware' && (categories.size || !overview);
+  const counts = new Map();
+  for (const {category} of recipes) counts.set(category, (counts.get(category) || 0) + 1);
+  const visibleRecipes = recipeFilter === 'all' ? recipes : recipes.filter(recipe => recipe.category === recipeFilter);
+  const showRecipes = catalogFilter !== 'firmware' && (categories.size || recipeFilter !== 'all');
   const categoryButton = (key, label, count) => `<button type="button" data-recipe-category="${key}"
-    aria-pressed="${recipeFilter === key}" class="${recipeFilter === key ? 'on' : ''}">${label}
-    ${count === undefined ? '' : `<span class="recipe-count">${count}</span>`}</button>`;
+    aria-pressed="${recipeFilter === key}" class="${recipeFilter === key ? 'on' : ''}">${esc(label)}
+    <span class="recipe-count">${count}</span></button>`;
   const heading = showRecipes ? `<div class="section-head"><h2>${t('recipeSection')}</h2></div>
     <div class="filters" id="recipeCategories" role="group" aria-label="Recipe category">
-      ${categoryButton('overview', 'Overview')}
-      ${categories.has('beds') || recipeFilter === 'beds' ? categoryButton('beds', 'Beds', bedCount) : ''}
-      ${[...recipeCategories].filter(([key]) => key !== 'beds' && (categories.has(key) || key === recipeFilter))
-        .map(([key, label]) => categoryButton(key, esc(label), categoryCounts.get(key) || 0)).join('')}
+      ${categoryButton('all', 'All recipes', recipes.length)}
+      ${[...recipeCategories].filter(([key]) => categories.has(key) || key === recipeFilter)
+        .map(([key, label]) => categoryButton(key, label, counts.get(key) || 0)).join('')}
     </div>` : '';
-  const emptyRecipes = groupBeds && bedCount ? 'Choose Beds to see the matching recipes.' : 'No recipes match these filters.';
+  const categoryBar = $('#recipeCategories');
+  const scrollLeft = categoryBar?.scrollLeft;
+  const focusedCategory = categoryBar?.contains(document.activeElement)
+    ? document.activeElement.dataset.recipeCategory : null;
   setHtml($('#catalogBody'), (catalogData ? '' : `<p class="sub" style="margin:12px 2px">${t('catalogOffline')}</p>`) +
     (fw.length ? `<div class="section-head"><h2>${t('firmwareSection')}</h2></div><div class="grid">${fw.map(([it, i]) => catalogCard(it, i)).join('')}</div>` : '') +
     heading +
-    (visibleRecipes.length ? `<div class="grid">${visibleRecipes.map(([it, i]) => catalogCard(it, i)).join('')}</div>` : '') +
-    (showRecipes && !visibleRecipes.length ? `<p class="sub">${emptyRecipes}</p>` : '') +
+    (visibleRecipes.length ? `<div class="grid">${visibleRecipes.map(({it, i}) => catalogCard(it, i)).join('')}</div>` : '') +
+    (showRecipes && !visibleRecipes.length ? '<p class="sub">No recipes match these filters.</p>' : '') +
     (!fw.length && !showRecipes ? `<div class="empty"><p class="sub">${catalogLoading ? t('checking') : t('noCatalog')}</p></div>` : ''));
+  const nextBar = $('#recipeCategories');
+  if (nextBar && nextBar !== categoryBar) {
+    if (scrollLeft !== undefined) nextBar.scrollLeft = scrollLeft;
+    if (focusedCategory) {
+      nextBar.querySelector(`[data-recipe-category="${focusedCategory}"]`)?.focus({preventScroll: true});
+    }
+  }
 }
 
 // Example specs of the generic device, when the catalog is not reachable

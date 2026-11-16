@@ -3299,15 +3299,16 @@ function specRow(sp) {
 }
 
 // A config on a new ESP32 (wizard, configured) or on a linked generic device
-async function useConfig(slug, where = 'choose') {
+async function useConfig(slug) {
   $$('details.more').forEach(d => { d.open = false; });
-  const text = (await api(`api/specs/${slug}`)).text;
-  const spec = await parseSpec(text).catch(() => null);
-  if (!spec) return;
-  const sp = (specs || []).find(x => x.slug === slug);
-  if (spec.components.length && where === 'new' && !(sp && sp.factory.length)) { toast(t('needsBuild')); return; }
-  if (where === 'new') openWizard('board', null, {configText: text, file: sp && sp.factory.length ? sp.factory[sp.factory.length - 1] : null});
-  else openWizard('recipeTarget', null, {recipe: {title: spec.name, rows: spec.rows, text}, configText: text, configSlug: slug});
+  try {
+    const {text, error} = await api(`api/specs/${slug}`);
+    if (error) throw new Error(error);
+    const spec = await parseSpec(text);
+    const saved = (specs || []).find(s => s.slug === slug);
+    openWizard('recipeTarget', null, {recipe: {title: spec.name, rows: spec.rows, text}, configText: text, configSlug: slug,
+      configFactory: saved?.factory.at(-1), configNeedsBuild: spec.components.length > 0});
+  } catch (e) { toast(e.message); }
 }
 
 let specQuery = '';
@@ -5162,6 +5163,17 @@ function openWizard(step, host, extra) {
   if (!specs) loadSpecs().then(renderWizard);
   if (!catalogData && !recipes) loadCatalog().then(renderWizard);
 }
+function installConfigOnNewBoard() {
+  if (wiz.configNeedsBuild && !wiz.configFactory) {
+    wiz.error = t('needsBuild');
+    renderWizard();
+    return;
+  }
+  wiz.file = wiz.configFactory || null;
+  wiz.keepFile = !!wiz.file;
+  wiz.choice = null;
+  go('board');
+}
 function closeWizard() { return leaveTask(); }
 function completeWizard(next) {
   if (!pageTask) return;
@@ -5336,9 +5348,10 @@ function renderWizard() {
     if (!wiz.configText) wiz.configText = wiz.recipe.text || specYaml(wiz.recipe.title, wiz.recipe.rows);
     body = `<div class="sub">${esc(wiz.recipe.title)}</div><div class="choices">
       ${wiz.deviceOnly ? '' : choice(false, 'usb', t(wiz.configSlug ? 'specNewBoard' : 'recipeNew'), wiz.configSlug ? '' : t('recipeNewHelp'),
-        wiz.configSlug ? `useConfig('${wiz.configSlug}', 'new')` : "go('board')")}
+        wiz.configSlug ? 'installConfigOnNewBoard()' : "go('board')")}
       ${generic.map(p => choice(false, 'chip', t(wiz.configSlug ? 'specExisting' : 'recipeOn', esc(p.name)), t('recipeOnHelp'), `const r = wiz.recipe; completeWizard(() => openDevice('${p.id}', 'connections', r))`)).join('')}</div>
-      ${(wiz.deviceOnly || wiz.configSlug) && !generic.length ? `<p class="sub">${t('noGeneric')}</p>` : ''}`;
+      ${(wiz.deviceOnly || wiz.configSlug) && !generic.length ? `<p class="sub">${t('noGeneric')}</p>` : ''}
+      ${wiz.error ? `<p class="error" role="alert">${esc(wiz.error)}</p>` : ''}`;
   } else if (wiz.step === 'board') {
     title = t('wBoard');
     const busy = wiz.board && wiz.board.busy;

@@ -1441,7 +1441,7 @@ const needs = (requires, network) => [...(network ? [].concat(network) : []).map
   ...((requires || []).includes('bluetooth') ? ['Bluetooth'] : [])];
 const needChips = (list, extra = '') => list.length || extra
   ? `<div class="needs">${list.map(n => `<span class="chip${n === 'Bluetooth' ? ' accent' : ''}">${esc(n)}</span>`).join('')}${extra}</div>` : '';
-const rowsNeed = rows => rows.some(r => isBle(r.type)) ? ['bluetooth'] : [];
+const rowsNeed = rows => rows.some(r => isBle(r.type) || r.type === 'ble_command') ? ['bluetooth'] : [];
 const pkgOf = app => (state.packages || []).find(p => p.app === app);
 
 // A connection type the device's firmware does not have (a component)
@@ -1575,8 +1575,12 @@ const TYPE_ICON = {
   ble_sensor: 'M11 2h1l5 5-3.5 3.5L17 14l-5 5h-1v-6.5L7.5 16 6 14.5 10.5 10 6 5.5 7.5 4l3.5 3.5V2m2 3.8v3.4L14.7 7.5 13 5.8m0 7v3.4l1.7-1.7L13 12.8Z',
   ble_presence: 'M11 2h1l5 5-3.5 3.5L17 14l-5 5h-1v-6.5L7.5 16 6 14.5 10.5 10 6 5.5 7.5 4l3.5 3.5V2m2 3.8v3.4L14.7 7.5 13 5.8m0 7v3.4l1.7-1.7L13 12.8Z',
 };
+// The built-in Bluetooth command is available in recipes before a device supplies its driver list.
+const BLE_COMMAND_DRIVER = {type: 'ble_command', title: 'Bluetooth command', pins: 0, matter: 'on_off', number: 'Command (1–8)'};
+const connectionDriver = (type, drivers) => drivers.find(d => d.type === type) ||
+  (type === BLE_COMMAND_DRIVER.type ? BLE_COMMAND_DRIVER : null);
 const MATTER_ICON = {on_off: 'relay', dimmable: 'led', color: 'led', button: 'button', contact: 'contact', occupancy: 'motion', climate: 'sht4x'};
-const typeIcon = (type, driver) => `<svg viewBox="0 0 24 24"><path d="${TYPE_ICON[type] || (driver && TYPE_ICON[MATTER_ICON[driver.matter]]) || ICON.chip}"/></svg>`;
+const typeIcon = (type, driver) => type === 'ble_command' ? icon('bluetooth') : `<svg viewBox="0 0 24 24"><path d="${TYPE_ICON[type] || (driver && TYPE_ICON[MATTER_ICON[driver.matter]]) || ICON.chip}"/></svg>`;
 const isOutputType = type => type === 'relay' || type === 'led';
 // The on-device options (power-on, off after, what an input switches): built-in
 // types here, component types by what they are in Matter
@@ -1669,7 +1673,7 @@ class ConfigEditor {
     EDITORS[id] = this;
   }
   get ref() { return `EDITORS['${this.id}']`; }
-  driver(type) { return this.drivers.find(d => d.type === type) || null; }
+  driver(type) { return connectionDriver(type, this.drivers); }
   types() { return [...TYPES, ...this.drivers.map(d => d.type)]; }
   title(type) { const d = this.driver(type); return d ? d.title : TEXT.types[type] || type; }
   help(type) { const d = this.driver(type); return d ? (d.description || '') : TEXT.typeHelp[type] || ''; }
@@ -2371,7 +2375,7 @@ class ConfigEditor {
            <button class="pri" onclick="${ref}.doneCardYaml(${r.slot})">${t('done')}</button></div>`
       : `<div class="ed-fields">
           <label class="field"><span>${t('type')}</span><select onchange="${ref}.set(${r.slot}, 'type', this.value)">
-            ${this.types().map(x => `<option value="${x}" ${x === r.type ? 'selected' : ''}>${esc(this.title(x))}</option>`).join('')}</select></label>
+            ${[...new Set([...this.types(), r.type])].map(x => `<option value="${esc(x)}" ${x === r.type ? 'selected' : ''}>${esc(this.title(x))}</option>`).join('')}</select></label>
           ${isBle(r.type) ? `<label class="field"><span>${t('mac')}</span><input required data-check="mac:${r.slot}" value="${esc(r.mac)}" placeholder="${t('macHint')}" maxlength="17" spellcheck="false" oninput="${ref}.setQuiet(${r.slot}, 'mac', this.value)"></label>`
             : this.pinKeys(r).map(key => this.pinField(r, key)).join('')}
           ${this.driver(r.type) && this.driver(r.type).number ? `<label class="field"><span>${esc(this.driver(r.type).number)}</span><input type="number" min="0" max="65535" value="${r.number || 0}" oninput="${ref}.setQuiet(${r.slot}, 'number', +this.value)"></label>` : ''}
@@ -2388,7 +2392,7 @@ class ConfigEditor {
         <div class="sub" style="margin-top:8px">${esc(this.help(r.type))}</div>
         ${isIr(r.type) && this.irLast !== undefined ? (this.irLast ? `<div class="actions" style="margin-top:6px"><button class="text" onclick="${ref}.set(${r.slot}, 'code', '${esc(this.irLast)}')">${esc(t('useLastCode', this.irLast))}</button></div>`
           : `<div class="sub" style="margin-top:6px">${t('noLastCode')}</div>`) : ''}
-        ${r.type !== 'sht4x' && !isIr(r.type) && !isBle(r.type) ? `<label class="switch" style="margin-top:10px"><input type="checkbox" ${r.inverted ? 'checked' : ''} onchange="${ref}.set(${r.slot}, 'inverted', this.checked)"><span class="sub">${t('invertedHelp')}</span></label>` : ''}`;
+        ${r.type !== 'sht4x' && !isIr(r.type) && this.pinCount(r.type) > 0 ? `<label class="switch" style="margin-top:10px"><input type="checkbox" ${r.inverted ? 'checked' : ''} onchange="${ref}.set(${r.slot}, 'inverted', this.checked)"><span class="sub">${t('invertedHelp')}</span></label>` : ''}`;
     const names = groupNames(this.rows);
     const moves = !this.grouping ? '' : names.filter(g => g !== r.group).map(g => `<button onclick="${ref}.moveTo(${r.slot}, '${esc(g)}')">${esc(t('moveTo', g))}</button>`).join('')
       + (names.length < GROUPS_MAX ? `<button onclick="${ref}.moveTo(${r.slot}, null)">${t('moveToNew')}</button>` : '')
@@ -3077,10 +3081,15 @@ function renderItem() {
     <p>${esc(catalogDescription(it))}</p>
     ${it.kind === 'recipe' ? recipeSetupHtml(it.text) : ''}
     <div class="compatibility">${catalogCompatibilityHtml(it, catalogCompatibility(it, variants))}</div>
-    ${it.kind === 'recipe' && variants.length && rows.some(r => !isBle(r.type)) ? `<p class="sub">${t('catalogCheckPins')}</p>` : ''}
+    ${it.kind === 'recipe' && variants.length && rows.some(r => connectionPins(r, []).length) ? `<p class="sub">${t('catalogCheckPins')}</p>` : ''}
     ${installable.length ? `<label class="field"><span>${t('catalogBoardNetwork')}</span><select id="catalogVariant">
       ${installable.map(v => `<option value="${esc(v.factory)}">${esc(catalogBoardName(v.chip))} · ${esc(NET_NAMES[v.network] || v.network)}</option>`).join('')}</select></label>` : ''}
-    ${rows.length ? `<div>${rows.map(r => `<div class="row"><div class="label">${esc(r.name)}</div><div class="sub">${esc(TEXT.types[r.type] || r.type)} · GPIO ${r.pin}${r.type === 'sht4x' ? ' / ' + r.pin2 : ''}</div></div>`).join('')}</div>` : ''}
+    ${rows.length ? `<div>${rows.map(r => {
+      const type = TEXT.types[r.type] || connectionDriver(r.type, [])?.title || r.type;
+      const pins = connectionPins(r, []).filter(pin => pin != null);
+      const label = pins.length ? `${type} · GPIO ${pins.join(' / ')}` : type;
+      return `<div class="row"><div class="label">${esc(r.name)}</div><div class="sub">${esc(label)}</div></div>`;
+    }).join('')}</div>` : ''}
     ${facts.length ? `<div>${facts.map(([k, v]) => `<div class="row"><div class="label sub">${k}</div><div>${v}</div></div>`).join('')}</div>` : ''}
     ${it.official ? '' : `<div class="banner" style="background:var(--warnchip)"><span class="grow sub" style="color:var(--fg)">${t('communityNotice')}</span></div>`}
     ${it.kind === 'firmware' && !canInstall ? `<p class="sub">${t('updateOnly')}</p>` : ''}
@@ -4689,12 +4698,12 @@ function specYaml(name, rows, components = [], drivers = [], rules = [], ble = n
   if (device) lines.push(`  board: ${device.board}`, `  version: ${device.version}`);
   lines.push('', 'connections:');
   for (const r of rows) {
-    const d = drivers.find(x => x.type === r.type);
+    const d = connectionDriver(r.type, drivers);
     lines.push(`  - slot: ${r.slot}`, `    type: ${r.type}`);
     if (isBle(r.type)) lines.push(`    mac: ${r.mac}`); else if (!d || d.pins > 0) lines.push(`    pin: ${r.pin}`);
     if (r.type === 'sht4x') lines.push(`    scl: ${r.pin2}`);
     if (d && d.pins === 2) lines.push(`    pin2: ${r.pin2}`);
-    if ((d && d.number) || r.type === 'ble_command') lines.push(`    number: ${r.number || 0}`);
+    if (d?.number) lines.push(`    number: ${r.number || 0}`);
     if (isIr(r.type)) lines.push(`    code: ${r.code}`);
     if (r.inverted) lines.push('    inverted: true');
     if (optOutput(r.type, d) && r.power && r.power !== 'off') lines.push(`    power: ${r.power}`);
@@ -4839,7 +4848,7 @@ function bleLines(before, after) {
 }
 
 function connectionPins(row, drivers) {
-  const count = drivers.find(d => d.type === row.type)?.pins ?? (isBle(row.type) ? 0 : row.type === 'sht4x' ? 2 : 1);
+  const count = connectionDriver(row.type, drivers)?.pins ?? (isBle(row.type) ? 0 : row.type === 'sht4x' ? 2 : 1);
   return [row.pin, row.pin2].slice(0, count);
 }
 
@@ -4902,7 +4911,7 @@ function diffLines(io, rows, name, drivers = []) {
   for (const r of rows) {
     const old = before.get(r.slot);
     if (old && sameConnection(old, r, drivers)) continue;
-    const d = drivers.find(x => x.type === r.type);
+    const d = connectionDriver(r.type, drivers);
     const where = d ? [d.pins > 0 ? r.pin : null, d.pins > 1 ? r.pin2 : null, d.number ? `n=${r.number || 0}` : null].filter(x => x !== null).join(' ')
       : isBle(r.type) ? r.mac : r.type === 'sht4x' ? `${r.pin} ${r.pin2}` : isIr(r.type) ? `${r.pin} ${r.code}` : `${r.pin}`;
     const options = [optOutput(r.type, d) && r.power && r.power !== 'off' ? `power=${r.power}` : null,

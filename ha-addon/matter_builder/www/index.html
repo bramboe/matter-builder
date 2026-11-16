@@ -78,8 +78,10 @@ a:not(.button){color:var(--primary)}
 #catalogBody[data-view="list"] .grid{grid-template-columns:minmax(0,1fr);gap:8px}
 #catalogBody .card{cursor:pointer}
 button.catalog-open{display:inline;min-height:0;padding:0;border-radius:2px;background:transparent;color:inherit;text-align:start;white-space:normal}
-#catalogBody .card[data-item]:has(.catalog-open:focus-visible){outline:2px solid var(--primary);outline-offset:2px}
-button.catalog-open:focus-visible{outline:none}
+button.catalog-open:focus-visible{outline:none;background:var(--chip);color:var(--primary)}
+@media (forced-colors:active){
+  button.catalog-open:focus-visible{forced-color-adjust:none;background:Highlight;color:HighlightText}
+}
 #catalogBody .card .acts{margin:auto 0 0}
 .catalog-tip{position:relative;display:inline-flex}
 button.catalog-tip-trigger{width:28px;min-height:28px;padding:0;color:var(--mute)}

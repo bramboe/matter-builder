@@ -62,7 +62,7 @@ a:not(.button){color:var(--primary)}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,320px),1fr));gap:12px;align-items:stretch}
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;display:flex;flex-direction:column;min-width:0}
 @media (hover:hover){
-  .card[data-device]:hover,#catalogBody .card[data-item]:hover,.spec-row:hover{border-color:var(--hover-border)}
+  .card[data-device]:hover,#catalogBody .card[data-item]:hover{border-color:var(--hover-border)}
   #catalogBody .bed-family-entry:hover,#builds > .row:hover{box-shadow:inset 0 0 0 1px var(--hover-border)}
 }
 .card .head{display:flex;align-items:center;gap:10px}
@@ -220,12 +220,12 @@ button.catalog-tip-trigger.optional{border:1px dashed var(--mute)}
 .spec-builds.spec-builds-inline{margin:0;padding-top:4px;border-top:1px solid var(--line);flex-basis:100%}
 .spec-builds-inline .row{flex-wrap:wrap}
 .spec-builds-inline .label{min-width:0;overflow-wrap:anywhere}
-.spec-row .spec-name{min-height:44px}
 .spec-row{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);display:flex;align-items:center;gap:12px;padding:10px 12px;flex-wrap:wrap}
-button.spec-name{min-width:0;flex:1 1 160px;justify-content:flex-start;text-align:start;background:none;padding:0;white-space:normal}
+.spec-name{display:flex;align-items:center;gap:8px;min-width:0;min-height:44px;flex:1 1 160px;font-weight:500}
 .spec-name .info{min-width:0;overflow-wrap:anywhere}
 .spec-name .sub{display:block;font-weight:400}
-.spec-actions{display:flex;align-items:center;gap:4px;margin-inline-start:auto}
+.spec-actions{display:flex;align-items:center;flex-wrap:wrap;justify-content:flex-end;gap:4px;margin-inline-start:auto}
+button.spec-use{color:var(--primary);background:var(--chip)}
 .spec-actions .pop a.button{white-space:normal}
 .spec-builds{margin-top:24px}
 .spec-builds>summary{cursor:pointer;font-weight:500;padding:10px 2px}
@@ -1146,7 +1146,7 @@ const TEXT = {
   setUpConnections: 'Set up connections', openDevice: 'Open device', wRecipeTarget: 'Where should it go?', recipeNew: 'A new ESP32', recipeNewHelp: 'Install the generic firmware first',
   recipeOn: n => `On ${n}`, recipeOnHelp: 'Replaces its connections after you save and apply',
   catalogType: 'Type', filterAll: 'All', filterFirmware: 'Firmware', filterRecipes: 'Recipes', official: 'Official', recipe: 'Recipe', use: 'Use',
-  anySource: 'Any source', community: 'Community', verified: 'Verified', source: 'Source', version: 'Version', stars: 'GitHub stars',
+  community: 'Community', verified: 'Verified', source: 'Source', version: 'Version', stars: 'GitHub stars',
   downloads: 'Downloads', updated: 'Last release', keyFingerprint: 'Key fingerprint', maker: 'Maker',
   catalogOffline: 'The online catalog is not reachable: this shows the official firmware and examples only.',
   catalogBoards: 'Supported boards', catalogExperimental: 'Untested boards', catalogBoardNetwork: 'Board and network',
@@ -2703,7 +2703,7 @@ function recipeCategory(item) {
 const mobileCatalog = matchMedia('(max-width:759px)');
 const defaultCatalogFilters = {sort: 'recommended', category: 'all', type: 'all', source: 'any',
   board: 'any', network: 'any', bluetooth: 'any'};
-const catalogNetworkOptions = [['any', 'Any network'], ['thread', 'Thread'], ['wifi', 'Wi-Fi']];
+const catalogNetworkOptions = [['any', 'Any'], ['thread', 'Thread'], ['wifi', 'Wi-Fi']];
 const catalogBluetoothOptions = [['any', 'Any'], ['required', 'Bluetooth required'], ['optional', 'Bluetooth optional']];
 const catalogFilterDialog = $('#catalogFilterDialog');
 $('#openCatalogFilters').insertAdjacentHTML('beforeend', '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3,17V19H9V17H3M3,5V7H13V5H3M13,21V19H21V17H13V15H11V21H13M7,9V11H3V13H7V15H9V9H7M21,13V11H11V13H21M15,9H17V7H21V5H17V3H15V9Z"/></svg>');
@@ -2780,7 +2780,7 @@ function catalogFilterGroups(filters, withSort) {
       help: 'Wi-Fi uses your wireless network. Thread requires a Thread border router.'},
     {...options('bluetooth', 'Bluetooth', catalogBluetoothOptions),
       help: 'Required means Bluetooth is needed to talk to an accessory. Optional means it can be enabled for compatible accessories.'},
-    options('source', 'Source', [['any', 'Any source'], ['official', 'Official'], ['community', 'Community']]),
+    options('source', 'Source', [['any', 'Any'], ['official', 'Official'], ['community', 'Community']]),
   ];
 }
 const filterOption = (group, option, prefix = '') => `<label class="${option.child ? 'child' : ''}">
@@ -3248,21 +3248,23 @@ function specDownload(file, label) {
 function specRow(sp) {
   const dev = state.settings.dev_mode;
   const facts = t('specSummary', sp.connections, sp.rules);
-  if (sp.connection_names?.length) facts[0] = sp.connection_names.join(', ');
+  const connectionNames = sp.connection_names || [];
+  const repeatsName = connectionNames.length === 1 && connectionNames[0].trim().toLowerCase() === sp.name.trim().toLowerCase();
+  if (sp.connections && connectionNames.length && !repeatsName) facts[0] = connectionNames.join(', ');
   if (sp.requires?.includes('bluetooth')) facts.push(t('bleTitle'));
   const summary = sp.error || facts.join(' · ') || t('noSpecConnections');
   const files = dev ? [
     ...[...sp.firmware].reverse().map(file => [file, t('downloadUpdate')]),
     ...[...sp.factory].reverse().map(file => [file, t('downloadInstaller')]),
   ] : [];
-  return `<div class="spec-row">
-    <button class="spec-name" data-config="${esc(sp.slug)}" onclick="editSpec('${sp.slug}')">
-      <span class="ico">${icon('recipe')}</span><span class="info">${esc(sp.name)}<span class="sub ${sp.error ? 'warnText' : ''}">${esc(summary)}</span></span>
-    </button>
+  return `<div class="spec-row" data-config="${esc(sp.slug)}">
+    <div class="spec-name">
+      <span class="ico" aria-hidden="true">${icon('recipe')}</span><span class="info">${esc(sp.name)}<span class="sub ${sp.error ? 'warnText' : ''}">${esc(summary)}</span></span>
+    </div>
     <div class="spec-actions">
-      ${sp.error ? '' : `<button class="text" onclick="useConfig('${sp.slug}')">${t('specUse')}</button>`}
+      <button class="text" aria-label="${t('edit')} ${esc(sp.name)}" onclick="editSpec('${sp.slug}')">${t('edit')}</button>
+      ${sp.error ? '' : `<button class="spec-use" aria-label="${t('specUse')} ${esc(sp.name)}" onclick="useConfig('${sp.slug}')">${t('specUse')}</button>`}
       <details class="more"><summary aria-label="${t('more')}">${icon('dots')}</summary><div class="pop" style="bottom:auto;top:100%">
-        <button onclick="editSpec('${sp.slug}')">${t('edit')}</button>
         ${sp.error ? '' : `<button onclick="shareSpec('${sp.slug}')">${t('share')}</button>`}
         ${dev ? `<button onclick="buildSpec('${sp.slug}')" ${sp.error || !state.toolchain || state.job.running ? 'disabled' : ''}>${t('build')}</button>` : ''}
         <button class="warn" onclick="deleteSpec('${sp.slug}')">${t('del')}</button></div></details></div>

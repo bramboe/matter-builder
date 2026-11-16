@@ -69,13 +69,17 @@ a:not(.button){color:var(--primary)}
 .card .meta{margin-top:8px;display:grid;gap:2px}
 .card .acts{display:flex;flex-wrap:wrap;align-items:center;gap:2px;margin:auto -8px -6px;padding-top:10px}
 .card .acts details.more{margin-left:auto}
+#deviceGrid{grid-template-columns:repeat(auto-fill,minmax(min(100%,360px),1fr))}
+.card[data-device] .head{align-items:flex-start}
+.card[data-device] .meta{gap:4px;margin-bottom:4px}
+.card[data-device] .acts{margin:auto 0 -4px;gap:4px}
+.card[data-device] .acts .device-edit:enabled{color:var(--primary);background:var(--chip)}
 #catalogBody[data-view="list"] .grid{grid-template-columns:minmax(0,1fr);gap:8px}
 #catalogBody .card{cursor:pointer}
 button.catalog-open{display:inline;min-height:0;padding:0;border-radius:2px;background:transparent;color:inherit;text-align:start;white-space:normal}
 #catalogBody .card .acts{margin:auto 0 0}
-#catalogBody .needs,.catalog-detail .needs{align-items:center}
+.catalog-detail .needs{align-items:center}
 .catalog-tip{position:relative;display:inline-flex}
-.catalog-tip.boards{margin-inline-start:auto}
 button.catalog-tip-trigger{width:28px;min-height:28px;padding:0;color:var(--mute)}
 .catalog-tip-trigger svg{width:16px;height:16px}
 .catalog-tip-trigger.required,.catalog-tip-trigger[aria-expanded="true"]{background:var(--chip);color:var(--primary)}
@@ -83,18 +87,20 @@ button.catalog-tip-trigger.optional{background:var(--fill);color:var(--mute);bor
 .catalog-tip [role="tooltip"]{display:none;position:absolute;inset-inline-start:0;top:100%;z-index:4;
   width:max-content;max-width:min(240px,75vw);padding:6px 10px;border:1px solid var(--line);border-radius:8px;
   background:var(--card);color:var(--fg);box-shadow:var(--shadow);font-size:12px;line-height:1.4;cursor:default}
-.catalog-tip.boards [role="tooltip"]{inset-inline-start:auto;inset-inline-end:0}
 .catalog-tip-trigger[aria-expanded="true"] + [role="tooltip"]{display:block}
-#catalogBody[data-view="list"] .needs{gap:6px;margin-top:2px}
 #catalogBody[data-view="list"] .card{padding:12px 16px;gap:8px}
 #catalogBody[data-view="list"] .meta{margin-top:0;gap:4px}
 #catalogBody[data-view="list"] .acts{margin:0;padding:0;gap:6px}
 @media (min-width:760px){
   #catalogBody[data-view="list"] .card{display:grid;grid-template-columns:minmax(150px,1fr) minmax(0,2fr) auto;align-items:center;gap:20px}
 }
+.catalog-facts{display:grid;gap:2px;margin-top:4px;overflow-wrap:anywhere}
+#catalogBody[data-view="cards"] .catalog-description{
+  display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;
+}
 .catalog-toolbar{display:flex;align-items:center;gap:8px 16px;flex-wrap:wrap;margin-bottom:12px}
 #openCatalogFilters,#catalogSidebar{display:none}
-#catalogResultCount{flex:1 1 auto;order:-1;color:var(--mute)}
+#catalogResultCount{color:var(--mute)}
 .catalog-sort{display:flex;align-items:center;gap:8px;color:var(--mute);margin-inline-start:auto}
 .catalog-sort select{font:inherit;height:36px;border:0;border-radius:18px;background:var(--card);box-shadow:inset 0 0 0 1px var(--line);color:var(--fg);padding:0 12px;cursor:pointer}
 .catalog-sort + #catalogView{margin-inline-start:0}
@@ -152,7 +158,6 @@ button.catalog-tip-trigger.optional{background:var(--fill);color:var(--mute);bor
   #catalogBody .section-head:first-child{margin-top:0}
   #openCatalogFilters{display:inline-flex;grid-column:1/-1;justify-self:start;min-height:44px;padding-inline:0 8px;background:transparent}
   #catalogView{grid-column:2;grid-row:2}
-  #catalogResultCount{display:block;grid-column:1;grid-row:2}
   #catalogFilterDialog{
     position:fixed;inset:auto 0 0;margin:0;width:100%;max-width:none;height:min(720px,calc(100dvh - 40px));
     max-height:calc(100dvh - 40px);border-radius:24px 24px 0 0;
@@ -196,13 +201,18 @@ button.catalog-tip-trigger.optional{background:var(--fill);color:var(--mute);bor
   #catalogBody[data-view="list"] .card:last-child{border-end-start-radius:var(--radius);border-end-end-radius:var(--radius)}
   #catalogBody[data-view="list"] .head{grid-column:1/-1}
   #catalogBody[data-view="list"] .head>.ico{width:28px;height:28px}
-  #catalogBody[data-view="list"] .needs{margin-top:0}
   #catalogBody[data-view="list"] .acts{justify-content:flex-end}
   #catalogBody[data-view="list"] .acts .grow{display:none}
 }
 #recipeCategories .recipe-count{font-size:11px;font-variant-numeric:tabular-nums;color:var(--mute);background:var(--card);border-radius:20px;padding:1px 6px}
 .catalog-bed-link{margin-top:12px}
+#developerTab{max-width:900px;margin-inline:auto}
+.config-intro{margin:0 2px 16px}
 .spec-list{display:grid;gap:8px}
+.spec-builds.spec-builds-inline{margin:0;padding-top:4px;border-top:1px solid var(--line);flex-basis:100%}
+.spec-builds-inline .row{flex-wrap:wrap}
+.spec-builds-inline .label{min-width:0;overflow-wrap:anywhere}
+.spec-row .spec-name{min-height:44px}
 .spec-row{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);display:flex;align-items:center;gap:12px;padding:10px 12px;flex-wrap:wrap}
 button.spec-name{min-width:0;flex:1 1 160px;justify-content:flex-start;text-align:start;background:none;padding:0;white-space:normal}
 .spec-name .info{min-width:0;overflow-wrap:anywhere}
@@ -571,13 +581,15 @@ dialog.side{max-width:100vw}
 /* Touch: small icons keep their size and get a finger-sized area around them */
 button.catalog-tip-trigger{position:relative}
 @media (pointer:coarse){.catalog-tip-trigger::after{content:"";position:absolute;inset:-8px}}
-#catalogApplied{display:flex;flex-wrap:wrap;gap:8px;flex:1 1 100%;order:2}
+.catalog-results{display:flex;align-items:center;flex-wrap:wrap;min-width:0;gap:8px}
+#catalogApplied{display:flex;flex-wrap:wrap;gap:8px}
 #catalogApplied button{flex:none}
 .applied-filter{background:var(--card);box-shadow:inset 0 0 0 1px var(--control);gap:8px}
 .applied-filter span{color:var(--mute);font-size:12px}
 @media (max-width:759px){
   .catalog-sort{display:none}
-  #catalogApplied{flex-wrap:nowrap;grid-column:1/-1;overflow-x:auto;scrollbar-width:none;margin-top:-4px}
+  .catalog-results{grid-column:1;grid-row:2}
+  #catalogApplied{flex-wrap:nowrap;max-width:100%;overflow-x:auto;scrollbar-width:none}
   #catalogApplied::-webkit-scrollbar{display:none}
   #catalogApplied button{min-height:44px}
   .catalog-sheet-options label.child{padding-inline-start:30px}
@@ -670,6 +682,10 @@ button.catalog-tip-trigger{position:relative}
   <aside id="catalogSidebar" aria-label="Filters"></aside>
   <div class="catalog-toolbar">
     <button type="button" id="openCatalogFilters" aria-haspopup="dialog"><span id="catalogFilterLabel">Filter and sort</span></button>
+    <div class="catalog-results">
+      <span id="catalogResultCount" role="status"></span>
+      <div id="catalogApplied" role="group" aria-label="Applied filters" hidden></div>
+    </div>
     <label class="catalog-sort"><span>Sort</span><select id="catalogSort"></select></label>
     <div class="filters" id="catalogView" role="group" aria-label="Catalog view">
       <button type="button" data-view="cards" aria-label="Cards" title="Cards" aria-pressed="true" class="on">
@@ -679,8 +695,6 @@ button.catalog-tip-trigger{position:relative}
         <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 5h3v2H3zm5 0h13v2H8zM3 11h3v2H3zm5 0h13v2H8zM3 17h3v2H3zm5 0h13v2H8z"/></svg>
       </button>
     </div>
-    <span id="catalogResultCount" role="status"></span>
-    <div id="catalogApplied" role="group" aria-label="Applied filters" hidden></div>
   </div>
   <div id="catalogBody" data-view="cards"></div>
 </section>
@@ -688,10 +702,10 @@ button.catalog-tip-trigger{position:relative}
 <!-- Developer -->
 <section id="developerTab" hidden>
   <div class="section-head"><h2 data-t="myConfigs"></h2><span class="grow"></span><button class="pri" id="newSpecBtn" onclick="newSpec()" data-t="newSpec"></button></div>
-  <p class="sub" id="specHelp" data-t="specHelp" style="margin:0 2px 10px"></p>
+  <p class="sub config-intro" id="specHelp" data-t="specHelp"></p>
   <div class="spec-list" id="specList"></div>
   <details class="spec-builds" id="devBlock" hidden>
-    <summary data-t="firmwareBuilds"></summary>
+    <summary data-t="otherFirmwareBuilds"></summary>
     <div class="card">
       <div class="row"><div class="label"><h3 data-t="genericTitle"></h3><div class="sub" data-t="genericHelp"></div></div>
         <button id="buildGenericBtn" data-t="build"></button></div>
@@ -905,7 +919,7 @@ ${esc(text)}</textarea></mb-yaml-editor>`;
 const TEXT = {
   tabDevices: 'Devices', tabCatalog: 'Catalog', tabConfigs: 'Configs', configuration: 'Configuration', searchDevices: 'Search devices', searchCatalog: 'Search the catalog', searchConfigs: 'Search configs', clearSearch: 'Clear search',
   noDeviceMatch: q => `No devices match “${q}”`, noDeviceMatchHelp: 'Search looks at the name, the address and the connected items.',
-  myConfigs: 'My configs', saveConfig: 'Save to My configs', configSaved: n => `Saved as “${n}” in My configs.`,
+  myConfigs: 'Saved configurations', saveConfig: 'Save a reusable configuration', configSaved: n => `Saved “${n}” in Configs.`,
   readOnlyYaml: 'This firmware has no configurable connections; its own settings are on its page. This is what it reports:',
   settingsHelp: 'Settings of this device. Saving restarts it; on Thread it is back within a minute.', settingsLabel: 'Settings', bedsLabel: 'Beds', bedN: n => `Bed ${n}`, bedsHelp: 'Beds are paired and named on the device page:', settingsYamlHelp: 'Edit the same device settings as in the visual editor.',
   settingsYamlBlock: 'Use the settings: block with two spaces before each setting.',
@@ -916,8 +930,8 @@ const TEXT = {
   recipeSetup: 'Wiring and setup',
   recipeMeasurementsFirmware: 'Requires generic firmware 0.1.31 or later.',
   wConfigure: 'Configure the device', configureHelp: 'Its name and what is connected. Wi-Fi, Thread and passwords are set on the device itself.',
-  startEmpty: 'Empty', fromConfigs: 'My configs', fromRecipes: 'Recipes', skipConfiguration: 'Continue without a configuration', saveToConfigs: 'Save a reusable copy',
-  saveToConfigsHelp: 'Find it later under Configs → My configs to use the same connections and rules on another ESP32.',
+  startEmpty: 'Empty', fromConfigs: 'Saved configurations', fromRecipes: 'Recipes', skipConfiguration: 'Continue without a configuration', saveToConfigs: 'Save a reusable copy',
+  saveToConfigsHelp: 'Find it later in Configs to use the same connections and rules on another ESP32.',
   configOk: (n, c) => `${n}: ${c} connection${c === 1 ? '' : 's'}.`, applyTo: 'Apply to a device', noGeneric: 'No linked generic device yet.',
   applyingConfig: 'Applying the configuration…', configOnTrial: s => `The new connections run on trial: keep them within ${s} s, or the device goes back.`,
   configKept: 'Kept. The device is ready.', configFailed: e => `The configuration was not applied: ${e}`,
@@ -982,7 +996,7 @@ const TEXT = {
   online: 'Online', offlineFor: d => `Offline ${d}`, notReachable: 'Not reachable on the network', offline: 'Offline', checking: 'Checking', keyRejected: 'Key refused', configMode: 'Configuration mode',
   updating: 'Updating', updatingPct: n => `Updating · ${n} %`, updateStarting: 'Starting the update…', updateQueued: 'Waiting for its turn',
   opening: n => `Opening the page of ${n}…`, openingAny: 'Opening the page…', openingSlow: 'The device answers slowly (on Thread this can take a few seconds). It opens by itself.',
-  updateTo: v => `Update to ${v}`, edit: 'Edit', openPage: 'Open page', logs: 'Logs', logsOf: n => `Logs of ${n}`, logLive: 'Live, over the network', logPaused: 'Paused', logPause: 'Pause', logResume: 'Resume', logSave: 'Download', logWaiting: 'Waiting for the device…', logUnsupported: 'This firmware does not keep its log yet: update it to see the log here.', logRestarted: '--- the device restarted ---', logLost: '--- older lines are gone ---', logError: e => `Not reachable: ${e}`, openDirect: 'Open on the device', more: 'More', rename: 'Rename', forget: 'Forget', showKey: 'Show key',
+  updateTo: v => `Update to ${v}`, edit: 'Edit', openPage: 'Open device page', logs: 'Logs', logsOf: n => `Logs of ${n}`, logLive: 'Live, over the network', logPaused: 'Paused', logPause: 'Pause', logResume: 'Resume', logSave: 'Download', logWaiting: 'Waiting for the device…', logUnsupported: 'This firmware does not keep its log yet: update it to see the log here.', logRestarted: '--- the device restarted ---', logLost: '--- older lines are gone ---', logError: e => `Not reachable: ${e}`, openDirect: 'Open on the device', more: 'More', rename: 'Rename', forget: 'Forget', showKey: 'Show key',
   updateAll: n => `Update all (${n})`, nothingConnected: 'Nothing connected yet', connections: 'Connections', firmware: 'Firmware', info: 'Info',
   noIo: 'This firmware has no configurable connections. Its own settings are on its page.',
   form: 'Form', visualEditor: 'Visual editor', duplicate: 'Duplicate', editInYaml: 'Edit in YAML', cancel: 'Cancel',
@@ -1123,11 +1137,11 @@ const TEXT = {
   anySource: 'Any source', community: 'Community', verified: 'Verified', source: 'Source', version: 'Version', stars: 'GitHub stars',
   downloads: 'Downloads', updated: 'Last release', keyFingerprint: 'Key fingerprint', maker: 'Maker',
   catalogOffline: 'The online catalog is not reachable: this shows the official firmware and examples only.',
-  catalogBoards: 'Boards', catalogSupportedBoards: 'Supported boards', catalogExperimental: 'Untested boards', catalogBoardNetwork: 'Board and network',
+  catalogBoards: 'Supported boards', catalogExperimental: 'Untested boards', catalogBoardNetwork: 'Board and network',
   catalogBoardsUnknown: 'Board information unavailable', catalogCheckPins: 'Check the GPIO assignments for your board.',
   catalogCustomBuild: 'Custom build required', catalogNoDescription: 'No description provided.',
   catalogConnections: names => `Connections: ${names}.`, catalogMoreConnections: n => `+${n} more`,
-  catalogBle: 'BLE required', catalogBleOptional: 'BLE optional',
+  catalogBle: 'Bluetooth required', catalogBleOptional: 'Bluetooth optional',
   communityNotice: 'Made by the community. The Matter Builder project did not test, audit or support it.',
   gateTitle: 'Before you install from the community',
   gateTips: ['Community firmware and recipes are made by other people. The project did not test or audit them.',
@@ -1150,10 +1164,16 @@ const TEXT = {
   toolchainReady: 'Ready', toolchainMissing: 'Not installed: about 6 GB, 15 minutes or more. Not included in backups.',
   ownDevices: 'Own devices', noConfigsTitle: 'No configs yet', noConfigs: 'A config keeps a setup to reuse on a linked device or a new board. Save one from a device, or make a new one.',
   noConfigMatch: q => `No configs match “${q}”`, goDevices: 'Go to devices', newSpec: 'New config',
-  specHelp: 'Reuse a setup on a linked device or install it on a new board.',
+  specHelp: 'Save connections and rules to reuse on a linked device or install on a new board.',
   specValidate: 'Validate', specDiscard: 'Discard unsaved changes to this config?', specExample: 'Choose an example',
-  specSummary: (connections, rules) => [`${connections} connection${connections === 1 ? '' : 's'}`, ...(rules ? [`${rules} rule${rules === 1 ? '' : 's'}`] : [])],
-  specUse: 'Use config', firmwareBuilds: 'Firmware builds', download: 'Download', downloadUpdate: 'Download update', downloadInstaller: 'Download installer',
+  specSummary: (connections, rules) => [
+    ...(connections ? [`${connections} connection${connections === 1 ? '' : 's'}`] : []),
+    ...(rules ? [`${rules} rule${rules === 1 ? '' : 's'}`] : []),
+  ],
+  specUse: 'Use on a device…', specTarget: 'Use configuration on a device',
+  specNewBoard: 'Install on a new board', specExisting: n => `Apply to ${n}`,
+  noSpecConnections: 'No connections or rules',
+  specBuildFiles: 'Build files', otherFirmwareBuilds: 'Other firmware builds', download: 'Download', downloadUpdate: 'Download update', downloadInstaller: 'Download installer',
   check: 'Check', save: 'Save', specOk: s => `Valid: ${s.name} ${s.version} (${s.app}).`, specSaved: 'Saved.', del: 'Delete',
   build: 'Build', updateFile: 'Update file', factoryFile: 'For a new ESP32', confirmDelete: n => `Delete the spec “${n}”? Built files stay.`,
   standardBuilds: 'Standard firmware', genericTitle: 'Generic device', genericHelp: 'Build the standard firmware yourself, the same as the release.',
@@ -1443,10 +1463,9 @@ function deviceCard(p) {
     <div class="acts">
       ${up ? `<button class="text" onclick="updateProxy('${p.id}', '${esc(up)}')" ${state.job.running ? 'disabled' : ''}>${t('updateTo', fileVersion(up))}</button>` : ''}
       ${s && s.auth ? `<button class="text" onclick="openWizard('link', '${esc(p.host)}')">${t('linkAgain')}</button>` : ''}
-      <button class="plain" onclick="openDevice('${p.id}', 'connections')" ${updating ? 'disabled' : ''}>${t('editConfiguration')}</button>
+      <button class="text device-edit" onclick="openDevice('${p.id}', 'connections')" ${updating ? 'disabled' : ''}>${t('editConfiguration')}</button>
       <button class="plain" onclick="openLogs('${p.id}')">${t('logs')}</button>
       ${updating ? '' : `<a class="button plain" href="${esc(portalUrl(p))}">${t('openPage')}</a>`}
-      <span class="grow"></span>
       ${updating ? `<button class="icon" disabled aria-label="${t('more')}">${icon('dots')}</button>` : `<details class="more"><summary aria-label="${t('more')}">${icon('dots')}</summary><div class="pop">
         <button onclick="shareDevice('${p.id}')">${t('shareDevice')}</button>
         ${state.standalone ? '' : `<button onclick="addToHa('${p.id}')" ${state.job.running ? 'disabled' : ''}>${t('addToHaBtn')}</button>`}
@@ -1489,7 +1508,7 @@ function renderDevices() {
 // automation editor: a visual mode with a card per connection (open it to
 // change it; ⋮ to duplicate, edit that card in YAML or delete it; "Add
 // connection" picks a type), and the whole configuration in YAML. Used in the
-// device panel, the New device wizard and My configs.
+// device panel, the New device wizard and saved configurations.
 const SAFE_PINS = [0, 1, 2, 3, 4, 5, 6, 7, 10, 11, 18, 19, 20, 21, 22, 23];
 // The same per chip (firmware/generic/main/io.cpp), for a configuration made before the device is linked
 const CHIP_PINS = {esp32c6: SAFE_PINS, esp32: [2, 4, 5, 13, 14, 16, 17, 18, 19, 21, 22, 23, 25, 26, 27, 32, 33],
@@ -2435,11 +2454,14 @@ function catalogCompatibility(it, variants) {
 const catalogBoardNotice = it => `<div class="sub">${t(it.custom_build ? 'catalogCustomBuild'
   : measurementRecipe(it) ? 'recipeMeasurementsFirmware' : 'catalogBoardsUnknown')}</div>`;
 
+function catalogBoardFacts(it, boards, experimental) {
+  if (!boards.length && !experimental.length) return catalogBoardNotice(it);
+  return `${boards.length ? `<div class="sub"><b>${t('catalogBoards')}</b> · ${esc(boards.join(', '))}</div>` : ''}
+    ${experimental.length ? `<div class="sub"><b>${t('catalogExperimental')}</b> · ${esc(experimental.join(', '))}</div>` : ''}`;
+}
+
 function catalogCompatibilityHtml(it, {labels, boards, experimental}) {
-  return `${protocolIcons(labels, 'item')}
-    ${boards.length ? `<div class="sub"><b>${t('catalogBoards')}</b> · ${esc(boards.join(', '))}</div>` : ''}
-    ${experimental.length ? `<div class="sub"><b>${t('catalogExperimental')}</b> · ${esc(experimental.join(', '))}</div>` : ''}
-    ${!boards.length && !experimental.length ? catalogBoardNotice(it) : ''}`;
+  return protocolIcons(labels, 'item') + catalogBoardFacts(it, boards, experimental);
 }
 
 function showCatalogTip(button, visible) {
@@ -2468,17 +2490,12 @@ const PROTOCOL_ICONS = new Map([
   [t('catalogBleOptional'), {glyph: 'bluetooth', style: 'optional'}],
 ]);
 
-function protocolIcons(labels, id, extra = '') {
+function protocolIcons(labels, id) {
   const badges = labels.filter(label => PROTOCOL_ICONS.has(label)).map((label, index) => {
     const {glyph, style} = PROTOCOL_ICONS.get(label);
     return catalogTip(`protocol-${esc(id)}-${index}`, glyph, label, label, style);
   });
-  return needChips(labels.filter(label => !PROTOCOL_ICONS.has(label)), badges.join('') + extra);
-}
-
-function catalogBoardTooltip(names, i) {
-  const shortNames = names.map(name => name.replace(/^ESP32-/, '').replace(/ ESP32$/, ''));
-  return catalogTip(`catalog-boards-${i}`, 'chip', t('catalogSupportedBoards'), shortNames.join(', '), 'boards');
+  return needChips(labels.filter(label => !PROTOCOL_ICONS.has(label)), badges.join(''));
 }
 
 async function loadCatalog() {
@@ -2498,14 +2515,15 @@ const badge = it => it.official ? `<span class="chip accent">${t('official')}</s
 
 function catalogCard(it, i) {
   const {labels, boards, experimental} = catalogCompatibility(it, catalogVariants(it));
-  const supported = boards.concat(experimental);
   return `<div class="card" data-item="${esc(it.id || it.source + '/' + it.title)}"
     onclick="openItem(${i}, this.querySelector('.catalog-open'))">
     <div class="head"><span class="ico">${it.kind === 'firmware' ? appIcon(it.app) : icon('recipe')}</span>
       <div class="info"><h3><button type="button" class="catalog-open" aria-haspopup="dialog">${esc(it.title)}</button></h3><div class="sub">${it.kind === 'firmware' ? esc(it.version || '') : t('recipe')} · ${esc(it.maker || (it.source || '').split('/')[0])}</div></div></div>
     <div class="meta"><div class="sub catalog-description">${esc(catalogDescription(it))}</div>
-      ${protocolIcons(labels, i, supported.length ? catalogBoardTooltip(supported, i) : '')}
-      ${supported.length ? '' : catalogBoardNotice(it)}</div>
+      <div class="catalog-facts">
+        ${catalogBoardFacts(it, boards, experimental)}
+        ${labels.length ? `<div class="sub">${esc(labels.join(' · '))}</div>` : ''}
+      </div></div>
     <div class="acts">${badge(it)}<span class="grow"></span>${it.stars ? `<span class="sub">★ ${it.stars}</span>` : ''}</div></div>`;
 }
 
@@ -2797,9 +2815,10 @@ function renderCatalog() {
       (applied.length > 1 ? '<button type="button" class="text" data-clear="all">Clear all</button>' : ''));
   }
   const showRecipes = visibleRecipes.length > 0;
-  const heading = showRecipes ? `<div class="section-head"><h2>${t('recipeSection')}</h2></div>` : '';
+  const heading = showRecipes && filters.type === 'all' ? `<div class="section-head"><h2>${t('recipeSection')}</h2></div>` : '';
   setHtml($('#catalogBody'), (catalogData ? '' : `<p class="sub" style="margin:12px 2px">${t('catalogOffline')}</p>`) +
-    (fw.length ? `<div class="section-head"><h2>${t('firmwareSection')}</h2></div><div class="grid">${fw.map(([it, i]) => catalogCard(it, i)).join('')}</div>` : '') +
+    (fw.length && filters.type === 'all' ? `<div class="section-head"><h2>${t('firmwareSection')}</h2></div>` : '') +
+    (fw.length ? `<div class="grid">${fw.map(([it, i]) => catalogCard(it, i)).join('')}</div>` : '') +
     heading + (bedRecipes?.html ?? ((listedRecipes.length ? `<div class="grid">${listedRecipes.map(({it, i}) => catalogCard(it, i)).join('')}</div>` : '') + bedGroup)) +
     (noMatch || (showRecipes && !visibleRecipes.length ? '<p class="sub">No recipes match these filters.</p>' : '') +
     (!fw.length && !showRecipes ? `<div class="empty"><p class="sub">${catalogLoading ? t('checking') : t('noCatalog')}</p></div>` : '')));
@@ -3049,12 +3068,18 @@ function specDownload(file, label) {
 }
 
 function specRow(sp) {
-  const dev = state.settings.dev_mode, fw = sp.firmware.at(-1), factory = sp.factory.at(-1);
-  const summary = sp.error ? esc(sp.error) : esc(t('specSummary', sp.connections, sp.rules)
-    .concat((sp.requires || []).includes('bluetooth') ? [t('bleTitle')] : []).join(' · '));
+  const dev = state.settings.dev_mode;
+  const facts = t('specSummary', sp.connections, sp.rules);
+  if (sp.connection_names?.length) facts[0] = sp.connection_names.join(', ');
+  if (sp.requires?.includes('bluetooth')) facts.push(t('bleTitle'));
+  const summary = sp.error || facts.join(' · ') || t('noSpecConnections');
+  const files = dev ? [
+    ...[...sp.firmware].reverse().map(file => [file, t('downloadUpdate')]),
+    ...[...sp.factory].reverse().map(file => [file, t('downloadInstaller')]),
+  ] : [];
   return `<div class="spec-row">
     <button class="spec-name" data-config="${esc(sp.slug)}" onclick="editSpec('${sp.slug}')">
-      <span class="ico">${icon('recipe')}</span><span class="info">${esc(sp.name)}<span class="sub ${sp.error ? 'warnText' : ''}">${summary}</span></span>
+      <span class="ico">${icon('recipe')}</span><span class="info">${esc(sp.name)}<span class="sub ${sp.error ? 'warnText' : ''}">${esc(summary)}</span></span>
     </button>
     <div class="spec-actions">
       ${sp.error ? '' : `<button class="text" onclick="useConfig('${sp.slug}')">${t('specUse')}</button>`}
@@ -3062,9 +3087,11 @@ function specRow(sp) {
         <button onclick="editSpec('${sp.slug}')">${t('edit')}</button>
         ${sp.error ? '' : `<button onclick="shareSpec('${sp.slug}')">${t('share')}</button>`}
         ${dev ? `<button onclick="buildSpec('${sp.slug}')" ${sp.error || !state.toolchain || state.job.running ? 'disabled' : ''}>${t('build')}</button>` : ''}
-        ${dev && fw ? specDownload(fw, t('downloadUpdate')) : ''}
-        ${dev && factory ? specDownload(factory, t('downloadInstaller')) : ''}
-        <button class="warn" onclick="deleteSpec('${sp.slug}')">${t('del')}</button></div></details></div></div>`;
+        <button class="warn" onclick="deleteSpec('${sp.slug}')">${t('del')}</button></div></details></div>
+    ${files.length ? `<details class="spec-builds spec-builds-inline">
+      <summary>${t('specBuildFiles')} (${files.length})</summary>
+      ${files.map(([file, label]) => `<div class="row"><div class="label mono">${esc(file)}</div>${specDownload(file, label)}</div>`).join('')}
+    </details>` : ''}</div>`;
 }
 
 // A config on a new ESP32 (wizard, configured) or on a linked generic device
@@ -3095,11 +3122,12 @@ function renderDeveloper() {
   $('#devBlock').hidden = !state.settings.dev_mode;
   $('#buildGenericBtn').disabled = !state.toolchain || state.job.running;
   $('#buildHint').hidden = state.toolchain;
-  $('#devBlock > summary').textContent = `${t('firmwareBuilds')} (${state.builds.length})`;
-  setHtml($('#builds'), state.builds.length ? state.builds.map(b => {
+  const configFiles = new Set(specs.flatMap(sp => sp.firmware));
+  const otherBuilds = state.builds.filter(b => !configFiles.has(b.file));
+  $('#devBlock > summary').textContent = `${t('otherFirmwareBuilds')} (${otherBuilds.length})`;
+  setHtml($('#builds'), otherBuilds.length ? otherBuilds.map(b => {
     const app = b.file.slice(0, b.file.lastIndexOf('-'));
-    const name = specs.find(sp => sp.firmware.includes(b.file))?.name || appTitle(app);
-    return `<div class="row"><div class="label">${esc(name)} · ${esc(fileVersion(b.file))}
+    return `<div class="row"><div class="label">${esc(appTitle(app))} · ${esc(fileVersion(b.file))}
       <div class="sub">${date(b.date)} · ${(b.size / 2 ** 20).toFixed(2)} MB</div></div>${specDownload(b.file, t('download'))}</div>`;
   }).join('') : `<div class="sub">${t('noBuilds')}</div>`);
 }
@@ -5074,13 +5102,13 @@ function renderWizard() {
       ${choice(false, 'link', t('wExisting'), t('wExistingHelp'), "wiz.linkOnly = true; go('link')")}
       ${choice(false, 'store', t('wCatalog'), t('wCatalogHelp'), "completeWizard(() => goTab('catalog'))")}</div>`;
   } else if (wiz.step === 'recipeTarget') {
-    title = t('wRecipeTarget');
+    title = t(wiz.configSlug ? 'specTarget' : 'wRecipeTarget');
     const generic = state.proxies.filter(p => { const r = running(statuses[p.id]); return r && isGenericApp(r.app); });
     if (!wiz.configText) wiz.configText = wiz.recipe.text || specYaml(wiz.recipe.title, wiz.recipe.rows);
     body = `<div class="sub">${esc(wiz.recipe.title)}</div><div class="choices">
-      ${wiz.deviceOnly ? '' : choice(false, 'usb', t('recipeNew'), t('recipeNewHelp'),
+      ${wiz.deviceOnly ? '' : choice(false, 'usb', t(wiz.configSlug ? 'specNewBoard' : 'recipeNew'), wiz.configSlug ? '' : t('recipeNewHelp'),
         wiz.configSlug ? `useConfig('${wiz.configSlug}', 'new')` : "go('board')")}
-      ${generic.map(p => choice(false, 'chip', t('recipeOn', esc(p.name)), t('recipeOnHelp'), `const r = wiz.recipe; completeWizard(() => openDevice('${p.id}', 'connections', r))`)).join('')}</div>
+      ${generic.map(p => choice(false, 'chip', t(wiz.configSlug ? 'specExisting' : 'recipeOn', esc(p.name)), t('recipeOnHelp'), `const r = wiz.recipe; completeWizard(() => openDevice('${p.id}', 'connections', r))`)).join('')}</div>
       ${(wiz.deviceOnly || wiz.configSlug) && !generic.length ? `<p class="sub">${t('noGeneric')}</p>` : ''}`;
   } else if (wiz.step === 'board') {
     title = t('wBoard');

@@ -1733,6 +1733,7 @@ def list_specs():
         out.append({"slug": path.stem, "name": spec["name"] if spec else path.stem, "app": spec["app"] if spec else "",
                     "version": spec["version"] if spec else "", "error": error,
                     "connections": len(spec["connections"]) if spec else 0,
+                    "connection_names": [c["name"] for c in spec["connections"]] if spec else [],
                     "rules": len(spec["rules"]) if spec else 0,
                     "requires": spec.get("requires", []) if spec else [], "network": spec.get("network") if spec else None,
                     "firmware": sorted((p.name for p in FIRMWARE.glob(f"{project}-*.bin")), key=version_key)

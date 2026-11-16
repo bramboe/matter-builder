@@ -70,11 +70,16 @@ a:not(.button){color:var(--primary)}
 .card .meta{margin-top:8px;display:grid;gap:2px}
 .card .acts{display:flex;flex-wrap:wrap;align-items:center;gap:2px;margin:auto -8px -6px;padding-top:10px}
 .card .acts details.more{margin-left:auto}
+.device-toolbar{display:flex;justify-content:flex-end;margin-bottom:12px}
+#addDeviceBtn > span[aria-hidden]{display:flex}
 #deviceGrid{grid-template-columns:repeat(auto-fill,minmax(min(100%,360px),1fr))}
 .card[data-device] .head{align-items:flex-start}
+.card[data-device] .head .info{overflow-wrap:anywhere}
+.card[data-device] .head > .chip{max-inline-size:45%;white-space:normal}
+.device-firmware{font-size:12px}
 .card[data-device] .meta{gap:4px;margin-bottom:4px}
 .card[data-device] .acts{margin:auto 0 -4px;gap:4px}
-.card[data-device] .acts .device-edit:enabled{color:var(--primary);background:var(--chip)}
+.card[data-device] .acts .device-primary:enabled{color:var(--primary);background:var(--chip)}
 #catalogBody[data-view="list"] .grid{grid-template-columns:minmax(0,1fr);gap:8px}
 #catalogBody .card{cursor:pointer}
 button.catalog-open{display:inline;min-height:0;padding:0;border-radius:2px;background:transparent;color:inherit;text-align:start;white-space:normal}
@@ -339,7 +344,6 @@ button.pri.busy::after{border-color:var(--on-primary);border-right-color:transpa
 #opening .box{display:grid;justify-items:center;gap:10px;text-align:center;padding:24px;max-width:320px}
 #opening .spin{width:28px;height:28px;border-width:3px;color:var(--primary)}
 @media (prefers-reduced-motion:reduce){.skel,#loadbar::before,.cardwork .track.indef i{animation:none}main{transition:none}}
-.new{border:1.5px dashed var(--line);background:none;align-items:center;justify-content:center;text-align:center;min-height:150px;cursor:pointer;color:var(--mute)}
 .banner{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--chip);color:var(--fg);border-radius:var(--radius);padding:8px 8px 8px 14px;margin-bottom:12px}
 .banner .grow{min-width:200px}
 .empty{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:24px;text-align:center;max-width:560px;margin:32px auto}
@@ -675,6 +679,9 @@ button.catalog-tip-trigger{position:relative}
 <main>
 <!-- Devices -->
 <section id="devicesTab">
+  <div class="device-toolbar" id="deviceToolbar" hidden>
+    <button type="button" class="pri" id="addDeviceBtn" onclick="openWizard()"><span data-t="addDevice"></span></button>
+  </div>
   <div id="discovered"></div>
   <div id="emptyState" class="empty" hidden>
     <div class="ico" style="margin:0 auto 10px;width:48px;height:48px" id="emptyIcon"></div>
@@ -999,7 +1006,7 @@ const TEXT = {
   accountTitle: 'Password', accountHelp: 'This Matter Builder runs without Home Assistant and has its own password. Changing it signs out every other browser.',
   currentPassword: 'Current password', newPassword: 'New password', changePassword: 'Change password', signOut: 'Sign out', passwordChanged: 'Changed.',
   emptyText: 'Matter Builder turns an ESP32-C6 into a standard Matter device for Home Assistant, Apple Home and Google Home. Every device keeps working without Home Assistant and has a settings page of its own.',
-  newDevice: 'New device', newDeviceHelp: 'Install firmware or link one', browseCatalog: 'Browse the catalog',
+  newDevice: 'New device', addDevice: 'Add device', browseCatalog: 'Browse the catalog',
   discovered: (n, v) => `Discovered: ${n}${v ? ' · ' + v : ''}`, adopt: 'Adopt',
   bootMenuChip: a => `BOOT menu: ${a}`, bootHeld: 'BOOT held: let go for the menu', bootLong: 'BOOT held over 10 s',
   bootReset: 'BOOT held: release to erase all settings', bootNothing: 'BOOT held: releasing does nothing',
@@ -1477,27 +1484,33 @@ function deviceCard(p) {
   const s = statuses[p.id], r = running(s), work = updateWork(p), up = !work && updateFor(p);
   // While it updates (it restarts): only its log; editing, its page and the ⋮ menu wait
   const updating = !!work && !work.queued;
+  const relink = !updating && s?.auth && !s.ok;
   const what = connectedText(s);
+  const app = r?.app || p.app;
+  const generic = isGenericApp(app);
+  const variant = generic ? app.slice('mb_generic'.length + 1) : '';
+  const board = generic ? BOARDS[!variant || variant === 'wifi' ? 'esp32c6' : variant]?.name : '';
+  const firmware = [appTitle(board ? baseApp(app) : app), board, r?.version && `v${r.version}`].filter(Boolean).join(' · ');
   const chip = work && !work.queued ? `<span class="chip accent"><span class="spin" aria-hidden="true"></span>${work.pct != null ? t('updatingPct', work.pct) : t('updating')}</span>`
     : work ? `<span class="chip">${t('updateQueued')}</span>` : statusChip(s);
   return `<div class="card" data-device="${esc(p.id)}"${work && !work.queued ? ' aria-busy="true"' : ''}>
-    <div class="head"><span class="ico">${appIcon(r ? r.app : p.app)}</span><div class="info"><h3>${esc(p.name)}</h3>
-      ${r ? `<div class="sub">${esc(appTitle(r.app))} ${esc(r.version)}</div>`
+    <div class="head"><span class="ico" aria-hidden="true">${appIcon(app)}</span><div class="info"><h3>${esc(p.name)}</h3>
+      ${what ? `<div class="sub">${esc(what)}</div>` : ''}
+      ${r ? `<div class="sub device-firmware">${esc(firmware)}</div>`
         : s ? `<div class="sub mono" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(p.host)}">${esc(p.host)}</div>`
         : '<span class="skel" style="width:70%;margin-top:6px"></span>'}</div>${chip}</div>
     ${work && !work.queued ? `<div class="cardwork"><div class="sub">${esc(work.phase.replace(/^Update .+ with /, ''))}</div>
       <div class="track${work.pct == null ? ' indef' : ''}"><i style="width:${work.pct || 0}%"></i></div></div>` : ''}
     <div class="meta">
       ${s && !s.ok && !s.auth ? `<div class="sub">${t('notReachable')}</div>` : ''}
-      ${what ? `<div class="sub">${esc(what)}</div>` : ''}
       ${r ? protocolIcons(needs(s.io ? (s.io.bluetooth === 'on' || s.io.slots.some(c => isBle(c.type)) ? ['bluetooth'] : [])
         : (pkgOf(r.app) || {}).requires, /^thread/.test(r.net) ? 'thread' : /^wifi|^configuration/.test(r.net) ? 'wifi' : null), `device-${p.id}`) : ''}
     </div>
     <div class="acts">
       ${up ? `<button class="text" onclick="updateProxy('${p.id}', '${esc(up)}')" ${state.job.running ? 'disabled' : ''}>${t('updateTo', fileVersion(up))}</button>` : ''}
-      ${s && s.auth ? `<button class="text" onclick="openWizard('link', '${esc(p.host)}')">${t('linkAgain')}</button>` : ''}
-      <button class="text device-edit" onclick="openDevice('${p.id}', 'connections')" ${updating ? 'disabled' : ''}>${t('editConfiguration')}</button>
-      <button class="plain" onclick="openLogs('${p.id}')">${t('logs')}</button>
+      ${relink ? `<button class="text device-primary" onclick="openWizard('link', '${esc(p.host)}')">${t('linkAgain')}</button>` : ''}
+      <button class="${s?.ok && !updating ? 'text device-primary' : 'plain'}" onclick="openDevice('${p.id}', 'connections')" ${updating ? 'disabled' : ''}>${t('editConfiguration')}</button>
+      <button class="${updating ? 'text device-primary' : 'plain'}" onclick="openLogs('${p.id}')">${t('logs')}</button>
       ${updating ? '' : `<a class="button plain" href="${esc(portalUrl(p))}">${t('openPage')}</a>`}
       ${updating ? `<button class="icon" disabled aria-label="${t('more')}">${icon('dots')}</button>` : `<details class="more"><summary aria-label="${t('more')}">${icon('dots')}</summary><div class="pop">
         <button onclick="shareDevice('${p.id}')">${t('shareDevice')}</button>
@@ -1517,6 +1530,8 @@ async function ignoreFound(id, on) {
   refresh();
 }
 
+$('#addDeviceBtn').insertAdjacentHTML('afterbegin', `<span aria-hidden="true">${icon('plus')}</span>`);
+
 function renderDevices() {
   const found = state.found;
   setHtml($('#discovered'), found.map(d => `<div class="banner"><span class="ico" style="width:32px;height:32px">${appIcon(d.app)}</span>
@@ -1526,11 +1541,11 @@ function renderDevices() {
   const q = query.trim().toLowerCase();
   const list = state.proxies.filter(p => !q || textMatches(`${p.name} ${p.host} ${connectedText(statuses[p.id])}`.toLowerCase(), q));
   $('#emptyState').hidden = state.proxies.length > 0;
+  $('#deviceToolbar').hidden = !state.proxies.length;
   setHtml($('#deviceGrid'), state.proxies.length && q && !list.length ? `<div class="empty" style="grid-column:1/-1">
       <h2>${esc(t('noDeviceMatch', query.trim()))}</h2><p class="sub">${t('noDeviceMatchHelp')}</p>
       <div class="actions" style="justify-content:center"><button type="button" class="pri" onclick="clearSearch()">${t('clearSearch')}</button></div></div>`
-    : state.proxies.length ? list.map(deviceCard).join('') +
-    `<button class="card new" onclick="openWizard()">${icon('plus')}<b style="font-weight:500;color:var(--fg)">${t('newDevice')}</b><span class="sub">${t('newDeviceHelp')}</span></button>` : '');
+    : list.map(deviceCard).join(''));
   const updates = state.proxies.filter(updateFor).length;
   $('#updateAllBtn').hidden = !updates;
   $('#updateAllBtn').textContent = t('updateAll', updates);

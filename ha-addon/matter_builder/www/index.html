@@ -577,6 +577,8 @@ dialog.side{max-width:100vw}
 @media (min-width:760px){#catalogBody[data-view="cards"] .bed-family-list.bed-group{grid-template-columns:repeat(auto-fill,minmax(min(100%,320px),1fr))}}
 .search-clear{width:28px;min-height:28px;margin-inline:8px -6px;flex:none}
 .empty h2{margin:0 0 6px;font-size:18px;font-weight:500}
+.field:has(:required) > span:first-child::after{content:" (required)"}
+[aria-invalid="true"]{box-shadow:0 2px 0 var(--bad)}
 /* Touch: small icons keep their size and get a finger-sized area around them */
 button.catalog-tip-trigger{position:relative}
 @media (pointer:coarse){.catalog-tip-trigger::after{content:"";position:absolute;inset:-8px}}
@@ -613,7 +615,7 @@ button.catalog-tip-trigger{position:relative}
 </head>
 <body>
 <div id="loadbar"></div>
-<div id="opening" hidden><div class="box"><span class="spin"></span><b style="font-weight:500" id="openingTitle"></b><span class="sub" id="openingHelp"></span></div></div>
+<div id="opening" role="status" hidden><div class="box"><span class="spin" aria-hidden="true"></span><b style="font-weight:500" id="openingTitle"></b><span class="sub" id="openingHelp"></span></div></div>
 <header>
   <div class="bar" id="mainBar">
     <img src="matter-builder-app-icoon-transparant.svg" width="48" height="48" alt="">
@@ -654,7 +656,7 @@ button.catalog-tip-trigger{position:relative}
       <label class="field"><span data-t="password"></span><input id="authPass" type="password" autocomplete="current-password" required></label>
       <label class="field" id="authPass2Field" hidden><span data-t="passwordAgain"></span><input id="authPass2" type="password" autocomplete="new-password"></label>
     </div>
-    <div class="sub warnText error" id="authError" hidden></div>
+    <div class="sub warnText error" id="authError" role="alert" hidden></div>
     <div class="actions"><span class="grow"></span><button class="pri" type="submit" id="authBtn"></button></div>
   </form>
 </section>
@@ -831,7 +833,7 @@ button.catalog-tip-trigger{position:relative}
           <label class="field"><span data-t="newPassword"></span><input id="pNew" type="password" autocomplete="new-password"></label>
           <div class="actions" style="margin-top:0"><button class="plain" type="button" id="logoutBtn" data-t="signOut"></button><span class="grow"></span><button type="submit" data-t="changePassword"></button></div>
         </form>
-        <div class="sub" id="passwordResult"></div>
+        <div class="sub" id="passwordResult" role="status"></div>
         <div style="height:12px"></div>
       </div>
       <section class="settings-section">
@@ -1311,14 +1313,34 @@ function drawAuth() {
   $('#authError').hidden = true;
   setTimeout(() => (first && auth.needs_code ? $('#authCode') : $('#authPass')).focus(), 0);
 }
+// An error belongs to a field: the field is marked invalid and described by the
+// message, focus goes to it, and the mark goes as soon as the field changes.
+function fieldError(field, box, text) {
+  box.textContent = text;
+  box.hidden = false;
+  field.setAttribute('aria-invalid', 'true');
+  field.setAttribute('aria-describedby', box.id);
+  field.focus();
+  field.addEventListener('input', () => {
+    field.removeAttribute('aria-invalid');
+    field.removeAttribute('aria-describedby');
+    box.hidden = true;
+  }, {once: true});
+}
+// The second password is checked as it is typed, once it is as long as the first
+$('#authPass2').oninput = () => {
+  const a = $('#authPass').value, b = $('#authPass2').value;
+  if ($('#authPass2Field').hidden || b.length < a.length || a === b) return;
+  fieldError($('#authPass2'), $('#authError'), t('passwordsDiffer'));
+};
 $('#authForm').onsubmit = async e => {
   e.preventDefault();
-  const first = auth && !auth.password_set, error = $('#authError');
-  if (first && $('#authPass').value !== $('#authPass2').value) { error.textContent = t('passwordsDiffer'); error.hidden = false; return; }
+  const first = auth && !auth.password_set;
+  if (first && $('#authPass').value !== $('#authPass2').value) { fieldError($('#authPass2'), $('#authError'), t('passwordsDiffer')); return; }
   $('#authBtn').disabled = true;
   try {
     const r = await api(first ? 'api/auth/setup' : 'api/auth/login', {password: $('#authPass').value, code: $('#authCode').value});
-    if (r.error) { error.textContent = r.error; error.hidden = false; return; }
+    if (r.error) { fieldError(/code/i.test(r.error) && !$('#authCodeField').hidden ? $('#authCode') : $('#authPass'), $('#authError'), r.error); return; }
     location.reload();
   } finally { $('#authBtn').disabled = false; }
 };
@@ -1444,7 +1466,7 @@ function deviceCard(p) {
   // While it updates (it restarts): only its log; editing, its page and the ⋮ menu wait
   const updating = !!work && !work.queued;
   const what = connectedText(s);
-  const chip = work && !work.queued ? `<span class="chip accent"><span class="spin"></span>${work.pct != null ? t('updatingPct', work.pct) : t('updating')}</span>`
+  const chip = work && !work.queued ? `<span class="chip accent"><span class="spin" aria-hidden="true"></span>${work.pct != null ? t('updatingPct', work.pct) : t('updating')}</span>`
     : work ? `<span class="chip">${t('updateQueued')}</span>` : statusChip(s);
   return `<div class="card" data-device="${esc(p.id)}"${work && !work.queued ? ' aria-busy="true"' : ''}>
     <div class="head"><span class="ico">${appIcon(r ? r.app : p.app)}</span><div class="info"><h3>${esc(p.name)}</h3>
@@ -2330,7 +2352,7 @@ class ConfigEditor {
     const head = `<div class="ed-head">${need.length ? `<span class="sub">${t('needsLabel')}</span>${needChips(need).replace('class="needs"', 'class="needs" style="margin:0"')}` : ''}<span class="grow"></span><div class="seg" style="margin:0">
         <button class="${this.mode === 'visual' ? 'on' : ''}" onclick="${ref}.setMode('visual')">${t('visualEditor')}</button>
         <button class="${this.mode === 'yaml' ? 'on' : ''}" onclick="${ref}.setMode('yaml')">YAML</button></div></div>`;
-    const error = this.error ? `<div class="error">${esc(this.error)}</div>` : '';
+    const error = this.error ? `<div class="error" role="alert">${esc(this.error)}</div>` : '';
     if (this.mode === 'yaml') {
       this.host.innerHTML = `${head}${yamlEditor(this.yaml, `${ref}.setYaml(this.value)`, '', this.originalYaml)}
         <div class="sub">${t('yamlHelp')}</div>${error}`;
@@ -2980,7 +3002,7 @@ async function addSourceFlow(repo, expected, then) {
   const p = await api('api/sources/preview', {repo});
   if (dlgOpen && (!$('#itemDlg').open || item !== selected)) return;
   if (p.error) {
-    setHtml(target, `<div class="error">${esc(p.error)}</div>${dlgOpen ? `<div class="actions end"><button class="plain" onclick="renderItem()">${t('back')}</button></div>` : ''}`);
+    setHtml(target, `<div class="error" role="alert">${esc(p.error)}</div>${dlgOpen ? `<div class="actions end"><button class="plain" onclick="renderItem()">${t('back')}</button></div>` : ''}`);
     return;
   }
   const mismatch = expected && expected !== p.fingerprint;
@@ -2993,14 +3015,14 @@ async function addSourceFlow(repo, expected, then) {
       <p class="sub">The fingerprint identifies this source’s public signing key. Compare it with the fingerprint published by the source. Matter Builder remembers the key and uses it to verify firmware signatures.</p>
     </details>
     <p class="mono">${esc(p.fingerprint.match(/.{1,16}/g).join(' '))}</p>
-    ${mismatch ? `<div class="error">${t('keyMismatch')}</div>` : `<p class="sub">${t('addSourceHelp')}</p>`}
+    ${mismatch ? `<div class="error" role="alert">${t('keyMismatch')}</div>` : `<p class="sub">${t('addSourceHelp')}</p>`}
     <div class="actions end"><button class="plain" id="srcCancel">${t('back')}</button>
       ${mismatch ? '' : `<button class="pri" id="srcAdd">${t('addSource')}</button>`}</div>`);
   $('#srcCancel').onclick = () => { if (dlgOpen) restoreCatalogItem(selected, variant); else setHtml(target, ''); };
   if (!mismatch) $('#srcAdd').onclick = async () => {
     setHtml(target, `<p class="sub">${t('checking')}</p>`);
     const r = await api('api/sources/add', {repo: p.repo, fingerprint: p.fingerprint});
-    if (r.error) { setHtml(target, `<div class="error">${esc(r.error)}</div>`); return; }
+    if (r.error) { setHtml(target, `<div class="error" role="alert">${esc(r.error)}</div>`); return; }
     await refresh();
     if (dlgOpen) { if ($('#itemDlg').open && item === selected) then?.(); } else setHtml(target, '');
   };
@@ -3086,7 +3108,7 @@ function renderShare(keepFocus) {
           <div class="actions"><a class="button pri" href="${esc(f.url)}" target="_blank" rel="noopener">${t('shareOpenGithub')}</a><span class="sub">${t('shareWaiting')}</span></div>`
       : f.state === 'done' ? `<div class="health ok" style="margin-top:0">${esc(t('shareDone', f.repo))}</div>
           <div class="actions"><a class="button" href="${esc(f.file)}" target="_blank" rel="noopener">${t('shareSeeRecipe')}</a><a class="text" href="${esc(f.url)}" target="_blank" rel="noopener">${t('shareOpenRepo')}</a></div>`
-      : `<div class="error">${esc(f.error)}</div><div class="actions"><button onclick="share.flow = null; renderShare()">${t('shareAgain')}</button></div>`;
+      : `<div class="error" role="alert">${esc(f.error)}</div><div class="actions"><button onclick="share.flow = null; renderShare()">${t('shareAgain')}</button></div>`;
     main = `<div class="share-auto">${auto}</div>
       <details class="share-manual"><summary class="sub">${t('shareByHand')}</summary>${manual}</details>`;
   }
@@ -3336,6 +3358,7 @@ function openTask({title, content, cleanup, blocked, dirty, after}, context = la
     $('#taskPage').append(content);
     content.hidden = false;
     $('#taskTitle').textContent = title;
+    document.title = `${title} – Matter Builder`;
     $('#taskSubtitle').textContent = '';
     $('#taskSubtitle').hidden = true;
     const origin = $(`#mainBar nav button[data-tab="${context.tab}"]`)?.textContent.trim();
@@ -3457,6 +3480,8 @@ function showTab(name) {
   $('#mainBar').hidden = editingConfig || name === 'task';
   $('#checkReleases').hidden = name !== 'devices';
   $('#search').placeholder = t({catalog: 'searchCatalog', developer: 'searchConfigs'}[name] || 'searchDevices');
+  $('#search').setAttribute('aria-label', $('#search').placeholder);
+  if (mainTabs.includes(name)) document.title = `${$(`#mainBar nav button[data-tab="${name}"]`).textContent.trim()} – Matter Builder`;
   $('#search').value = name === 'catalog' ? catalogQuery : name === 'developer' ? specQuery : query;
   syncSearchClear();
   if (name === 'catalog' && !catalogData) loadCatalog();
@@ -3826,7 +3851,7 @@ class SettingsEditor {
       ${this.beds.map(b => `<div class="row"><span class="ico">${icon('bed')}</span><div class="label">${esc(b.name || t('bedN', b.index + 1))}
         <div class="sub">${esc(b.state || '')}${b.rssi ? ` · ${b.rssi} dBm` : ''}</div></div></div>`).join('')}
       <div class="sub" style="margin-top:8px">${t('bedsHelp')} <a href="${esc(this.page || '#')}">${t('openPage')}</a></div></section>` : '';
-    this.host.innerHTML = `${head}${beds}<section class="device-settings-card"><h3>${t('settingsLabel')}</h3>${help}${body}${this.error ? `<div class="error">${esc(this.error)}</div>` : ''}${this.notice ? `<div class="notice">${esc(this.notice)}</div>` : ''}
+    this.host.innerHTML = `${head}${beds}<section class="device-settings-card"><h3>${t('settingsLabel')}</h3>${help}${body}${this.error ? `<div class="error" role="alert">${esc(this.error)}</div>` : ''}${this.notice ? `<div class="notice">${esc(this.notice)}</div>` : ''}
       <div class="actions"><button id="setSave" class="${this.changed() ? 'pri' : ''}" onclick="setEditor.save()" ${this.busy || bridgeEditor?.busy || !this.changed() ? 'disabled' : ''}>${this.busy ? t('saving') : 'Apply to device'}</button></div></section>`;
     bridgeEditor?.syncMode(this.mode);
   }
@@ -3966,7 +3991,11 @@ $('#deviceDlg').addEventListener('close', () => {
 
 function setDtab(name) {
   dtab = name;
-  $$('[data-dtab]').forEach(b => b.classList.toggle('on', b.dataset.dtab === name));
+  $$('[data-dtab]').forEach(b => {
+    b.classList.toggle('on', b.dataset.dtab === name);
+    if (b.dataset.dtab === name) b.setAttribute('aria-current', 'true');
+    else b.removeAttribute('aria-current');
+  });
   $('#dConnections').hidden = name !== 'connections';
   $('#dFirmware').hidden = name !== 'firmware';
   $('#dInfo').hidden = name !== 'info';
@@ -5029,7 +5058,7 @@ function boardCard() {
   const d = wiz.board;
   if (!d) return '';
   if (d.busy) return `<div class="board"><div class="sub">${t('boardDetecting')}</div></div>`;
-  if (d.error) return `<div class="board"><div class="error" style="margin:0">${esc(d.error)}</div></div>`;
+  if (d.error) return `<div class="board"><div class="error" role="alert" style="margin:0">${esc(d.error)}</div></div>`;
   const b = BOARDS[d.chip];
   if (!b) return `<div class="board"><div>${esc(t('boardUnknown', d.name))}</div></div>`;
   const small = b.support !== 'no' && d.flash_mb && d.flash_mb < b.flash;
@@ -5037,7 +5066,7 @@ function boardCard() {
   return `<div class="board"><div class="row" style="gap:8px;flex-wrap:wrap"><b class="grow">${esc(t('boardFound', d.name, d.flash_mb))}</b>${supportChip(b)}</div>
     ${b.support === 'experimental' ? `<div class="sub">${t('boardExperimentalHelp')}</div>` : ''}
     ${boardFacts(b)}
-    ${small ? `<div class="error" style="margin:6px 0 0">${esc(t('boardFlashShort', d.flash_mb, b.flash))}</div>` : ''}
+    ${small ? `<div class="error" role="alert" style="margin:6px 0 0">${esc(t('boardFlashShort', d.flash_mb, b.flash))}</div>` : ''}
     ${b.support !== 'no' && !small && !has ? `<div class="sub">${t('boardNoFirmware')}</div>` : ''}</div>`;
 }
 
@@ -5214,7 +5243,7 @@ function renderWizard() {
       <label class="check"><input type="checkbox" ${wiz.saveConfig ? 'checked' : ''} onchange="wiz.saveConfig = this.checked" aria-describedby="wSaveConfigHelp">${t('saveToConfigs')}</label>
       <p class="sub" id="wSaveConfigHelp" style="margin:4px 0 12px">${t('saveToConfigsHelp')}</p>
       ${wiz.configOk ? `<div class="notice">${esc(wiz.configOk)}</div>` : ''}
-      ${wiz.error ? `<div class="error">${esc(wiz.error)}</div>` : ''}
+      ${wiz.error ? `<div class="error" role="alert">${esc(wiz.error)}</div>` : ''}
       <div class="actions end"><button class="plain" onclick="wizPrev()">${t('back')}</button><span class="grow"></span>
         <button class="plain" onclick="wiz.configSpec = null; go('method')">${t('skipConfiguration')}</button>
         <button class="pri" onclick="configureNext()">${t('next')}</button></div>`;
@@ -5237,7 +5266,7 @@ function renderWizard() {
   } else if (wiz.step === 'install') {
     title = t('wInstalling');
     body = `<p id="wStatus">${esc(wiz.status)}</p>${wiz.progress !== undefined ? `<div class="progress"><i style="width:${wiz.progress}%"></i></div>` : ''}
-      ${wiz.error ? `<div class="error">${esc(wiz.error)}</div><div class="actions end"><button class="plain" onclick="go('method')">${t('back')}</button><button class="pri" onclick="startInstall()">${t('retry')}</button></div>` : ''}`;
+      ${wiz.error ? `<div class="error" role="alert">${esc(wiz.error)}</div><div class="actions end"><button class="plain" onclick="go('method')">${t('back')}</button><button class="pri" onclick="startInstall()">${t('retry')}</button></div>` : ''}`;
   } else if (wiz.step === 'setup') {
     title = t('wSetup');
     body = `${wiz.status ? `<p class="notice">${esc(wiz.status)}</p>` : ''}<ol class="steps">${TEXT.wSetupSteps.map(s => `<li>${esc(s)}</li>`).join('')}</ol>
@@ -5251,7 +5280,7 @@ function renderWizard() {
         <label class="field"><span>${t('address')}</span><input id="wHost" autocomplete="off" spellcheck="false" placeholder="1A2B3C4D5E6F7081.local" value="${esc(wiz.host)}" oninput="wiz.host = this.value" ${wiz.waiting ? 'disabled' : ''}></label>
         <label class="field"><span>${t('pagePassword')}</span><input id="wPass" type="password" autocomplete="off" ${wiz.waiting ? 'disabled' : ''}></label>
         ${wiz.waiting ? `<div class="notice">${esc(wiz.status)}</div>` : ''}
-        ${wiz.error ? `<div class="error" style="margin:0">${esc(wiz.error)}</div>` : ''}
+        ${wiz.error ? `<div class="error" role="alert" style="margin:0">${esc(wiz.error)}</div>` : ''}
         <div class="actions end" style="margin-top:0"><button type="button" class="plain" onclick="closeWizard()">${t('close')}</button>
           <button class="pri" type="submit" ${wiz.waiting ? 'disabled' : ''}>${t('link')}</button></div></form>`;
   } else if (wiz.step === 'done') {
@@ -5259,13 +5288,13 @@ function renderWizard() {
     const a = wiz.apply || {};
     body = `<p>${esc(wiz.configSpec ? t('linkedName', wiz.linkedName || '') : t('linkedText', wiz.linkedName || ''))}</p>
       ${wiz.defaultWifi === true ? '<p class="sub">The default Wi-Fi was saved on this device. If it uses Matter over Wi-Fi, it can switch to this network after a restart.</p>' : ''}
-      ${wiz.defaultWifi === false ? '<p class="error">Could not save the default configuration Wi-Fi. You can retry from Settings.</p>' : ''}
+      ${wiz.defaultWifi === false ? '<p class="error" role="alert">Could not save the default configuration Wi-Fi. You can retry from Settings.</p>' : ''}
       ${a.state === 'applying' ? `<p class="notice">${t('applyingConfig')}</p>` : ''}
       ${a.state === 'review' ? '<p class="sub">Review your configuration before sending it to the linked device.</p>' : ''}
       ${a.state === 'trial' ? `<p class="notice">${t('configOnTrial', a.trial)}</p>` : ''}
       ${a.state === 'kept' ? `<p class="notice">${t('configKept')}</p>` : ''}
       ${a.state === 'applied' ? '<p class="notice">Configuration applied. The device is ready.</p>' : ''}
-      ${a.state === 'error' ? `<div class="error">${esc(t('configFailed', a.error))}</div>` : ''}
+      ${a.state === 'error' ? `<div class="error" role="alert">${esc(t('configFailed', a.error))}</div>` : ''}
       <div class="actions end">${a.state === 'trial' ? `<button class="pri" onclick="keepConfig()">${t('keep')}</button>` : `<button class="plain" onclick="completeWizard()" ${a.state === 'applying' ? 'disabled' : ''}>${t('done')}</button>`}
         ${a.state === 'review' ? '<button class="pri" id="wReviewChanges" onclick="applyConfig()">Review changes</button>' : ''}
         ${wiz.linkedId && a.state !== 'trial' && a.state !== 'applying' && a.state !== 'review' ? `<button class="${['kept', 'applied'].includes(a.state) ? 'plain' : 'pri'}" onclick="const w = wiz; completeWizard(() => openDevice(w.linkedId, 'connections'))">${['kept', 'applied'].includes(a.state) ? t('openDevice') : t('setUpConnections')}</button>` : ''}</div>`;
@@ -5728,6 +5757,19 @@ function addEye(input) {
   draw();
   field.appendChild(button);
 }
+const errorWatcher = new MutationObserver(records => {
+  for (const {target} of records) {
+    const box = (target.nodeType === 1 ? target : target.parentElement)?.closest('.error');
+    if (!box || box.hidden || !box.textContent.trim() || !box.getClientRects().length) continue;
+    const rect = box.getBoundingClientRect();
+    if (rect.top < 64 || rect.bottom > innerHeight) {
+      box.scrollIntoView({block: 'center', behavior: matchMedia('(prefers-reduced-motion:reduce)').matches ? 'auto' : 'smooth'});
+    }
+  }
+});
+for (const id of ['mError', 'specError', 'authError']) {
+  errorWatcher.observe($('#' + id), {attributes: true, attributeFilter: ['hidden'], childList: true, characterData: true, subtree: true});
+}
 document.querySelectorAll('input[type=password]').forEach(addEye);
 new MutationObserver(() => document.querySelectorAll('input[type=password]:not([data-eye],[data-private])').forEach(addEye))
   .observe(document.body, {childList: true, subtree: true});
@@ -5739,8 +5781,9 @@ $('#logoutBtn').onclick = async () => { await api('api/auth/logout', {}); locati
 $('#passwordForm').onsubmit = async e => {
   e.preventDefault();
   const r = await api('api/auth/password', {old: $('#pOld').value, password: $('#pNew').value});
-  $('#passwordResult').textContent = r.error || t('passwordChanged');
   $('#passwordResult').className = 'sub' + (r.error ? ' warnText' : '');
+  if (r.error) fieldError($('#pOld'), $('#passwordResult'), r.error);
+  else { $('#passwordResult').hidden = false; $('#passwordResult').textContent = t('passwordChanged'); }
   if (!r.error) { $('#pOld').value = ''; $('#pNew').value = ''; }
 };
 

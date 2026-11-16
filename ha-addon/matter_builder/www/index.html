@@ -970,8 +970,8 @@ const TEXT = {
   bleSendOnce: 'Send once', bleSendRepeatedly: (count, pause) => `Send ${count} times · ${pause} ms between sends`,
   bleAddCommand: 'Add command', bleAsConnection: 'Add as connection', bleIsConnection: 'Added as connection',
   bleRemove: 'Remove the Bluetooth device', bleRemoveConfirm: 'Remove the Bluetooth device from this configuration, with the connections that use its commands? (On the device it stays until you clear it on its page.)',
-  bleNeedUuid: 'Bluetooth device: the service and characteristic as a UUID, e.g. FFE0', bleNeedAddress: 'Bluetooth device: the address like AA:BB:CC:DD:EE:FF',
-  bleNeedBytes: n => `Bluetooth device: command ${n} needs its bytes as hex (1 to 64 bytes)`, bleNoCommand: n => `${n}: no such command on the Bluetooth device`,
+  bleNeedUuid: 'Enter the service and the characteristic of the Bluetooth device as a UUID, such as FFE0.', bleNeedAddress: 'Enter the address of the Bluetooth device like AA:BB:CC:DD:EE:FF, or leave it empty.',
+  bleNeedBytes: n => `Enter the bytes of Bluetooth command ${n} as hex, 1 to 64 bytes.`, bleNoCommand: n => `${n}: no such command on the Bluetooth device`,
   bleNotHere: 'This device has no Bluetooth device to send commands to (it needs an ESP32-C6 with current firmware).',
   groupsTooOld: v => `Groups need generic firmware ${v} or newer: update the device first (Firmware tab).`,
   groups: 'Groups', groupsHelp: 'Connections in one group are one device: one accessory in Apple Home (with its parts), one device in Home Assistant. Drag them between groups, or use ⋮ → Move to.',
@@ -1067,7 +1067,7 @@ const TEXT = {
   missingComponent: type => `This device's firmware has no “${type}” (a component): install firmware built with that component first.`,
   componentsHelp: 'Connection types of their own, built into the firmware: change them in YAML; installing needs a build (developer mode) or a package.',
   needsBuild: 'This config uses components: build it first (Configs › menu › Build, developer mode), or install it as a package from the catalog.', needsBluetooth: 'This firmware uses Bluetooth for what it does (not only for pairing): the ESP32 needs Bluetooth, and shares its radio between Bluetooth and the network.', firmwareTooOld: v => `IR and Bluetooth connections need generic firmware ${v} or newer: update the device first (Firmware tab).`,
-  needCode: n => `${n}: an IR code like nec:00FF:A25D`, needMac: n => `${n}: a Bluetooth address like AA:BB:CC:DD:EE:FF`, liveSend: 'Send', liveHere: 'here', liveAway: 'away', liveSeen: s => `seen ${s} s ago`,
+  needCode: n => `Enter an IR code for ${n}, like nec:00FF:A25D.`, needMac: n => `Enter a Bluetooth address for ${n}, like AA:BB:CC:DD:EE:FF.`, liveSend: 'Send', liveHere: 'here', liveAway: 'away', liveSeen: s => `seen ${s} s ago`,
   saved: 'Saved as draft.', unchanged: 'Nothing changed.', applying: 'Restarting with the new connections…',
   trialLeft: s => `On trial: keep within ${s} s.`, kept: 'Kept.', yamlError: e => `YAML: ${e}`,
   fromRecipe: n => `Filled in from “${n}”. Review the configuration before applying it to this device.`, saveApply: 'Save and apply',
@@ -1116,7 +1116,7 @@ const TEXT = {
     'The device’s page opens: choose a password, then set your Wi-Fi and, for Thread, the Thread network. (On Wi-Fi you can also pair it over Bluetooth with the Home Assistant app, which brings the Wi-Fi network along.)', 'Once it is on your network it shows up here under Discovered. Then link it.'],
   downloaded: 'Downloaded. Flash it at address 0, then continue.', linkNow: 'Link it now', retry: 'Try again',
   wLink: 'Link a device', linkHelp: 'Choose a discovered device or enter its device page address. Use the password you set on that page. You’ll confirm the link on the ESP32.',
-  pagePassword: 'Device page password', link: 'Link', wrongPassword: 'Wrong password.',
+  pagePassword: 'Device page password', link: 'Link', wrongPassword: 'That is not the password of the device page. Check it and try again.', needAddress: 'Enter the address of the device, such as 1A2B3C4D5E6F7081.local.',
   pressBoot: s => `Now press the device’s BOOT button briefly (${s} s left). Button out of reach? Switch its power off and on three times.`,
   notLinked: 'Not linked: the BOOT button was not pressed in time.', wLinked: 'Linked', linkedText: n => `${n} is linked. Set up what is connected to it next.`, linkedName: n => `${n} is linked.`,
   blePairing: 'Pair over Bluetooth', blePairingOn: 'pairing on',
@@ -1631,6 +1631,7 @@ class ConfigEditor {
     this.id = id; this.host = null; this.name = ''; this.rows = []; this.pins = SAFE_PINS;
     this.mode = 'visual'; this.yaml = ''; this.error = ''; this.open = new Set(); this.cardYaml = {};
     this.picking = false; this.live = null; this.tester = null; this.onChange = null;
+    this.badField = null;  // the field that failed the last check, as "kind:number"
     this.components = []; this.drivers = [];  // component types: from the config, or from the device
     this.rules = []; this.ruleOpen = new Set(); this.rulesSupported = true; this.clock = null;
     this.grouping = false;  // the Groups switch: connections shown and moved by group
@@ -1700,9 +1701,10 @@ class ConfigEditor {
     const rows = this.rows.map(r => ({...r, name: (r.name || '').trim() || this.title(r.type),
       code: isIr(r.type) ? normalCode(r.code) : '', mac: isBle(r.type) ? (r.mac || '').trim().toUpperCase() : '',
       pin: isBle(r.type) ? 0 : r.pin}));
+    this.badField = null;
     for (const r of rows) {
-      if (isIr(r.type) && !/^nec:[0-9A-F]{4}:[0-9A-F]{4}$/.test(r.code)) throw new Error(t('needCode', r.name));
-      if (isBle(r.type) && !/^[0-9A-F]{2}(:[0-9A-F]{2}){5}$/.test(r.mac)) throw new Error(t('needMac', r.name));
+      if (isIr(r.type) && !/^nec:[0-9A-F]{4}:[0-9A-F]{4}$/.test(r.code)) throw this.invalid('code:' + r.slot, t('needCode', r.name));
+      if (isBle(r.type) && !/^[0-9A-F]{2}(:[0-9A-F]{2}){5}$/.test(r.mac)) throw this.invalid('mac:' + r.slot, t('needMac', r.name));
     }
     // Rules: each needs a trigger on a connection that is there, and steps that point somewhere
     const slots = new Set(rows.map(r => r.slot));
@@ -1733,15 +1735,52 @@ class ConfigEditor {
         times: Math.max(1, Math.min(50, Math.round(+c.times || 1))), gap: Math.max(0, Math.min(2000, Math.round(+c.gap || 0))),
         ...(bleHex(c.finish || '') ? {finish: bleHex(c.finish), finish_gap: Math.max(0, Math.min(5000, Math.round(+c.finish_gap || 0)))} : {})}))};
   }
+  // A value that fails a check: its card opens and the field is marked and focused,
+  // next to the message the caller shows
+  invalid(check, message) {
+    this.badField = check;
+    setTimeout(() => this.revealInvalid(), 0);
+    return new Error(message);
+  }
+  revealInvalid() {
+    if (!this.badField || !this.host || this.mode !== 'visual') return;
+    const [kind, n] = this.badField.split(':');
+    if (kind === 'mac' || kind === 'code') this.open.add(+n);
+    else if (kind === 'blecmd') this.bleOpen.add(+n);
+    else this.bleSettingsOpen = true;
+    this.render();
+    this.host.querySelector(`[data-check="${this.badField}"]`)?.focus();
+  }
+  markInvalid() {
+    const field = this.badField && this.host?.querySelector(`[data-check="${this.badField}"]`);
+    if (!field) return;
+    field.setAttribute('aria-invalid', 'true');
+    const box = {spec: 'specError', dev: 'mError', wiz: 'wError'}[this.id];
+    if (box) field.setAttribute('aria-describedby', box);
+    field.addEventListener('input', () => {
+      this.badField = null;
+      field.removeAttribute('aria-invalid');
+      field.removeAttribute('aria-describedby');
+    }, {once: true});
+  }
+  // A check that failed on the server names the connection: the same field is marked here
+  serverError(message) {
+    const m = /^connection (\d+): (mac|code) like/.exec(message);
+    const row = m && this.mode === 'visual' && this.rows.find(r => r.slot === +m[1]);
+    if (!row) return message;
+    this.badField = `${m[2]}:${m[1]}`;
+    setTimeout(() => this.revealInvalid(), 0);
+    return t(m[2] === 'mac' ? 'needMac' : 'needCode', (row.name || '').trim() || this.title(row.type));
+  }
   checkedBle(rows) {
     const b = this.cleanBle(), uuid = /^([0-9A-F]{4}|[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12})$/;
     const used = rows.filter(r => r.type === 'ble_command');
     if (!b) return null;
-    if (!uuid.test(b.service) || !uuid.test(b.characteristic)) throw new Error(t('bleNeedUuid'));
-    if (b.address && !/^[0-9A-F]{2}(:[0-9A-F]{2}){5}$/.test(b.address)) throw new Error(t('bleNeedAddress'));
+    if (!uuid.test(b.service) || !uuid.test(b.characteristic)) throw this.invalid(uuid.test(b.service) ? 'ble:characteristic' : 'ble:service', t('bleNeedUuid'));
+    if (b.address && !/^[0-9A-F]{2}(:[0-9A-F]{2}){5}$/.test(b.address)) throw this.invalid('ble:address', t('bleNeedAddress'));
     b.commands.forEach((c, i) => {
       const hexFrame = /^([0-9A-F]{2}){1,64}$/;
-      if (!hexFrame.test(c.bytes) || (c.finish && !hexFrame.test(c.finish))) throw new Error(t('bleNeedBytes', i + 1));
+      if (!hexFrame.test(c.bytes) || (c.finish && !hexFrame.test(c.finish))) throw this.invalid('blecmd:' + i, t('bleNeedBytes', i + 1));
     });
     for (const r of used) if (!(r.number >= 1 && r.number <= b.commands.length)) throw new Error(t('bleNoCommand', r.name || this.title(r.type)));
     return b;
@@ -1900,7 +1939,7 @@ class ConfigEditor {
       </details>
     </div>`;
     const full = this.rows.length >= 8;
-    const field = (label, key, value, extra = '') => `<label class="field"><span>${label}</span><input value="${esc(value)}" spellcheck="false" ${extra} oninput="${ref}.bleSet('${key}', this.value)"></label>`;
+    const field = (label, key, value, extra = '') => `<label class="field"><span>${label}</span><input data-check="ble:${key}" value="${esc(value)}" spellcheck="false" ${extra} oninput="${ref}.bleSet('${key}', this.value)"></label>`;
     const commands = b.commands.map((c, i) => {
       const linked = this.rows.some(r => r.type === 'ble_command' && r.number === i + 1);
       return `<details class="ed-item ble-panel" data-ble-command="${i}" ${this.bleOpen.has(i) ? 'open' : ''}
@@ -1910,7 +1949,7 @@ class ConfigEditor {
           ${linked ? `<span class="chip ok">${t('bleIsConnection')}</span>` : ''}<span class="chev"></span></summary>
         <div class="ed-item-body"><div class="ed-fields ble-cmd">
           <label class="field"><span>${t('bleCommandName')}</span><input maxlength="32" value="${esc(c.label)}" oninput="${ref}.bleCmd(${i}, 'label', this.value)"></label>
-          <div><label class="field"><span>${t('bleBytes')}</span><input class="mono" spellcheck="false" value="${esc(groupHex(bleHex(c.bytes)))}" oninput="${ref}.bleCmd(${i}, 'bytes', formatHexInput(this, bleHex, event))"></label>
+          <div><label class="field"><span>${t('bleBytes')}</span><input required data-check="blecmd:${i}" class="mono" spellcheck="false" value="${esc(groupHex(bleHex(c.bytes)))}" oninput="${ref}.bleCmd(${i}, 'bytes', formatHexInput(this, bleHex, event))"></label>
             <div class="sub ble-field-help">${t('bleBytesHelp')}</div></div></div>
         <div class="ble-timing">
           <div><label class="field"><span>${t('bleTimes')}</span><input type="number" min="1" max="50" value="${c.times}" oninput="${ref}.bleCmd(${i}, 'times', +this.value)"></label>
@@ -1930,10 +1969,10 @@ class ConfigEditor {
       ontoggle="if (this.isConnected) ${ref}.bleSettingsOpen = this.open">
       <summary><span class="info"><b>${t('bleSettings')}</b></span><span class="chev"></span></summary>
       <div class="ed-item-body"><div class="ed-fields">
-        ${field(t('bleAddress'), 'address', b.address, `placeholder="${t('bleAddressHint')}" maxlength="17"`)}
+        ${field(t('bleAddress') + ' (optional)', 'address', b.address, `placeholder="${t('bleAddressHint')}" maxlength="17"`)}
         <label class="field"><span>${t('bleAddressType')}</span><select onchange="${ref}.bleSet('address_type', this.value)">
           <option value="public" ${b.address_type !== 'random' ? 'selected' : ''}>${t('blePublic')}</option><option value="random" ${b.address_type === 'random' ? 'selected' : ''}>${t('bleRandom')}</option></select></label>
-        ${field(t('bleService'), 'service', b.service, 'placeholder="FFE0"')}${field(t('bleCharacteristic'), 'characteristic', b.characteristic, 'placeholder="FFE1"')}
+        ${field(t('bleService'), 'service', b.service, 'required placeholder="FFE0"')}${field(t('bleCharacteristic'), 'characteristic', b.characteristic, 'required placeholder="FFE1"')}
         <label class="field"><span>${t('bleWrite')}</span><select onchange="${ref}.bleSet('write', this.value)">
           <option value="response" ${b.write === 'response' ? 'selected' : ''}>${t('bleWriteResp')}</option><option value="no-response" ${b.write === 'no-response' ? 'selected' : ''}>${t('bleWriteNoResp')}</option></select></label>
         <label class="field"><span>${t('bleIdle')}</span><input type="number" min="0" max="3600" value="${b.idle}" oninput="${ref}.bleSet('idle', +this.value)"></label></div>
@@ -2028,7 +2067,7 @@ class ConfigEditor {
   ruleCard(r) {
     const ref = this.ref, i = r.index, open = this.ruleOpen.has(i), w = r.when, c = r.if;
     const kindSelect = (list, value, prefix, onchange, none) => `<select onchange="${onchange}">${none ? `<option value="">${t('ifNone')}</option>` : ''}${list.map(k => `<option value="${k}" ${k === value ? 'selected' : ''}>${t(prefix + k)}</option>`).join('')}</select>`;
-    const valueInput = (kind, value, onchange) => `<label class="field"><span>${kind.startsWith('humid') ? '%' : '°C'}</span><input type="number" step="${kind.startsWith('humid') ? 1 : 0.1}" value="${value / 100}" onchange="${onchange}"></label>`;
+    const valueInput = (kind, value, onchange) => `<label class="field"><span>${kind.startsWith('humid') ? '%' : '°C'}</span><input type="number" aria-label="${kind.startsWith('humid') ? 'Humidity in percent' : 'Temperature in degrees Celsius'}" step="${kind.startsWith('humid') ? 1 : 0.1}" value="${value / 100}" onchange="${onchange}"></label>`;
     const whenFields = `<label class="field"><span>${t('ruleWhen')}</span>${kindSelect(TRIGGERS, w.kind, 'kind_', `${ref}.setWhen(${i}, 'kind', this.value)`)}</label>
       ${ROLE_OF_KIND[w.kind] ? `<label class="field"><span>${t('ruleWhich')}</span>${this.slotSelect(ROLE_OF_KIND[w.kind], w.slot, `${ref}.setWhen(${i}, 'slot', +this.value)`)}</label>` : ''}
       ${w.kind === 'press' ? `<label class="field"><span>${t('pressCount')}</span><input type="number" min="1" max="5" value="${w.value || 1}" onchange="${ref}.setWhen(${i}, 'value', Math.max(1, Math.min(5, +this.value || 1)))"></label>` : ''}
@@ -2045,14 +2084,14 @@ class ConfigEditor {
         ${ROLE_OF_KIND[st.kind] ? `<label class="field"><span>${t('ruleWhich')}</span>${this.slotSelect('output', st.target, `${ref}.setStep(${i}, ${n}, 'target', +this.value)`)}</label>` : ''}
         ${['enable', 'disable', 'toggle_rule'].includes(st.kind) ? `<label class="field"><span>${t('ruleRule')}</span><select onchange="${ref}.setStep(${i}, ${n}, 'target', +this.value)">${this.rules.map(x => `<option value="${x.index}" ${x.index === st.target ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label>` : ''}
         ${st.kind === 'wait' ? `<label class="field"><span>${t('seconds')}</span><input type="number" min="1" max="65535" value="${st.value}" onchange="${ref}.setStep(${i}, ${n}, 'value', Math.max(1, Math.min(65535, Math.round(+this.value || 1))))"></label>` : ''}
-        ${st.kind === 'level' ? `<label class="field"><span>%</span><input type="number" min="1" max="100" value="${Math.round(st.value / 2.54)}" onchange="${ref}.setStep(${i}, ${n}, 'value', Math.max(1, Math.min(254, Math.round(+this.value * 2.54))))"></label>` : ''}
+        ${st.kind === 'level' ? `<label class="field"><span>%</span><input type="number" aria-label="Brightness in percent" min="1" max="100" value="${Math.round(st.value / 2.54)}" onchange="${ref}.setStep(${i}, ${n}, 'value', Math.max(1, Math.min(254, Math.round(+this.value * 2.54))))"></label>` : ''}
         <button class="icon" onclick="${ref}.removeStep(${i}, ${n})" aria-label="${t('remove')}" ${r.do.length < 2 ? 'disabled' : ''}>${icon('close')}</button></div>`).join('');
     return `<div class="ed-item ${open ? 'open' : ''}">
       <div class="ed-item-head" onclick="if (!event.target.closest('details,button,label')) ${ref}.toggleRule(${i})">
         <span class="ico">${icon('sync')}</span>
         <div class="info"><b>${esc(r.name)}</b><div class="sub">${esc(this.ruleSummary(r))}</div></div>
         ${r.matter ? `<span class="chip">${t('ruleMatterChip')}</span>` : ''}
-        <label class="switch" title="${t('ruleEnabled')}"><input type="checkbox" ${r.enabled ? 'checked' : ''} onchange="${ref}.setRuleField(${i}, 'enabled', this.checked)"></label>
+        <label class="switch" title="${t('ruleEnabled')}"><input type="checkbox" aria-label="${t('ruleEnabled')}" ${r.enabled ? 'checked' : ''} onchange="${ref}.setRuleField(${i}, 'enabled', this.checked)"></label>
         <details class="more"><summary aria-label="${t('more')}">${icon('dots')}</summary><div class="pop" style="bottom:auto;top:40px">
           ${this.runner ? `<button onclick="${ref}.runner(${i})">${t('ruleRun')}</button>` : ''}
           <button class="warn" onclick="${ref}.removeRule(${i})">${t('remove')}</button></div></details>
@@ -2306,10 +2345,10 @@ class ConfigEditor {
       : `<div class="ed-fields">
           <label class="field"><span>${t('type')}</span><select onchange="${ref}.set(${r.slot}, 'type', this.value)">
             ${this.types().map(x => `<option value="${x}" ${x === r.type ? 'selected' : ''}>${esc(this.title(x))}</option>`).join('')}</select></label>
-          ${isBle(r.type) ? `<label class="field"><span>${t('mac')}</span><input value="${esc(r.mac)}" placeholder="${t('macHint')}" maxlength="17" spellcheck="false" oninput="${ref}.setQuiet(${r.slot}, 'mac', this.value)"></label>`
+          ${isBle(r.type) ? `<label class="field"><span>${t('mac')}</span><input required data-check="mac:${r.slot}" value="${esc(r.mac)}" placeholder="${t('macHint')}" maxlength="17" spellcheck="false" oninput="${ref}.setQuiet(${r.slot}, 'mac', this.value)"></label>`
             : this.pinKeys(r).map(key => this.pinField(r, key)).join('')}
           ${this.driver(r.type) && this.driver(r.type).number ? `<label class="field"><span>${esc(this.driver(r.type).number)}</span><input type="number" min="0" max="65535" value="${r.number || 0}" oninput="${ref}.setQuiet(${r.slot}, 'number', +this.value)"></label>` : ''}
-          ${isIr(r.type) ? `<label class="field"><span>${t('irCode')}</span><input value="${esc(r.code)}" placeholder="${t('irCodeHint')}" maxlength="13" spellcheck="false" oninput="${ref}.setQuiet(${r.slot}, 'code', this.value)"></label>` : ''}
+          ${isIr(r.type) ? `<label class="field"><span>${t('irCode')}</span><input required data-check="code:${r.slot}" value="${esc(r.code)}" placeholder="${t('irCodeHint')}" maxlength="13" spellcheck="false" oninput="${ref}.setQuiet(${r.slot}, 'code', this.value)"></label>` : ''}
           <label class="field"><span>${t('name')}</span><input maxlength="23" value="${esc(r.name)}" placeholder="${esc(this.title(r.type))}" oninput="${ref}.setQuiet(${r.slot}, 'name', this.value)"></label>
           ${optOutput(r.type, this.driver(r.type)) ? `<label class="field"><span>${t('powerOn')}</span><select onchange="${ref}.set(${r.slot}, 'power', this.value)">
             ${['off', 'on', 'last', 'toggle'].map(m => `<option value="${m}" ${m === (r.power || 'off') ? 'selected' : ''}>${t('power_' + m)}</option>`).join('')}</select></label>
@@ -2383,6 +2422,7 @@ class ConfigEditor {
         <button class="ed-add" onclick="${ref}.addRule()" ${this.rules.length >= RULES_MAX ? 'disabled' : ''}>${icon('plus')} ${t('addRule')}</button>`
         : `<div class="sub" style="margin:12px 2px">${t('rulesNeedUpdate')}</div>`)}
       ${error}`;
+    this.markInvalid();
   }
 }
 
@@ -3239,7 +3279,8 @@ async function postSpec(checkOnly) {
     specEditor.checkPins();
     const text = specEditor.text();
     const r = await api('api/specs', {text, check_only: checkOnly});
-    if (r.error) { specMessage(r.error); return; }
+    if (r.error) { specMessage(specEditor.serverError(r.error)); return; }
+    specEditor.badField = null;
     specMessage(null, checkOnly ? t('specOk', r.spec) : t('specSaved'));
     if (!checkOnly) {
       specEditor.originalYaml = text;
@@ -4331,7 +4372,7 @@ function renderDevicePanel() {
       <button class="pri" onclick="updateProxy('${p.id}', $('#fwPick').value)" ${state.job.running ? 'disabled' : ''}>${t('install')}</button></div>`
       : `<div class="sub" style="margin-top:12px">${t('noFirmware')}</div>`}
     <div class="row"><div class="label">${t('nightUpdates')}<div class="sub">${t('nightUpdatesHelp', String(state.settings.night_hour ?? 3).padStart(2, '0'))}</div></div>
-      <label class="switch"><input type="checkbox" ${p.auto_update ? 'checked' : ''} onchange="setAutoUpdate('${p.id}', this.checked)"></label></div>`);
+      <label class="switch"><input type="checkbox" aria-label="${t('nightUpdates')}" ${p.auto_update ? 'checked' : ''} onchange="setAutoUpdate('${p.id}', this.checked)"></label></div>`);
   const token = shownTokens[p.id];
   setHtml($('#dInfo'), `<h3>${t('info')}</h3><div class="row" style="margin-top:8px"><div class="label">${t('address')}<div class="sub mono">${esc(p.host)}</div></div>
       <a class="button text" href="${esc(portalUrl(p))}">${t('openPage')} ${icon('open')}</a></div>
@@ -4342,7 +4383,7 @@ function renderDevicePanel() {
       <button class="text" onclick="toggleToken('${p.id}')">${token ? t('hide') : t('show')}</button>
       ${token ? `<button class="text" onclick="copyToken('${p.id}')">${t('copy')}</button>` : ''}</div>
     ${s && s.io && s.io.ble_pairing !== undefined && s.io.bluetooth !== 'none' ? `<div class="row"><div class="label">${t('blePairing')}<div class="sub">${t('blePairingHelp')}</div></div>
-      <label class="switch"><input type="checkbox" ${s.io.ble_pairing ? 'checked' : ''} onchange="setBlePairing('${p.id}', this.checked)"></label></div>
+      <label class="switch"><input type="checkbox" aria-label="${t('blePairing')}" ${s.io.ble_pairing ? 'checked' : ''} onchange="setBlePairing('${p.id}', this.checked)"></label></div>
       <div class="row"><div class="label">Bluetooth</div><div class="sub">${esc(s.io.ble_pairing ? t('blePairingOn') + ' · ' : '')}${esc(t('ble_' + s.io.bluetooth) || s.io.bluetooth)}</div></div>` : ''}
     ${r ? `<div class="row"><div class="label">${t('shareDevice').replace('…', '')}<div class="sub">${t('shareIntro')}</div></div>
       <button onclick="shareDevice('${p.id}')">${t('shareDevice')}</button></div>` : ''}
@@ -5155,7 +5196,7 @@ async function startWith(kind, value) {
 }
 
 const choice = (on, ic, title, sub, click, attrs = '') =>
-  `<button class="choice ${on ? 'on' : ''}" onclick="${click}" ${attrs}><span class="ico">${icon(ic)}</span><span><b>${title}</b><span class="sub">${sub}</span></span></button>`;
+  `<button class="choice ${on ? 'on' : ''}" ${on ? 'aria-current="true"' : ''} onclick="${click}" ${attrs}><span class="ico">${icon(ic)}</span><span><b>${title}</b><span class="sub">${sub}</span></span></button>`;
 
 function renderWizard() {
   if (!wiz) return;
@@ -5242,8 +5283,8 @@ function renderWizard() {
       <div id="wizEditor"></div>
       <label class="check"><input type="checkbox" ${wiz.saveConfig ? 'checked' : ''} onchange="wiz.saveConfig = this.checked" aria-describedby="wSaveConfigHelp">${t('saveToConfigs')}</label>
       <p class="sub" id="wSaveConfigHelp" style="margin:4px 0 12px">${t('saveToConfigsHelp')}</p>
-      ${wiz.configOk ? `<div class="notice">${esc(wiz.configOk)}</div>` : ''}
-      ${wiz.error ? `<div class="error" role="alert">${esc(wiz.error)}</div>` : ''}
+      ${wiz.configOk ? `<div class="notice" role="status">${esc(wiz.configOk)}</div>` : ''}
+      ${wiz.error ? `<div class="error" role="alert" id="wError">${esc(wiz.error)}</div>` : ''}
       <div class="actions end"><button class="plain" onclick="wizPrev()">${t('back')}</button><span class="grow"></span>
         <button class="plain" onclick="wiz.configSpec = null; go('method')">${t('skipConfiguration')}</button>
         <button class="pri" onclick="configureNext()">${t('next')}</button></div>`;
@@ -5256,7 +5297,7 @@ function renderWizard() {
       ${choice(wiz.method === 'host', 'chip', t('mHost'), t('mHostHelp'), "wiz.method = 'host'; loadPorts()")}
       ${choice(wiz.method === 'download', 'download', t('mDownload'), t('mDownloadHelp'), "wiz.method = 'download'; renderWizard()")}</div>
       ${wiz.method === 'host' ? (wiz.ports && wiz.ports.length
-        ? `<div class="row"><label class="field" style="flex:1"><span>${t('usbPort')}</span><select onchange="wiz.port = this.value || null; renderWizard()">
+        ? `<div class="row"><label class="field" style="flex:1"><span>${t('usbPort')}</span><select required onchange="wiz.port = this.value || null; renderWizard()">
               <option value="">${t('choosePort')}</option>${wiz.ports.map(p => `<option value="${esc(p.path)}" ${p.path === wiz.port ? 'selected' : ''}>${esc(p.name)}${isEspressif(p) ? ' (ESP32)' : ''}</option>`).join('')}</select></label>
             <button class="plain" onclick="loadPorts()">${t('refresh')}</button></div>
           <div class="sub warnText">${t('portWarning')}</div>`
@@ -5265,22 +5306,23 @@ function renderWizard() {
       <div class="actions end"><button class="plain" onclick="wizPrev()">${t('back')}</button><button class="pri" onclick="startInstall()" ${wiz.method === 'host' && !wiz.port ? 'disabled' : ''}>${wiz.method === 'download' ? t('download') : t('install')}</button></div>`;
   } else if (wiz.step === 'install') {
     title = t('wInstalling');
-    body = `<p id="wStatus">${esc(wiz.status)}</p>${wiz.progress !== undefined ? `<div class="progress"><i style="width:${wiz.progress}%"></i></div>` : ''}
+    body = `<p id="wStatus" role="status">${esc(wiz.status)}</p>${wiz.progress !== undefined ? `<div class="progress" role="progressbar" aria-label="${esc(t('wInstalling'))}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${wiz.progress}"><i style="width:${wiz.progress}%"></i></div>` : ''}
       ${wiz.error ? `<div class="error" role="alert">${esc(wiz.error)}</div><div class="actions end"><button class="plain" onclick="go('method')">${t('back')}</button><button class="pri" onclick="startInstall()">${t('retry')}</button></div>` : ''}`;
   } else if (wiz.step === 'setup') {
     title = t('wSetup');
-    body = `${wiz.status ? `<p class="notice">${esc(wiz.status)}</p>` : ''}<ol class="steps">${TEXT.wSetupSteps.map(s => `<li>${esc(s)}</li>`).join('')}</ol>
+    body = `${wiz.status ? `<p class="notice" role="status">${esc(wiz.status)}</p>` : ''}<ol class="steps">${TEXT.wSetupSteps.map(s => `<li>${esc(s)}</li>`).join('')}</ol>
       <div class="actions end"><button class="plain" onclick="closeWizard()">${t('close')}</button><button class="pri" onclick="go('link')">${t('linkNow')}</button></div>`;
   } else if (wiz.step === 'link') {
     title = t('wLink');
     const found = state.found;
+    const linkBad = id => wiz.error && wiz.errorField === id ? 'aria-invalid="true" aria-describedby="wLinkError"' : '';
     body = `<div class="sub">${t('linkHelp')}</div>
       ${found.length && !wiz.host ? `<div class="choices">${found.map(d => choice(false, 'chip', esc(appTitle(d.app)) + ' ' + esc(d.version || ''), esc(d.host), `wiz.host = '${esc(d.address)}'; renderWizard()`)).join('')}</div>` : ''}
       <form class="form" onsubmit="event.preventDefault(); startLink()">
-        <label class="field"><span>${t('address')}</span><input id="wHost" autocomplete="off" spellcheck="false" placeholder="1A2B3C4D5E6F7081.local" value="${esc(wiz.host)}" oninput="wiz.host = this.value" ${wiz.waiting ? 'disabled' : ''}></label>
-        <label class="field"><span>${t('pagePassword')}</span><input id="wPass" type="password" autocomplete="off" ${wiz.waiting ? 'disabled' : ''}></label>
+        <label class="field"><span>${t('address')}</span><input id="wHost" required autocomplete="off" spellcheck="false" placeholder="1A2B3C4D5E6F7081.local" value="${esc(wiz.host)}" oninput="wiz.host = this.value; this.removeAttribute('aria-invalid')" ${linkBad('wHost')} ${wiz.waiting ? 'disabled' : ''}></label>
+        <label class="field"><span>${t('pagePassword')}</span><input id="wPass" type="password" autocomplete="off" value="${esc(wiz.pass || '')}" oninput="wiz.pass = this.value; this.removeAttribute('aria-invalid')" ${linkBad('wPass')} ${wiz.waiting ? 'disabled' : ''}></label>
         ${wiz.waiting ? `<div class="notice">${esc(wiz.status)}</div>` : ''}
-        ${wiz.error ? `<div class="error" role="alert" style="margin:0">${esc(wiz.error)}</div>` : ''}
+        ${wiz.error ? `<div class="error" role="alert" id="wLinkError" style="margin:0">${esc(wiz.error)}</div>` : ''}
         <div class="actions end" style="margin-top:0"><button type="button" class="plain" onclick="closeWizard()">${t('close')}</button>
           <button class="pri" type="submit" ${wiz.waiting ? 'disabled' : ''}>${t('link')}</button></div></form>`;
   } else if (wiz.step === 'done') {
@@ -5289,11 +5331,11 @@ function renderWizard() {
     body = `<p>${esc(wiz.configSpec ? t('linkedName', wiz.linkedName || '') : t('linkedText', wiz.linkedName || ''))}</p>
       ${wiz.defaultWifi === true ? '<p class="sub">The default Wi-Fi was saved on this device. If it uses Matter over Wi-Fi, it can switch to this network after a restart.</p>' : ''}
       ${wiz.defaultWifi === false ? '<p class="error" role="alert">Could not save the default configuration Wi-Fi. You can retry from Settings.</p>' : ''}
-      ${a.state === 'applying' ? `<p class="notice">${t('applyingConfig')}</p>` : ''}
+      ${a.state === 'applying' ? `<p class="notice" role="status">${t('applyingConfig')}</p>` : ''}
       ${a.state === 'review' ? '<p class="sub">Review your configuration before sending it to the linked device.</p>' : ''}
-      ${a.state === 'trial' ? `<p class="notice">${t('configOnTrial', a.trial)}</p>` : ''}
-      ${a.state === 'kept' ? `<p class="notice">${t('configKept')}</p>` : ''}
-      ${a.state === 'applied' ? '<p class="notice">Configuration applied. The device is ready.</p>' : ''}
+      ${a.state === 'trial' ? `<p class="notice" role="status">${t('configOnTrial', a.trial)}</p>` : ''}
+      ${a.state === 'kept' ? `<p class="notice" role="status">${t('configKept')}</p>` : ''}
+      ${a.state === 'applied' ? '<p class="notice" role="status">Configuration applied. The device is ready.</p>' : ''}
       ${a.state === 'error' ? `<div class="error" role="alert">${esc(t('configFailed', a.error))}</div>` : ''}
       <div class="actions end">${a.state === 'trial' ? `<button class="pri" onclick="keepConfig()">${t('keep')}</button>` : `<button class="plain" onclick="completeWizard()" ${a.state === 'applying' ? 'disabled' : ''}>${t('done')}</button>`}
         ${a.state === 'review' ? '<button class="pri" id="wReviewChanges" onclick="applyConfig()">Review changes</button>' : ''}
@@ -5301,7 +5343,12 @@ function renderWizard() {
   }
   $('#wTitle').textContent = title;
   $('#taskTitle').textContent = progress ? `${title} · ${progress}` : title;
+  const active = document.activeElement;
+  const held = !$('#wBody').contains(active) ? null : active.id ? '#' + CSS.escape(active.id)
+    : active.getAttribute('onclick') ? `[onclick="${CSS.escape(active.getAttribute('onclick'))}"]` : null;
   $('#wBody').innerHTML = body;
+  if (held && !$('#wBody').contains(document.activeElement)) $('#wBody').querySelector(held)?.focus({preventScroll: true});
+  if (wiz.step === 'link' && wiz.error && wiz.focusError) { wiz.focusError = false; $('#' + wiz.errorField)?.focus(); }
   if (wiz.step === 'configure') {
     if (!wiz.editorReady) {
       wiz.editorReady = true;
@@ -5510,11 +5557,12 @@ async function startInstall() {
 // Linking: the password, then a press of the device's BOOT button
 async function startLink() {
   const host = $('#wHost').value.trim(), password = $('#wPass').value;
-  if (!host) { wiz.error = t('address'); renderWizard(); return; }
+  const fail = (field, text) => { wiz.error = text; wiz.errorField = field; wiz.focusError = true; renderWizard(); };
+  if (!host) return fail('wHost', t('needAddress'));
   wiz.error = '';
   let r;
   try { r = await api('api/link', {host, password}); } catch (err) { r = {error: err.message}; }
-  if (r.error) { wiz.error = r.error === 'wrong password' ? t('wrongPassword') : r.error; renderWizard(); return; }
+  if (r.error) return r.error === 'wrong password' ? fail('wPass', t('wrongPassword')) : fail('wHost', r.error);
   wiz.waiting = true;
   const until = Date.now() + r.seconds * 1000;
   const poll = async () => {
@@ -5528,6 +5576,7 @@ async function startLink() {
       wiz.defaultWifi = s.default_wifi;
       wiz.linkedId = s.id;
       wiz.linkedName = added ? added.name : host;
+      wiz.pass = '';
       go('done');
       loadStatuses();
       if (wiz.configSpec && wiz.linkedId) { wiz.apply = {state: 'review'}; renderWizard(); }

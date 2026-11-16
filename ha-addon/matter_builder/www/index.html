@@ -78,12 +78,10 @@ a:not(.button){color:var(--primary)}
 #catalogBody .card{cursor:pointer}
 button.catalog-open{display:inline;min-height:0;padding:0;border-radius:2px;background:transparent;color:inherit;text-align:start;white-space:normal}
 #catalogBody .card .acts{margin:auto 0 0}
-.catalog-detail .needs{align-items:center}
 .catalog-tip{position:relative;display:inline-flex}
 button.catalog-tip-trigger{width:28px;min-height:28px;padding:0;color:var(--mute)}
 .catalog-tip-trigger svg{width:16px;height:16px}
 .catalog-tip-trigger.required,.catalog-tip-trigger[aria-expanded="true"]{background:var(--chip);color:var(--primary)}
-button.catalog-tip-trigger.optional{background:var(--fill);color:var(--mute);border:1px dashed var(--mute)}
 .catalog-tip [role="tooltip"]{display:none;position:absolute;inset-inline-start:0;top:100%;z-index:4;
   width:max-content;max-width:min(240px,75vw);padding:6px 10px;border:1px solid var(--line);border-radius:8px;
   background:var(--card);color:var(--fg);box-shadow:var(--shadow);font-size:12px;line-height:1.4;cursor:default}
@@ -94,7 +92,6 @@ button.catalog-tip-trigger.optional{background:var(--fill);color:var(--mute);bor
 @media (min-width:760px){
   #catalogBody[data-view="list"] .card{display:grid;grid-template-columns:minmax(150px,1fr) minmax(0,2fr) auto;align-items:center;gap:20px}
 }
-.catalog-facts{display:grid;gap:2px;margin-top:4px;overflow-wrap:anywhere}
 #catalogBody[data-view="cards"] .catalog-description{
   display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;
 }
@@ -363,7 +360,7 @@ dialog.side{margin:0 0 0 auto;height:100vh;max-height:100vh;border-radius:16px 0
 .dlg-head .info{flex:1;min-width:0}
 .dlg-body{padding:4px 20px 20px;overflow:auto;flex:1}
 .catalog-detail{display:grid;gap:20px;padding:6px 0 4px}
-.catalog-detail p,.catalog-detail .needs,.catalog-detail .actions,.catalog-detail .banner{margin:0}
+.catalog-detail p,.catalog-detail .actions,.catalog-detail .banner{margin:0}
 .catalog-detail .compatibility{display:grid;gap:8px}
 .catalog-detail .row{min-height:52px;padding:10px 0}
 .catalog-detail .field{padding:10px 12px 8px}
@@ -2438,13 +2435,21 @@ function catalogDescription(it) {
   return t('catalogConnections', short.join(', '));
 }
 
+function catalogNetworks(it, variants) {
+  const networks = variants.map(v => v.network).filter(Boolean);
+  return [...new Set(networks.length ? networks : it.kind === 'firmware' ? [].concat(it.network || []) : [])];
+}
+
+function catalogBluetooth(it, variants) {
+  if (catalogBleRequired(it)) return 'required';
+  if (it.kind === 'firmware' && it.official && it.app === 'mb_generic' && variants.some(v => BOARDS[v.chip]?.bluetooth)) return 'optional';
+  return null;
+}
+
 function catalogCompatibility(it, variants) {
-  const networks = [...new Set(variants.map(v => v.network))].filter(Boolean);
-  const labels = needs([], networks.length ? networks : it.kind === 'firmware' ? it.network : []);
-  if (catalogBleRequired(it)) labels.push(t('catalogBle'));
-  else if (it.kind === 'firmware' && it.official && it.app === 'mb_generic' && variants.some(v => BOARDS[v.chip]?.bluetooth)) {
-    labels.push(t('catalogBleOptional'));
-  }
+  const labels = needs([], catalogNetworks(it, variants));
+  const bluetooth = catalogBluetooth(it, variants);
+  if (bluetooth) labels.push(t(bluetooth === 'required' ? 'catalogBle' : 'catalogBleOptional'));
   const chips = [...new Set(variants.map(v => v.chip))].filter(Boolean);
   const boards = chips.filter(chip => BOARDS[chip]?.support !== 'experimental').map(catalogBoardName);
   const experimental = chips.filter(chip => BOARDS[chip]?.support === 'experimental').map(catalogBoardName);
@@ -2461,7 +2466,8 @@ function catalogBoardFacts(it, boards, experimental) {
 }
 
 function catalogCompatibilityHtml(it, {labels, boards, experimental}) {
-  return protocolIcons(labels, 'item') + catalogBoardFacts(it, boards, experimental);
+  return `<h3>Compatibility</h3>${catalogBoardFacts(it, boards, experimental)}
+    ${labels.length ? `<div class="sub">${esc(labels.join(' · '))}</div>` : ''}`;
 }
 
 function showCatalogTip(button, visible) {
@@ -2486,8 +2492,6 @@ const PROTOCOL_ICONS = new Map([
   [NET_NAMES.wifi, {glyph: 'wifi'}],
   [NET_NAMES.thread, {glyph: 'thread'}],
   ['Bluetooth', {glyph: 'bluetooth', style: 'required'}],
-  [t('catalogBle'), {glyph: 'bluetooth', style: 'required'}],
-  [t('catalogBleOptional'), {glyph: 'bluetooth', style: 'optional'}],
 ]);
 
 function protocolIcons(labels, id) {
@@ -2514,16 +2518,11 @@ const badge = it => it.official ? `<span class="chip accent">${t('official')}</s
   : `<span class="chip">${t('community')}</span>${it.verified ? ` <span class="chip ok">${t('verified')}</span>` : ''}${it.liked ? ` <span class="chip ok">${t('liked')}</span>` : ''}`;
 
 function catalogCard(it, i) {
-  const {labels, boards, experimental} = catalogCompatibility(it, catalogVariants(it));
   return `<div class="card" data-item="${esc(it.id || it.source + '/' + it.title)}"
     onclick="openItem(${i}, this.querySelector('.catalog-open'))">
     <div class="head"><span class="ico">${it.kind === 'firmware' ? appIcon(it.app) : icon('recipe')}</span>
       <div class="info"><h3><button type="button" class="catalog-open" aria-haspopup="dialog">${esc(it.title)}</button></h3><div class="sub">${it.kind === 'firmware' ? esc(it.version || '') : t('recipe')} · ${esc(it.maker || (it.source || '').split('/')[0])}</div></div></div>
-    <div class="meta"><div class="sub catalog-description">${esc(catalogDescription(it))}</div>
-      <div class="catalog-facts">
-        ${catalogBoardFacts(it, boards, experimental)}
-        ${labels.length ? `<div class="sub">${esc(labels.join(' · '))}</div>` : ''}
-      </div></div>
+    <div class="meta catalog-description sub">${esc(catalogDescription(it))}</div>
     <div class="acts">${badge(it)}<span class="grow"></span>${it.stars ? `<span class="sub">★ ${it.stars}</span>` : ''}</div></div>`;
 }
 
@@ -2577,7 +2576,10 @@ function recipeCategory(item) {
 }
 
 const mobileCatalog = matchMedia('(max-width:759px)');
-const defaultCatalogFilters = {sort: 'recommended', category: 'all', type: 'all', source: 'any'};
+const defaultCatalogFilters = {sort: 'recommended', category: 'all', type: 'all', source: 'any',
+  board: 'any', network: 'any', bluetooth: 'any'};
+const catalogNetworkOptions = [['any', 'Any network'], ['thread', 'Thread'], ['wifi', 'Wi-Fi']];
+const catalogBluetoothOptions = [['any', 'Any Bluetooth requirement'], ['required', 'Bluetooth required'], ['optional', 'Bluetooth optional']];
 const catalogFilterDialog = $('#catalogFilterDialog');
 $('#openCatalogFilters').insertAdjacentHTML('beforeend', '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3,17V19H9V17H3M3,5V7H13V5H3M13,21V19H21V17H13V15H11V21H13M7,9V11H3V13H7V15H9V9H7M21,13V11H11V13H21M15,9H17V7H21V5H17V3H15V9Z"/></svg>');
 let catalogFilters = {...defaultCatalogFilters}, draftCatalogFilters, selectedBedFamily = '';
@@ -2585,10 +2587,31 @@ const sortOptions = [
   ['recommended', 'Recommended'], ['az', 'Name A–Z'], ['za', 'Name Z–A'], ['stars', 'Most GitHub stars'],
 ];
 
-function catalogMatches(items, {type, source, category}, query) {
+function matchesCatalogCompatibility(it, {board, network, bluetooth}) {
+  if (board === 'any' && network === 'any' && bluetooth === 'any') return true;
+
+  let variants = catalogVariants(it);
+  if (board !== 'any') {
+    variants = variants.filter(variant => variant.chip === board);
+    if (!variants.length) return false;
+  }
+  if (network !== 'any') {
+    if (variants.length) {
+      variants = variants.filter(variant => variant.network === network);
+      if (!variants.length) return false;
+    } else if (!catalogNetworks(it, variants).includes(network)) {
+      return false;
+    }
+  }
+  return bluetooth === 'any' || catalogBluetooth(it, variants) === bluetooth;
+}
+
+function catalogMatches(items, filters, query) {
+  const {type, source, category} = filters;
   return items.filter(it => (type === 'all' || it.kind === type) &&
     (source === 'any' || (source === 'official') === !!it.official) &&
     (category === 'all' || (it.kind === 'recipe' && recipeCategory(it) === category)) &&
+    matchesCatalogCompatibility(it, filters) &&
     (!query || catalogSearchText(it).includes(query)));
 }
 
@@ -2600,10 +2623,21 @@ function chooseCatalogFilter(filters, name, value) {
   else if (value.startsWith('cat:')) Object.assign(filters, {type: 'all', category: value.slice(4)});
   else Object.assign(filters, {type: value, category: 'all'});
 }
+function catalogFilterBoardLabel(chip) {
+  const label = catalogBoardName(chip);
+  return BOARDS[chip]?.support === 'experimental' ? `${label} (untested)` : label;
+}
+
 function catalogFilterGroups(filters, withSort) {
   const items = catalogItems(), query = catalogQuery.trim().toLowerCase();
   const left = changes => catalogMatches(items, {...filters, ...changes}, query).length;
   const present = new Set(items.filter(it => it.kind === 'recipe').map(recipeCategory));
+  const boards = new Set(items.flatMap(it => catalogVariants(it).map(variant => variant.chip)).filter(Boolean));
+  if (filters.board !== 'any') boards.add(filters.board);
+  const boardOptions = [...boards].map(chip => [chip, catalogFilterBoardLabel(chip)])
+    .sort(([, a], [, b]) => a.localeCompare(b));
+  const options = (name, title, pairs) => ({name, title, options: pairs.map(([value, label]) =>
+    ({value, label, count: left({[name]: value}), checked: filters[name] === value}))});
   const kind = catalogKind(filters);
   const kinds = [['all', 'All', {type: 'all', category: 'all'}], ['firmware', 'Firmware', {type: 'firmware', category: 'all'}],
     ['recipe', 'Recipes', {type: 'recipe', category: 'all'}],
@@ -2613,8 +2647,10 @@ function catalogFilterGroups(filters, withSort) {
     ...(withSort ? [{name: 'sort', title: 'Sort', options: sortOptions.map(([value, label]) => ({value, label, checked: filters.sort === value}))}] : []),
     {name: 'kind', title: 'Category', options: kinds.map(([value, label, changes, child]) =>
       ({value, label, child, count: left(changes), checked: kind === value}))},
-    {name: 'source', title: 'Source', options: [['any', 'Any source'], ['official', 'Official'], ['community', 'Community']]
-      .map(([value, label]) => ({value, label, count: left({source: value}), checked: filters.source === value}))},
+    options('board', 'Board', [['any', 'Any board'], ...boardOptions]),
+    options('network', 'Network', catalogNetworkOptions),
+    options('bluetooth', 'Bluetooth', catalogBluetoothOptions),
+    options('source', 'Source', [['any', 'Any source'], ['official', 'Official'], ['community', 'Community']]),
   ];
 }
 const filterOption = (group, option, prefix = '') => `<label class="${option.child ? 'child' : ''}">
@@ -2641,13 +2677,13 @@ function updateCatalogSheet() {
   const filters = draftCatalogFilters;
   for (const group of catalogFilterGroups(filters, true)) {
     const row = $(`#catalogFilterGroups details[data-group="${group.name}"]`);
-    for (const option of group.options) {
-      const input = row.querySelector(`input[value="${CSS.escape(option.value)}"]`);
-      if (!input) continue;
-      input.checked = option.checked;
-      if (option.checked) row.querySelector('[data-summary]').textContent = option.label;
+    const options = new Map(group.options.map(option => [option.value, option]));
+    for (const input of row.querySelectorAll('input')) {
+      const option = options.get(input.value);
+      input.checked = !!option?.checked;
+      if (option?.checked) row.querySelector('[data-summary]').textContent = option.label;
       const count = input.parentElement.querySelector('[data-count]');
-      if (count) count.textContent = option.count;
+      if (count) count.textContent = option?.count ?? 0;
     }
   }
   const count = catalogMatches(catalogItems(), filters, catalogQuery.trim().toLowerCase()).length;
@@ -2695,7 +2731,7 @@ $('#catalogBody').addEventListener('click', event => {
   const reset = event.target.closest('[data-catalog-reset]')?.dataset.catalogReset;
   if (reset === 'search') return clearSearch();
   if (reset === 'filters') {
-    setCatalogFilters({type: 'all', source: 'any', category: 'all'});
+    setCatalogFilters({...defaultCatalogFilters, sort: catalogFilters.sort});
     return $('#search').focus();
   }
   const familyButton = event.target.closest('[data-bed-family]');
@@ -2786,7 +2822,7 @@ function renderCatalog() {
     : `${resultCount} ${resultNoun}${q ? ` for “${catalogQuery.trim()}”` : ''}`;
   if ($('#catalogResultCount').textContent !== resultLabel) $('#catalogResultCount').textContent = resultLabel;
   // No match is never a dead end: say what was looked for and offer the ways out
-  const filtersOn = ['type', 'source', 'category'].some(key => filters[key] !== defaultCatalogFilters[key]);
+  const filtersOn = Object.keys(defaultCatalogFilters).some(key => key !== 'sort' && filters[key] !== defaultCatalogFilters[key]);
   const widerCount = q && filtersOn ? catalogMatches(items, defaultCatalogFilters, q).length : 0;
   const noMatch = !catalogLoading && !resultCount && (q || filtersOn) ? `<div class="empty">
     <h2>${q ? `No results for “${esc(catalogQuery.trim())}”` : 'Nothing matches these filters'}</h2>
@@ -2807,6 +2843,9 @@ function renderCatalog() {
       ['type', {firmware: 'Firmware', recipe: 'Recipes'}[filters.type]],
       ['source', {official: 'Official', community: 'Community'}[filters.source]],
       ['category', recipeCategories.get(filters.category)],
+      ['board', filters.board !== 'any' && catalogFilterBoardLabel(filters.board)],
+      ['network', filters.network !== 'any' && NET_NAMES[filters.network]],
+      ['bluetooth', filters.bluetooth !== 'any' && catalogBluetoothOptions.find(([value]) => value === filters.bluetooth)?.[1]],
       ['family', selectedBedFamily && (bedRecipeFamilies.get(selectedBedFamily) || 'Other beds')],
     ].filter(([, text]) => text);
     $('#catalogApplied').hidden = !applied.length;
@@ -3441,7 +3480,8 @@ function goTab(name) {
 // The catalog's filters, sorting, bed brand and search are part of its address:
 // Back undoes the last change, and a reload or a link keeps them.
 const catalogChoices = {sort: sortOptions.map(([key]) => key), category: ['all', ...recipeCategories.keys()],
-  type: ['all', 'firmware', 'recipe'], source: ['any', 'official', 'community']};
+  type: ['all', 'firmware', 'recipe'], source: ['any', 'official', 'community'],
+  network: catalogNetworkOptions.map(([value]) => value), bluetooth: catalogBluetoothOptions.map(([value]) => value)};
 let catalogAddress = '#catalog';
 function catalogHash() {
   const params = new URLSearchParams();
@@ -3459,7 +3499,11 @@ function noteCatalogStep() {
 function adoptCatalogAddress(render) {
   const params = new URLSearchParams(location.hash.split('?')[1] || '');
   const filters = {...defaultCatalogFilters};
-  for (const key of Object.keys(filters)) if (catalogChoices[key].includes(params.get(key))) filters[key] = params.get(key);
+  for (const [key, choices] of Object.entries(catalogChoices)) {
+    if (choices.includes(params.get(key))) filters[key] = params.get(key);
+  }
+  const board = params.get('board');
+  if (board && /^[a-z0-9_-]{1,32}$/i.test(board)) filters.board = board;
   if (filters.type === 'firmware') filters.category = 'all';
   const family = filters.category === 'beds' ? params.get('family') || '' : '', q = params.get('q') || '';
   const same = JSON.stringify([filters, family, q]) === JSON.stringify([catalogFilters, selectedBedFamily, catalogQuery.trim()]);

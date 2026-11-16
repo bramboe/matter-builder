@@ -1515,7 +1515,7 @@ function renderDevices() {
       <button class="plain" onclick="ignoreFound('${esc(d.id)}', true)" title="${esc(t('ignoreHelp'))}">${t('ignore')}</button>
       <button class="pri" onclick="openWizard('link', '${esc(d.address)}')">${t('adopt')}</button></div>`).join(''));
   const q = query.trim().toLowerCase();
-  const list = state.proxies.filter(p => !q || `${p.name} ${p.host} ${connectedText(statuses[p.id])}`.toLowerCase().includes(q));
+  const list = state.proxies.filter(p => !q || textMatches(`${p.name} ${p.host} ${connectedText(statuses[p.id])}`.toLowerCase(), q));
   $('#emptyState').hidden = state.proxies.length > 0;
   setHtml($('#deviceGrid'), state.proxies.length && q && !list.length ? `<div class="empty" style="grid-column:1/-1">
       <h2>${esc(t('noDeviceMatch', query.trim()))}</h2><p class="sub">${t('noDeviceMatchHelp')}</p>
@@ -2593,6 +2593,52 @@ function catalogCard(it, i) {
     <div class="acts">${badge(it)}<span class="grow"></span>${it.stars ? `<span class="sub">★ ${it.stars}</span>` : ''}</div></div>`;
 }
 
+// Search: every word of the query has to be found, in any order. A word also
+// counts through its synonyms and abbreviations. One or two letters match the
+// start of a word, and an abbreviation such as "ir" only the whole word, so
+// that it finds neither "air" nor "irrigation".
+const SEARCH_SYNONYMS = [['ble', 'bluetooth'], ['ir', 'infrared'], ['pir', 'motion'], ['temp', 'temperature', 'thermometer'],
+  ['wifi', 'wi-fi'], ['co2', 'air quality'], ['rgb', 'colour', 'color'], ['humidity', 'sht4x'], ['pwm', 'brightness', 'dimmable']];
+const searchWords = text => text.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+function wordFound(word, text, words) {
+  if (word.includes(' ') || word.includes('-')) return text.includes(word);
+  if (word.length >= 3) return text.includes(word);
+  return words.includes(word) || (!SEARCH_SYNONYMS.flat().includes(word) && words.some(w => w.startsWith(word)));
+}
+function textMatches(text, query) {
+  const words = searchWords(text);
+  return searchWords(query).every(word => [word, ...SEARCH_SYNONYMS.filter(set => set.includes(word)).flat()]
+    .some(option => wordFound(option, text, words)));
+}
+function editDistance(a, b) {
+  if (Math.abs(a.length - b.length) > 2) return 3;
+  let row = [...Array(b.length + 1).keys()];
+  for (let i = 1; i <= a.length; i++) {
+    const next = [i];
+    for (let j = 1; j <= b.length; j++) next[j] = Math.min(row[j] + 1, next[j - 1] + 1, row[j - 1] + (a[i - 1] !== b[j - 1]));
+    row = next;
+  }
+  return row[b.length];
+}
+// The query the catalog searches with: the typed one, or, when that finds nothing
+// at all, the same query with an obvious misspelling put right
+let searchFix = {typed: null, size: -1, used: ''};
+function catalogSearchQuery() {
+  const typed = catalogQuery.trim().toLowerCase(), items = catalogItems();
+  if (searchFix.typed === typed && searchFix.size === items.length) return searchFix.used;
+  let used = typed;
+  if (typed && items.length && !items.some(it => textMatches(catalogSearchText(it), typed))) {
+    const known = new Set(items.flatMap(it => searchWords(catalogSearchText(it))).concat(SEARCH_SYNONYMS.flat()));
+    const fixed = searchWords(typed).map(word => {
+      if (word.length < 5 || known.has(word) || [...known].some(w => w.startsWith(word))) return word;
+      const limit = word.length >= 8 ? 2 : 1;
+      return [...known].filter(w => w.length >= 4).map(w => [editDistance(word, w), w]).filter(([d]) => d <= limit).sort(([a], [b]) => a - b)[0]?.[1] || word;
+    }).join(' ');
+    if (fixed !== searchWords(typed).join(' ') && items.some(it => textMatches(catalogSearchText(it), fixed))) used = fixed;
+  }
+  searchFix = {typed, size: items.length, used};
+  return used;
+}
 function catalogSearchText(it) {
   const {labels, boards, experimental} = catalogCompatibility(it, catalogVariants(it));
   const category = it.kind === 'recipe' ? recipeCategory(it) : '';
@@ -2651,7 +2697,8 @@ const catalogFilterDialog = $('#catalogFilterDialog');
 $('#openCatalogFilters').insertAdjacentHTML('beforeend', '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3,17V19H9V17H3M3,5V7H13V5H3M13,21V19H21V17H13V15H11V21H13M7,9V11H3V13H7V15H9V9H7M21,13V11H11V13H21M15,9H17V7H21V5H17V3H15V9Z"/></svg>');
 let catalogFilters = {...defaultCatalogFilters}, draftCatalogFilters, selectedBedFamily = '';
 const sortOptions = [
-  ['recommended', 'Recommended'], ['az', 'Name A–Z'], ['za', 'Name Z–A'], ['stars', 'Most GitHub stars'],
+  ['recommended', 'Recommended'], ['newest', 'Newest'], ['downloads', 'Most downloads'], ['stars', 'Most GitHub stars'],
+  ['az', 'Name A–Z'], ['za', 'Name Z–A'],
 ];
 
 function matchesCatalogCompatibility(it, {board, network, bluetooth}) {
@@ -2659,7 +2706,8 @@ function matchesCatalogCompatibility(it, {board, network, bluetooth}) {
 
   let variants = catalogVariants(it);
   if (board !== 'any') {
-    variants = variants.filter(variant => variant.chip === board);
+    const chosen = board.split(',');
+    variants = variants.filter(variant => chosen.includes(variant.chip));
     if (!variants.length) return false;
   }
   if (network !== 'any') {
@@ -2679,23 +2727,28 @@ function catalogMatches(items, filters, query) {
     (source === 'any' || (source === 'official') === !!it.official) &&
     (category === 'all' || (it.kind === 'recipe' && recipeCategory(it) === category)) &&
     matchesCatalogCompatibility(it, filters) &&
-    (!query || catalogSearchText(it).includes(query)));
+    (!query || textMatches(catalogSearchText(it), query)));
 }
 
 // The filters as lists of single choices, each with the number of items it leaves.
 // Firmware, recipes and the recipe categories are one tree: what the item is.
 const catalogKind = filters => filters.category !== 'all' ? 'cat:' + filters.category : filters.type;
-function chooseCatalogFilter(filters, name, value) {
-  if (name !== 'kind') filters[name] = value;
+function chooseCatalogFilter(filters, name, value, checked) {
+  if (name === 'board') {  // boards combine: any of the checked ones
+    const chosen = new Set(filters.board === 'any' ? [] : filters.board.split(','));
+    if (checked) chosen.add(value); else chosen.delete(value);
+    filters.board = [...chosen].sort().join(',') || 'any';
+  } else if (name !== 'kind') filters[name] = value;
   else if (value.startsWith('cat:')) Object.assign(filters, {type: 'all', category: value.slice(4)});
   else Object.assign(filters, {type: value, category: 'all'});
 }
 function catalogFilterGroups(filters, withSort) {
-  const items = catalogItems(), query = catalogQuery.trim().toLowerCase();
+  const items = catalogItems(), query = catalogSearchQuery();
   const left = changes => catalogMatches(items, {...filters, ...changes}, query).length;
   const present = new Set(items.filter(it => it.kind === 'recipe').map(recipeCategory));
   const boards = new Set(items.flatMap(it => catalogVariants(it).map(variant => variant.chip)).filter(Boolean));
-  if (filters.board !== 'any') boards.add(filters.board);
+  const chosenBoards = filters.board === 'any' ? [] : filters.board.split(',');
+  chosenBoards.forEach(chip => boards.add(chip));
   const boardOptions = [...boards].map(chip => [chip, catalogBoardName(chip)])
     .sort(([, a], [, b]) => a.localeCompare(b));
   const options = (name, title, pairs) => ({name, title, options: pairs.map(([value, label]) =>
@@ -2706,17 +2759,18 @@ function catalogFilterGroups(filters, withSort) {
     ...[...recipeCategories].filter(([key]) => present.has(key) || filters.category === key)
       .map(([key, label]) => ['cat:' + key, label, {type: 'all', category: key}, true])];
   return [
-    ...(withSort ? [{name: 'sort', title: 'Sort', options: sortOptions.map(([value, label]) => ({value, label, checked: filters.sort === value}))}] : []),
+    ...(withSort ? [{name: 'sort', title: 'Sort', options: availableSorts().map(([value, label]) => ({value, label, checked: filters.sort === value}))}] : []),
     {name: 'kind', title: 'Category', options: kinds.map(([value, label, changes, child]) =>
       ({value, label, child, count: left(changes), checked: kind === value}))},
-    options('board', 'Board', [['any', 'Any board'], ...boardOptions]),
+    {name: 'board', title: 'Board', multi: true, none: 'Any board', options: boardOptions.map(([value, label]) =>
+      ({value, label, count: left({board: value}), checked: chosenBoards.includes(value)}))},
     options('network', 'Network', catalogNetworkOptions),
     options('bluetooth', 'Bluetooth', catalogBluetoothOptions),
     options('source', 'Source', [['any', 'Any source'], ['official', 'Official'], ['community', 'Community']]),
   ];
 }
 const filterOption = (group, option, prefix = '') => `<label class="${option.child ? 'child' : ''}">
-  <input type="radio" name="${prefix}${group.name}" value="${esc(option.value)}" ${option.checked ? 'checked' : ''}><span>${esc(option.label)}</span>
+  <input type="${group.multi ? 'checkbox' : 'radio'}" name="${prefix}${group.name}" value="${esc(option.value)}" ${option.checked ? 'checked' : ''}><span>${esc(option.label)}</span>
   ${option.count === undefined ? '' : `<span class="sub" data-count>${option.count}</span>`}</label>`;
 
 // Desktop: the filters stay in view beside the list and apply at once
@@ -2731,7 +2785,7 @@ function renderCatalogSidebar() {
 }
 $('#catalogSidebar').onchange = ({target}) => {
   const next = {...catalogFilters};
-  chooseCatalogFilter(next, target.name.slice(5), target.value);
+  chooseCatalogFilter(next, target.name.slice(5), target.value, target.checked);
   setCatalogFilters(next);
 };
 
@@ -2747,8 +2801,11 @@ function updateCatalogSheet() {
       const count = input.parentElement.querySelector('[data-count]');
       if (count) count.textContent = option?.count ?? 0;
     }
+    if (group.multi) {
+      row.querySelector('[data-summary]').textContent = group.options.filter(option => option.checked).map(option => option.label).join(', ') || group.none;
+    }
   }
-  const count = catalogMatches(catalogItems(), filters, catalogQuery.trim().toLowerCase()).length;
+  const count = catalogMatches(catalogItems(), filters, catalogSearchQuery()).length;
   $('#applyCatalogFilters').textContent = `View ${count} ${count === 1 ? 'result' : 'results'}`;
 }
 
@@ -2777,7 +2834,7 @@ $('#clearCatalogFilters').onclick = () => {
   updateCatalogSheet();
 };
 $('#catalogFilterForm').onchange = ({target}) => {
-  chooseCatalogFilter(draftCatalogFilters, target.name, target.value);
+  chooseCatalogFilter(draftCatalogFilters, target.name, target.value, target.checked);
   updateCatalogSheet();
 };
 $('#catalogFilterForm').onsubmit = event => {
@@ -2848,7 +2905,8 @@ function renderBedRecipes(recipes, mobile) {
 let shownItems = [];
 function renderCatalog() {
   if (!catalogData && !catalogLoading && !recipes) loadCatalog();
-  const q = catalogQuery.trim().toLowerCase();
+  const q = catalogSearchQuery();
+  const corrected = q !== catalogQuery.trim().toLowerCase();
   const items = catalogItems();
   const mobile = mobileCatalog.matches;
   const filters = catalogFilters;
@@ -2863,6 +2921,8 @@ function renderCatalog() {
   const sort = {
     az: byName, za: (a, b) => byName(b, a),
     stars: (a, b) => (b.stars || 0) - (a.stars || 0) || byName(a, b),
+    newest: (a, b) => (Date.parse(b.updated) || 0) - (Date.parse(a.updated) || 0) || byName(a, b),
+    downloads: (a, b) => (b.downloads || 0) - (a.downloads || 0) || byName(a, b),
   }[filters.sort];
   if (sort) {
     fw.sort(([a], [b]) => sort(a, b));
@@ -2881,7 +2941,7 @@ function renderCatalog() {
   const resultCount = bedRecipes?.count ?? fw.length + visibleRecipes.length;
   const resultNoun = bedRecipes ? (resultCount === 1 ? 'recipe' : 'recipes') : (resultCount === 1 ? 'result' : 'results');
   const resultLabel = catalogLoading && !resultCount ? 'Loading catalog…'
-    : `${resultCount} ${resultNoun}${q ? ` for “${catalogQuery.trim()}”` : ''}`;
+    : `${resultCount} ${resultNoun}${q ? ` for “${corrected ? q : catalogQuery.trim()}”` : ''}${corrected ? `, shown instead of “${catalogQuery.trim()}”` : ''}`;
   if ($('#catalogResultCount').textContent !== resultLabel) $('#catalogResultCount').textContent = resultLabel;
   // No match is never a dead end: say what was looked for and offer the ways out
   const filtersOn = Object.keys(defaultCatalogFilters).some(key => key !== 'sort' && filters[key] !== defaultCatalogFilters[key]);
@@ -2899,13 +2959,14 @@ function renderCatalog() {
     $('#catalogFilterLabel').textContent = active ? `Filter and sort (${active})` : 'Filter and sort';
     if (catalogFilterDialog.open) updateCatalogSheet();
   } else renderCatalogSidebar();
+  markCatalogFilters();
   {
     const applied = [
       ['sort', filters.sort !== 'recommended' && `Sort: ${sortOptions.find(([key]) => key === filters.sort)[1]}`],
       ['type', {firmware: 'Firmware', recipe: 'Recipes'}[filters.type]],
       ['source', {official: 'Official', community: 'Community'}[filters.source]],
       ['category', recipeCategories.get(filters.category)],
-      ['board', filters.board !== 'any' && catalogBoardName(filters.board)],
+      ['board', filters.board !== 'any' && filters.board.split(',').map(catalogBoardName).join(' or ')],
       ['network', filters.network !== 'any' && NET_NAMES[filters.network]],
       ['bluetooth', filters.bluetooth !== 'any' && catalogBluetoothOptions.find(([value]) => value === filters.bluetooth)?.[1]],
       ['family', selectedBedFamily && (bedRecipeFamilies.get(selectedBedFamily) || 'Other beds')],
@@ -3211,7 +3272,7 @@ let specQuery = '';
 function renderDeveloper() {
   if (!specs) { loadSpecs(); return; }
   const q = specQuery.trim().toLowerCase();
-  const found = q ? specs.filter(sp => `${sp.name} ${sp.slug}`.toLowerCase().includes(q)) : specs;
+  const found = q ? specs.filter(sp => textMatches(`${sp.name} ${sp.slug}`.toLowerCase(), q)) : specs;
   $('#newSpecBtn').hidden = $('#specHelp').hidden = !specs.length;
   setHtml($('#specList'), found.length ? found.map(specRow).join('') : specs.length
     ? `<div class="empty" style="grid-column:1/-1"><h2>${esc(t('noConfigMatch', specQuery.trim()))}</h2>
@@ -3569,7 +3630,7 @@ function adoptCatalogAddress(render) {
     if (choices.includes(params.get(key))) filters[key] = params.get(key);
   }
   const board = params.get('board');
-  if (board && /^[a-z0-9_-]{1,32}$/i.test(board)) filters.board = board;
+  if (board && /^[a-z0-9_,-]{1,160}$/i.test(board)) filters.board = board.split(',').filter(Boolean).sort().join(',') || 'any';
   if (filters.type === 'firmware') filters.category = 'all';
   const family = filters.category === 'beds' ? params.get('family') || '' : '', q = params.get('q') || '';
   const same = JSON.stringify([filters, family, q]) === JSON.stringify([catalogFilters, selectedBedFamily, catalogQuery.trim()]);
@@ -3610,8 +3671,20 @@ $('#search').oninput = () => {
   else query = $('#search').value;
   render();
 };
-function markCatalogFilters() { $('#catalogSort').value = catalogFilters.sort; }
-$('#catalogSort').innerHTML = sortOptions.map(([value, label]) => `<option value="${value}">${label}</option>`).join('');
+// A sort order is offered when the catalog has the data for it: the release date
+// and the downloads are only useful once recipes carry them too
+const sortNeeds = {newest: 'updated', downloads: 'downloads'};
+function availableSorts() {
+  const recipes = catalogData ? catalogItems().filter(it => it.kind === 'recipe') : [];
+  return sortOptions.filter(([key]) => !sortNeeds[key] || key === catalogFilters.sort ||
+    recipes.filter(it => it[sortNeeds[key]] != null).length >= 2);
+}
+function markCatalogFilters() {
+  const options = availableSorts().map(([value, label]) => `<option value="${value}">${label}</option>`).join('');
+  if ($('#catalogSort').dataset.options !== options) { $('#catalogSort').innerHTML = options; $('#catalogSort').dataset.options = options; }
+  $('#catalogSort').value = catalogFilters.sort;
+}
+markCatalogFilters();
 $('#catalogSort').onchange = () => setCatalogFilters({sort: $('#catalogSort').value});
 function setCatalogFilters(changes) {
   Object.assign(catalogFilters, changes);

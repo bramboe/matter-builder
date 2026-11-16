@@ -949,8 +949,13 @@ const TEXT = {
   recipeSetup: 'Wiring and setup',
   recipeMeasurementsFirmware: 'Requires generic firmware 0.1.31 or later.',
   wConfigure: 'Configure the device', configureHelp: 'Its name and what is connected. Wi-Fi, Thread and passwords are set on the device itself.',
+  octoCommands: 'Built-in Bluetooth commands',
+  octoCommandsHelp: 'These are the standard Octo firmware commands. Bed addresses, PINs and any custom firmware changes are managed on the linked bridge.',
+  octoConfigReview: 'Review Octo Bridge configuration',
+  octoConfigBoard: 'This configuration requires an ESP32-C6.',
+  octoConfigImage: v => `No installer is available for Octo Bridge ${v}. Build this configuration in Configs or choose an available Octo Bridge version in Catalog.`,
   startEmpty: 'Empty', fromConfigs: 'Saved configurations', fromRecipes: 'Recipes', skipConfiguration: 'Continue without a configuration', saveToConfigs: 'Save a reusable copy',
-  saveToConfigsHelp: 'Find it later in Configs to use the same connections and rules on another ESP32.',
+  saveToConfigsHelp: 'Find it later in Configs to reuse the connections, Bluetooth commands and rules on another ESP32.',
   configOk: (n, c) => `${n}: ${c} connection${c === 1 ? '' : 's'}.`, applyTo: 'Apply to a device', noGeneric: 'No linked generic device yet.',
   applyingConfig: 'Applying the configuration…', configOnTrial: s => `The new connections run on trial: keep them within ${s} s, or the device goes back.`,
   configKept: 'Kept. The device is ready.', configFailed: e => `The configuration was not applied: ${e}`,
@@ -1183,7 +1188,8 @@ const TEXT = {
   toolchainReady: 'Ready', toolchainMissing: 'Not installed: about 6 GB, 15 minutes or more. Not included in backups.',
   ownDevices: 'Own devices', noConfigsTitle: 'No configs yet', noConfigs: 'A config keeps a setup to reuse on a linked device or a new board. Save one from a device, or make a new one.',
   noConfigMatch: q => `No configs match “${q}”`, goDevices: 'Go to devices', newSpec: 'New config',
-  specHelp: 'Save connections and rules to reuse on a linked device or install on a new board.',
+  specHelp: 'Reuse your saved connections, Bluetooth commands and rules on a linked device or a new board.',
+  specBleCommands: n => n === 1 ? '1 Bluetooth command' : `${n} Bluetooth commands`,
   specValidate: 'Validate', specDiscard: 'Discard unsaved changes to this config?', specExample: 'Choose an example',
   specSummary: (connections, rules) => [
     ...(connections ? [`${connections} connection${connections === 1 ? '' : 's'}`] : []),
@@ -1693,9 +1699,9 @@ class ConfigEditor {
     this.render();
   }
   // A YAML text (a config or recipe): shown as it is in the YAML mode
-  async loadText(text) {
+  async loadText(text, parsed = null) {
     this.originalYaml = this.yaml = text; this.cardYaml = {}; this.open.clear(); this.ruleOpen.clear(); this.bleOpen.clear(); this.bleSettingsOpen = false;
-    try { const s = await parseSpec(text); this.name = s.name; this.rows = s.rows; this.components = s.components; this.drivers = s.drivers; this.rules = s.rules; this.ble = s.ble; this.loadSpecDevice(s.device); this.error = ''; this.grouping = this.grouping || this.rows.some(r => r.group); }
+    try { const s = parsed || await parseSpec(text); this.name = s.name; this.rows = s.rows; this.components = s.components; this.drivers = s.drivers; this.rules = s.rules; this.ble = s.ble; this.loadSpecDevice(s.device); this.error = ''; this.grouping = this.grouping || this.rows.some(r => r.group); }
     catch (e) { this.error = t('yamlError', e.message); this.mode = 'yaml'; }
     this.changed();
   }
@@ -2428,11 +2434,15 @@ class ConfigEditor {
         <div class="sub">${t('yamlHelp')}</div>${error}`;
       return;
     }
+    const nameField = `<div class="ed-item"><div class="ed-item-head" style="cursor:default"><span class="ico">${appIcon(this.specDevice?.app)}</span>
+      <label class="field" style="flex:1"><span>${t('deviceName')}</span><input maxlength="32" value="${esc(this.name)}" oninput="${ref}.setName(this.value)"></label></div></div>`;
+    if (this.specDevice?.app === 'octo_bridge') {
+      this.host.innerHTML = `${head}${nameField}${savedOctoCommands(this.specDevice)}${error}`;
+      return;
+    }
     const full = this.rows.length >= 8;
     const section = content => this.id === 'spec' && content ? `<div class="spec-editor-section">${content}</div>` : content;
-    this.host.innerHTML = `${head}
-      <div class="ed-item"><div class="ed-item-head" style="cursor:default"><span class="ico">${icon('chip')}</span>
-        <label class="field" style="flex:1"><span>${t('deviceName')}</span><input maxlength="32" value="${esc(this.name)}" oninput="${ref}.setName(this.value)"></label></div></div>
+    this.host.innerHTML = `${head}${nameField}
       ${section(this.components.length ? `<div class="ed-section"><h3>${t('components')}</h3></div>
         <div class="sub" style="margin:-4px 2px 6px">${t('componentsHelp')}</div>
         ${this.components.map(c => `<div class="row"><div class="label mono">${esc(c.source)}</div></div>`).join('')}` : '')}
@@ -3275,7 +3285,9 @@ function specRow(sp) {
   const connectionNames = sp.connection_names || [];
   const repeatsName = connectionNames.length === 1 && connectionNames[0].trim().toLowerCase() === sp.name.trim().toLowerCase();
   if (sp.connections && connectionNames.length && !repeatsName) facts[0] = connectionNames.join(', ');
-  if (sp.requires?.includes('bluetooth')) facts.push(t('bleTitle'));
+  if (sp.app === 'octo_bridge') facts.push(`${appTitle(sp.app)} ${sp.version} · ${t('octoCommands')}`);
+  else if (sp.ble_commands) facts.push(t('specBleCommands', sp.ble_commands));
+  else if (sp.requires?.includes('bluetooth')) facts.push(t('bleTitle'));
   const summary = sp.error || facts.join(' · ') || t('noSpecConnections');
   const files = dev ? [
     ...[...sp.firmware].reverse().map(file => [file, t('downloadUpdate')]),
@@ -3306,7 +3318,8 @@ async function useConfig(slug) {
     if (error) throw new Error(error);
     const spec = await parseSpec(text);
     const saved = (specs || []).find(s => s.slug === slug);
-    openWizard('recipeTarget', null, {recipe: {title: spec.name, rows: spec.rows, text}, configText: text, configSlug: slug,
+    const octoConfig = spec.device.app === 'octo_bridge' ? spec : null;
+    openWizard('recipeTarget', null, {recipe: {title: spec.name, rows: spec.rows, text}, configText: text, configSlug: slug, octoConfig,
       configFactory: saved?.factory.at(-1), configNeedsBuild: spec.components.length > 0});
   } catch (e) { toast(e.message); }
 }
@@ -4178,6 +4191,16 @@ function mountBridgeEditor() {
   if (bridge && !host.firstChild) loadBridgeEditor(proxy, host);
 }
 
+function savedOctoCommands(device) {
+  const row = (label, key) => `<div class="row"><dt>${label}</dt><dd><code class="mono">${esc(groupHex(device.packets[key]))}</code></dd></div>`;
+  return `<section class="device-settings-card firmware-packets">
+    <h3>${t('octoCommands')}</h3>
+    <p class="sub">${esc(appTitle(device.app))} ${esc(device.version)} · ${esc(device.board.toUpperCase())}</p>
+    <p class="sub">${t('octoCommandsHelp')}</p>
+    ${device.packets ? bridgeCommandGroups(row) : '<p class="sub">The standard command list is unavailable.</p>'}
+  </section>`;
+}
+
 function bridgePacketFields(build, packets) {
   if (!packets) return '<p class="sub">Packet editing is unavailable for this firmware revision.</p>';
   const row = (label, key) => `<div class="row"><dt><label for="packet-${key}">${label}</label></dt>
@@ -4187,7 +4210,14 @@ function bridgePacketFields(build, packets) {
   return `<section class="firmware-packets">
     <h3>Edit Bluetooth commands</h3>
     <p class="sub">Edit the complete hexadecimal packets, including their framing, length and checksum. The ESP32 uses the new bytes after you build and upload.</p>
-    <p class="sub">Service <code>FFE0</code> · Command and notification characteristic <code>FFE1</code></p>
+    ${bridgeCommandGroups(row, `<p class="sub">${build.light_enabled ? 'Enabled' : 'Disabled'} in the running firmware.</p>`)}
+    <p class="sub"><a href="${sourceUrl}/octo_protocol/octo_protocol.cpp" target="_blank" rel="noopener">Packet encoders</a>
+      · <a href="${sourceUrl}/octo_core/bed_link.cpp" target="_blank" rel="noopener">Bluetooth driver</a></p>
+  </section>`;
+}
+
+function bridgeCommandGroups(row, lightNote = '') {
+  return `<p class="sub">Service <code>FFE0</code> · Command and notification characteristic <code>FFE1</code></p>
     <h4>Movement</h4>
     <p class="sub">While moving, the firmware sends a command every 375 ms. It sends Stop when movement ends.</p>
     <dl>
@@ -4200,7 +4230,7 @@ function bridgePacketFields(build, packets) {
       ${row('Stop', 'stop')}
     </dl>
     <h4>Under-bed light</h4>
-    <p class="sub">${build.light_enabled ? 'Enabled' : 'Disabled'} in the running firmware.</p>
+    ${lightNote}
     <dl>
       ${row('Light on', 'light_on')}
       ${row('Light off', 'light_off')}
@@ -4209,10 +4239,7 @@ function bridgePacketFields(build, packets) {
     <dl>
       <div class="row"><dt>Authenticate and keep alive</dt><dd>Command ID <code class="mono">20 43</code> · PIN payload hidden</dd></div>
       ${row('Read bed capabilities', 'capabilities')}
-    </dl>
-    <p class="sub"><a href="${sourceUrl}/octo_protocol/octo_protocol.cpp" target="_blank" rel="noopener">Packet encoders</a>
-      · <a href="${sourceUrl}/octo_core/bed_link.cpp" target="_blank" rel="noopener">Bluetooth driver</a></p>
-  </section>`;
+    </dl>`;
 }
 
 async function loadBridgeEditor(proxy, host) {
@@ -4739,7 +4766,7 @@ function specYaml(name, rows, components = [], drivers = [], rules = [], ble = n
 async function parseSpec(text) {
   const r = await api('api/specs', {text, check_only: true});
   if (!r.spec) throw new Error(r.error || 'not valid');
-  return {name: r.spec.name, device: {app: r.spec.app, board: r.spec.board, version: r.spec.version}, rows: rowsOf(r.spec.connections), components: (r.spec.components || []).map(c => ({source: c.source})),
+  return {name: r.spec.name, device: {app: r.spec.app, board: r.spec.board, version: r.spec.version, packets: r.spec.firmware_packets}, rows: rowsOf(r.spec.connections), components: (r.spec.components || []).map(c => ({source: c.source})),
     drivers: r.spec.drivers || [], rules: r.spec.rules || [], ble: r.spec.bluetooth_device || null};
 }
 
@@ -5164,6 +5191,12 @@ function openWizard(step, host, extra) {
   if (!catalogData && !recipes) loadCatalog().then(renderWizard);
 }
 function installConfigOnNewBoard() {
+  if (wiz.octoConfig) {
+    selectOctoInstaller(wiz.octoConfig, (specs || []).find(sp => sp.slug === wiz.configSlug) || {slug: wiz.configSlug, factory: []});
+    wiz.chip = 'esp32c6';
+    go('board');
+    return;
+  }
   if (wiz.configNeedsBuild && !wiz.configFactory) {
     wiz.error = t('needsBuild');
     renderWizard();
@@ -5173,6 +5206,15 @@ function installConfigOnNewBoard() {
   wiz.keepFile = !!wiz.file;
   wiz.choice = null;
   go('board');
+}
+
+function selectOctoInstaller(spec, saved) {
+  const {app, board, version} = spec.device;
+  const built = `${saved.slug.replaceAll('-', '_')}-${version}-factory.bin`;
+  const release = (state.release_factory || []).find(f => f.official && f.app === app && f.version === version && f.chip === 'esp32c6' && f.network === 'thread');
+  wiz.octoConfig = spec;
+  wiz.file = chipKey(board) === 'esp32c6' ? (saved.factory.includes(built) ? built : release?.file || null) : null;
+  wiz.choice = wiz.file ? {chip: 'esp32c6', title: `${appTitle(app)} ${version}`} : null;
 }
 function closeWizard() { return leaveTask(); }
 function completeWizard(next) {
@@ -5284,9 +5326,9 @@ async function detectOnHost() {
 // skips "how to start", only the ESP32-C6 has a network to choose, and only
 // the generic firmware is configured
 function wizFlow() {
-  const generic = !wiz.file || isGenericFile(wiz.file);
+  const generic = !wiz.octoConfig && (!wiz.file || isGenericFile(wiz.file));
   return ['board', ...(wiz.configText || wiz.recipe ? [] : ['how']), ...(generic && wiz.choice && wiz.choice.wifiFile ? ['network'] : []),
-    ...(generic ? ['configure'] : []), 'method', 'install', 'setup', 'link', 'done'];
+    ...(generic || wiz.octoConfig ? ['configure'] : []), 'method', 'install', 'setup', 'link', 'done'];
 }
 function wizNext() { const f = wizFlow(); go(f[f.indexOf(wiz.step) + 1]); }
 function wizPrev() { const f = wizFlow(), i = f.indexOf(wiz.step); if (wiz.step === wiz.catalogEntry) return closeWizard(); go(i > 0 ? f[i - 1] : 'start'); }
@@ -5294,6 +5336,10 @@ function wizPrev() { const f = wizFlow(), i = f.indexOf(wiz.step); if (wiz.step 
 // The board is chosen: its firmware (the newest generic one for the chip, on
 // Thread where it can; the network step may change that)
 function boardNext() {
+  if (wiz.configText && wiz.octoConfig) {
+    if (wiz.chip === 'esp32c6') wizNext();
+    return;
+  }
   if (!wiz.keepFile) {
     const c = factoryChoices().find(x => x.chip === wiz.chip && isGenericFile(x.file));
     if (!c) return;
@@ -5305,6 +5351,27 @@ function boardNext() {
 
 // How to start: from scratch, a recipe, a saved config, or ready-made firmware
 async function startWith(kind, value) {
+  const current = wiz;
+  let spec, text;
+  if (kind === 'config') {
+    try {
+      const config = await api(`api/specs/${value}`);
+      if (config.error) throw new Error(config.error);
+      text = config.text;
+      spec = await parseSpec(text);
+    } catch (e) { if (wiz === current) toast(e.message); return; }
+    if (wiz !== current || wiz.step !== 'how' || wiz.how !== 'config') return;
+    if (spec.device.app === 'octo_bridge') {
+      if (wiz.chip !== 'esp32c6') return;
+      selectOctoInstaller(spec, (specs || []).find(sp => sp.slug === value) || {slug: value, factory: []});
+      wiz.configSpec = null;
+      wiz.setupText = text;
+      wiz.how = null;
+      wizNext();
+      return;
+    }
+  }
+  wiz.octoConfig = null;
   const c = factoryChoices().find(x => x.chip === wiz.chip && isGenericFile(x.file));
   if (kind === 'firmware') { wiz.choice = factoryChoices().find(x => x.file === value) || null; wiz.file = value; wiz.editorReady = false; wizNext(); return; }
   if (!wiz.keepFile && c) { wiz.choice = c; wiz.file = c.file; }
@@ -5312,8 +5379,8 @@ async function startWith(kind, value) {
   wiz.setupText = '';
   if (kind === 'scratch') { wizEditor.load('My device', [], wizPins()); wizEditor.picking = true; }
   else if (kind === 'config') {
-    wiz.setupText = (await api(`api/specs/${value}`)).text;
-    await wizEditor.loadText(wiz.setupText);
+    wiz.setupText = text;
+    await wizEditor.loadText(wiz.setupText, spec);
   }
   else {
     const r = catalogItems().filter(i => i.kind === 'recipe')[+value];
@@ -5344,13 +5411,13 @@ function renderWizard() {
       ${choice(false, 'store', t('wCatalog'), t('wCatalogHelp'), "completeWizard(() => goTab('catalog'))")}</div>`;
   } else if (wiz.step === 'recipeTarget') {
     title = t(wiz.configSlug ? 'specTarget' : 'wRecipeTarget');
-    const generic = state.proxies.filter(p => { const r = running(statuses[p.id]); return r && isGenericApp(r.app); });
+    const generic = wiz.octoConfig ? [] : state.proxies.filter(p => { const r = running(statuses[p.id]); return r && isGenericApp(r.app); });
     if (!wiz.configText) wiz.configText = wiz.recipe.text || specYaml(wiz.recipe.title, wiz.recipe.rows);
     body = `<div class="sub">${esc(wiz.recipe.title)}</div><div class="choices">
       ${wiz.deviceOnly ? '' : choice(false, 'usb', t(wiz.configSlug ? 'specNewBoard' : 'recipeNew'), wiz.configSlug ? '' : t('recipeNewHelp'),
         wiz.configSlug ? 'installConfigOnNewBoard()' : "go('board')")}
       ${generic.map(p => choice(false, 'chip', t(wiz.configSlug ? 'specExisting' : 'recipeOn', esc(p.name)), t('recipeOnHelp'), `const r = wiz.recipe; completeWizard(() => openDevice('${p.id}', 'connections', r))`)).join('')}</div>
-      ${(wiz.deviceOnly || wiz.configSlug) && !generic.length ? `<p class="sub">${t('noGeneric')}</p>` : ''}
+      ${!wiz.octoConfig && (wiz.deviceOnly || wiz.configSlug) && !generic.length ? `<p class="sub">${t('noGeneric')}</p>` : ''}
       ${wiz.error ? `<p class="error" role="alert">${esc(wiz.error)}</p>` : ''}`;
   } else if (wiz.step === 'board') {
     title = t('wBoard');
@@ -5359,7 +5426,10 @@ function renderWizard() {
     const found = wiz.board && wiz.board.chip ? wiz.board : null;
     const small = found && BOARDS[found.chip] && BOARDS[found.chip].support !== 'no' && found.flash_mb && found.flash_mb < BOARDS[found.chip].flash;
     const chosen = BOARDS[wiz.chip];
-    const ok = wiz.keepFile ? !!wiz.chip : chosen && have(wiz.chip) && !(found && found.chip === wiz.chip && small);
+    const octo = wiz.configText && wiz.octoConfig;
+    const boards = Object.entries(BOARDS).filter(([k, b]) => octo ? k === 'esp32c6' : b.support !== 'no');
+    const ok = octo ? wiz.chip === 'esp32c6' && (!found || found.chip === 'esp32c6' && !small)
+      : wiz.keepFile ? !!wiz.chip : chosen && have(wiz.chip) && !(found && found.chip === wiz.chip && small);
     body = `<div class="sub">${t('boardHelp')}</div><div class="actions" style="margin-top:8px;flex-wrap:wrap;justify-content:flex-start">
         ${serialOk() ? `<button onclick="detectBoard()" ${busy ? 'disabled' : ''}>${icon('usb')} ${t('boardDetect')}</button>` : ''}
         ${wiz.boardHost ? '' : `<button class="${serialOk() ? 'plain' : ''}" onclick="detectOnHost()" ${busy ? 'disabled' : ''}>${t(serialOk() ? 'boardDetectHost' : 'boardDetect')}</button>`}</div>
@@ -5369,8 +5439,8 @@ function renderWizard() {
             <button class="plain" onclick="detectBoard($('#wBoardPort').value)" ${busy ? 'disabled' : ''}>${t('boardDetect')}</button></div>`
         : `<div class="row"><div class="label sub">${wiz.ports ? t('noPorts') : t('checking')}</div><button class="plain" onclick="loadPorts()">${t('refresh')}</button></div>`) : ''}
       ${boardCard()}
-      <div class="choices">${Object.entries(BOARDS).filter(([, b]) => b.support !== 'no').map(([k, b]) =>
-        choice(wiz.chip === k, 'chip', `${esc(b.name)} ${supportChip(b)}`, esc(have(k) || wiz.keepFile ? b.short : t('boardNoRelease')), `wiz.chip = '${k}'; renderWizard()`, have(k) || wiz.keepFile ? '' : 'disabled')).join('')}</div>
+      <div class="choices">${boards.map(([k, b]) =>
+        choice(wiz.chip === k, 'chip', `${esc(b.name)} ${supportChip(b)}`, esc(octo ? t('octoConfigBoard') : have(k) || wiz.keepFile ? b.short : t('boardNoRelease')), `wiz.chip = '${k}'; renderWizard()`, octo || have(k) || wiz.keepFile ? '' : 'disabled')).join('')}</div>
       ${chosen && !(found && found.chip === wiz.chip) ? `<div class="board">${chosen.support === 'experimental' ? `<div class="sub">${t('boardExperimentalHelp')}</div>` : ''}${boardFacts(chosen)}</div>` : ''}
       <details class="boards"><summary class="sub">${t('boardOthers')} (${Object.values(BOARDS).filter(b => b.support === 'no').length})</summary>${Object.values(BOARDS).filter(b => b.support === 'no').map(b =>
         `<div class="board"><div class="row" style="gap:8px"><b class="grow">${esc(b.name)}</b>${supportChip(b)}</div>${boardFacts(b)}</div>`).join('')}</details>
@@ -5388,7 +5458,10 @@ function renderWizard() {
         <div class="actions end"><button class="plain" onclick="wiz.how = null; renderWizard()">${t('back')}</button></div>`;
     } else if (wiz.how === 'config') {
       title = t('howPickConfig');
-      body = `<div class="choices">${(specs || []).map(sp => choice(false, 'recipe', esc(sp.name), esc(sp.slug), `startWith('config', '${esc(sp.slug)}')`)).join('')}</div>
+      body = `<div class="choices">${(specs || []).map(sp => {
+        const incompatible = sp.app === 'octo_bridge' && wiz.chip !== 'esp32c6';
+        return choice(false, 'recipe', esc(sp.name), esc(incompatible ? t('octoConfigBoard') : sp.error || sp.slug), `startWith('config', '${esc(sp.slug)}')`, incompatible || sp.error ? 'disabled' : '');
+      }).join('')}</div>
         <div class="actions end"><button class="plain" onclick="wiz.how = null; renderWizard()">${t('back')}</button></div>`;
     } else {
       body = `<div class="choices">${choice(false, 'plus', t('howScratch'), t('howScratchHelp'), "startWith('scratch')")}
@@ -5405,6 +5478,13 @@ function renderWizard() {
       ${choice(!onWifi, 'chip', t('netThread'), t('netThreadHelp'), `wiz.file = wiz.choice.threadFile; renderWizard()`)}
       ${choice(onWifi, 'chip', t('netWifi'), t('netWifiHelp'), `wiz.file = wiz.choice.wifiFile; renderWizard()`)}</div>
       <div class="actions end"><button class="plain" onclick="wizPrev()">${t('back')}</button><button class="pri" onclick="wizNext()">${t('next')}</button></div>`;
+  } else if (wiz.step === 'configure' && wiz.octoConfig) {
+    const spec = wiz.octoConfig;
+    title = t('octoConfigReview');
+    body = `<h3>${esc(spec.name)}</h3>${savedOctoCommands(spec.device)}
+      ${wiz.file ? '' : `<p class="notice" role="status">${esc(t('octoConfigImage', spec.device.version))}</p>`}
+      <div class="actions end"><button class="plain" onclick="wizPrev()">${t('back')}</button>
+        <button class="pri" onclick="wizNext()" ${wiz.file ? '' : 'disabled'}>${t('next')}</button></div>`;
   } else if (wiz.step === 'configure') {
     title = t('wConfigure');
     const cb = BOARDS[wiz.chip];
@@ -5480,7 +5560,7 @@ function renderWizard() {
   $('#wBody').innerHTML = body;
   if (held && !$('#wBody').contains(document.activeElement)) $('#wBody').querySelector(held)?.focus({preventScroll: true});
   if (wiz.step === 'link' && wiz.error && wiz.focusError) { wiz.focusError = false; $('#' + wiz.errorField)?.focus(); }
-  if (wiz.step === 'configure') {
+  if (wiz.step === 'configure' && !wiz.octoConfig) {
     if (!wiz.editorReady) {
       wiz.editorReady = true;
       wizEditor.host = null;
@@ -5504,7 +5584,8 @@ function chipOfFile(file) {
 
 // Generic firmware takes a configuration: the release's or an own build of a config
 function isGenericFile(file) {
-  return /^mb_generic(_[a-z0-9]+)?-/.test(file) || (specs || []).some(sp => sp.factory.includes(file));
+  const saved = (specs || []).find(sp => sp.factory.includes(file));
+  return saved ? saved.app === 'generic' : /^mb_generic(_[a-z0-9]+)?-/.test(file);
 }
 
 const wizEditor = new ConfigEditor('wiz');

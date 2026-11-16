@@ -1721,7 +1721,10 @@ def check_spec(text):
         os.unlink(path)
     if result.returncode != 0:
         return None, (result.stderr.strip() or result.stdout.strip()).removeprefix("spec error: ")
-    return json.loads(result.stdout), None
+    spec = json.loads(result.stdout)
+    if spec["app"] == "octo_bridge":
+        spec["firmware_packets"] = BRIDGE_DEFAULT_PACKETS
+    return spec, None
 
 
 def list_specs():
@@ -1735,6 +1738,7 @@ def list_specs():
                     "connections": len(spec["connections"]) if spec else 0,
                     "connection_names": [c["name"] for c in spec["connections"]] if spec else [],
                     "rules": len(spec["rules"]) if spec else 0,
+                    "ble_commands": len(spec.get("bluetooth_device", {}).get("commands", [])) if spec else 0,
                     "requires": spec.get("requires", []) if spec else [], "network": spec.get("network") if spec else None,
                     "firmware": sorted((p.name for p in FIRMWARE.glob(f"{project}-*.bin")), key=version_key)
                     if project else [], "factory": sorted(factory, key=lambda n: version_key(n.removesuffix("-factory.bin")))})

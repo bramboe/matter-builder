@@ -40,10 +40,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-# The bed bridge is only for a checkout or add-on that has its sources
-# (tools/addon_sync.sh --with-octo); the official add-on ships generic only
-APPS = {app: folder for app, folder in {"generic": "firmware/generic", "octo_bridge": "firmware/bridge"}.items()
-        if (ROOT / folder).is_dir()}
+# Saved specs can be validated without a firmware source checkout.
+APPS = {"generic": "firmware/generic", "octo_bridge": "firmware/bridge"}
 # What an application needs beyond its connections: the beds take their
 # commands over Bluetooth
 APP_REQUIRES = {"octo_bridge": ["bluetooth"]}
@@ -885,6 +883,8 @@ def generate(spec_path, out):
     text = Path(spec_path).read_text()
     spec = check(parse_yaml(text))
     app_dir = ROOT / APPS[spec["app"]]
+    if not app_dir.is_dir():
+        raise SpecError(f"Firmware sources for {spec['app']} are unavailable")
     out = Path(out)
     if out.exists():
         shutil.rmtree(out)

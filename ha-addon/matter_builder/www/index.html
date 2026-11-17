@@ -70,7 +70,10 @@ a:not(.button){color:var(--primary)}
 .card .meta{margin-top:8px;display:grid;gap:2px}
 .card .acts{display:flex;flex-wrap:wrap;align-items:center;gap:2px;margin:auto -8px -6px;padding-top:10px}
 .card .acts details.more{margin-left:auto}
-.device-toolbar{display:flex;justify-content:flex-end;margin-bottom:12px}
+#devicesTab{padding-block-end:72px}
+#addDeviceBtn{position:fixed;z-index:3;inset-inline-end:max(16px,env(safe-area-inset-right));
+  inset-block-end:calc(16px + max(var(--taskbar-height,0px),env(safe-area-inset-bottom)));
+  min-height:48px;padding-inline:18px;border-radius:24px;box-shadow:var(--shadow)}
 #addDeviceBtn > span[aria-hidden]{display:flex}
 #deviceGrid{grid-template-columns:repeat(auto-fill,minmax(min(100%,360px),1fr))}
 .card[data-device] .head{align-items:flex-start}
@@ -679,21 +682,18 @@ button.catalog-tip-trigger{position:relative}
 <main>
 <!-- Devices -->
 <section id="devicesTab">
-  <div class="device-toolbar" id="deviceToolbar" hidden>
-    <button type="button" class="pri" id="addDeviceBtn" onclick="openWizard()"><span data-t="addDevice"></span></button>
-  </div>
   <div id="discovered"></div>
   <div id="emptyState" class="empty" hidden>
     <div class="ico" style="margin:0 auto 10px;width:48px;height:48px" id="emptyIcon"></div>
     <h2 data-t="emptyTitle"></h2>
     <p class="sub" data-t="emptyText"></p>
-    <div class="actions" style="justify-content:center"><button class="pri" onclick="openWizard()" data-t="newDevice"></button>
-      <button onclick="goTab('catalog')" data-t="browseCatalog"></button></div>
+    <div class="actions" style="justify-content:center"><button onclick="goTab('catalog')" data-t="browseCatalog"></button></div>
   </div>
   <div class="grid" id="deviceGrid"><!-- until the first answer: the shape of what comes -->
     <div class="card ghost"><div class="head"><span class="skel round"></span><div class="info" style="display:grid;gap:8px"><span class="skel" style="width:55%"></span><span class="skel" style="width:80%"></span></div></div><span class="skel" style="width:40%"></span><span class="skel" style="width:70%;height:24px;border-radius:12px"></span></div>
     <div class="card ghost"><div class="head"><span class="skel round"></span><div class="info" style="display:grid;gap:8px"><span class="skel" style="width:45%"></span><span class="skel" style="width:70%"></span></div></div><span class="skel" style="width:30%"></span><span class="skel" style="width:70%;height:24px;border-radius:12px"></span></div>
   </div>
+  <button type="button" class="pri" id="addDeviceBtn" onclick="openWizard()"><span data-t="addDevice"></span></button>
 </section>
 
 <!-- Catalog -->
@@ -1011,7 +1011,7 @@ const TEXT = {
   accountTitle: 'Password', accountHelp: 'This Matter Builder runs without Home Assistant and has its own password. Changing it signs out every other browser.',
   currentPassword: 'Current password', newPassword: 'New password', changePassword: 'Change password', signOut: 'Sign out', passwordChanged: 'Changed.',
   emptyText: 'Matter Builder turns an ESP32-C6 into a standard Matter device for Home Assistant, Apple Home and Google Home. Every device keeps working without Home Assistant and has a settings page of its own.',
-  newDevice: 'New device', addDevice: 'Add device', browseCatalog: 'Browse the catalog',
+  addDevice: 'Add device', browseCatalog: 'Browse the catalog',
   discovered: (n, v) => `Discovered: ${n}${v ? ' · ' + v : ''}`, adopt: 'Adopt',
   bootMenuChip: a => `BOOT menu: ${a}`, bootHeld: 'BOOT held: let go for the menu', bootLong: 'BOOT held over 10 s',
   bootReset: 'BOOT held: release to erase all settings', bootNothing: 'BOOT held: releasing does nothing',
@@ -1537,6 +1537,9 @@ async function ignoreFound(id, on) {
 }
 
 $('#addDeviceBtn').insertAdjacentHTML('afterbegin', `<span aria-hidden="true">${icon('plus')}</span>`);
+new ResizeObserver(([{target}]) => {
+  $('#devicesTab').style.setProperty('--taskbar-height', `${target.offsetHeight}px`);
+}).observe($('#taskbar'));
 
 function renderDevices() {
   const found = state.found;
@@ -1547,7 +1550,6 @@ function renderDevices() {
   const q = query.trim().toLowerCase();
   const list = state.proxies.filter(p => !q || textMatches(`${p.name} ${p.host} ${connectedText(statuses[p.id])}`.toLowerCase(), q));
   $('#emptyState').hidden = state.proxies.length > 0;
-  $('#deviceToolbar').hidden = !state.proxies.length;
   setHtml($('#deviceGrid'), state.proxies.length && q && !list.length ? `<div class="empty" style="grid-column:1/-1">
       <h2>${esc(t('noDeviceMatch', query.trim()))}</h2><p class="sub">${t('noDeviceMatchHelp')}</p>
       <div class="actions" style="justify-content:center"><button type="button" class="pri" onclick="clearSearch()">${t('clearSearch')}</button></div></div>`

@@ -89,6 +89,7 @@ a:not(.button){color:var(--primary)}
 .card[data-device] .acts .device-primary:enabled{color:var(--primary);background:var(--chip)}
 #catalogBody[data-view="list"] .grid{grid-template-columns:minmax(0,1fr);gap:8px}
 #catalogBody .card{cursor:pointer}
+#catalogBody .card.spec-card{cursor:default}
 button.catalog-open{display:inline;min-height:0;padding:0;border-radius:2px;background:transparent;color:inherit;text-align:start;white-space:normal}
 button.catalog-open:focus-visible{outline:none;background:var(--chip);color:var(--primary)}
 @media (forced-colors:active){
@@ -304,6 +305,10 @@ button.spec-use{color:var(--primary);background:var(--chip)}
 :is(#specEditor,.spec-editor-bar,.device-config-page) :is(button,summary,input,select,textarea):not(:where(.field input,.field select)):focus-visible{outline:2px solid var(--editor-action);outline-offset:2px}
 
 .ico{display:grid;place-items:center;width:38px;height:38px;border-radius:50%;background:var(--chip);color:var(--primary);flex:none}
+.chip.proto svg{width:14px;height:14px;fill:currentColor}
+.chip.proto.required{color:var(--fg)}
+.parts{margin:4px 0 8px;padding-left:20px}
+.parts li{margin:2px 0}
 .chip{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:500;padding:2px 10px;border-radius:10px;background:var(--fill);color:var(--mute);white-space:nowrap}
 .chip.ok{background:var(--okchip);color:var(--ok)}
 .chip.bad{background:var(--badchip);color:var(--bad)}
@@ -1144,9 +1149,9 @@ const TEXT = {
   wBoard: 'Which ESP32 do you have?', boardHelp: 'Plug it in and let Matter Builder look, or choose it yourself. The right firmware is picked for you.',
   boardNoRelease: 'No firmware for it in this release yet', boardOthers: 'Boards that do not work',
   wHow: 'How do you want to start?', howScratch: 'From scratch', howScratchHelp: 'Add what is connected, one thing at a time',
-  howTemplate: 'From a template', howTemplateHelp: 'A ready-made recipe from the catalog; change it as you like',
+  howTemplate: 'From a recipe', howTemplateHelp: 'A ready-made recipe from the catalog; change it as you like',
   howConfig: 'Use one of my recipes', howConfigHelp: 'Connections and rules you saved yourself.',
-  howReady: 'Ready-made firmware, nothing to build here', howOwn: 'Own build', howPickTemplate: 'Choose a template', howPickConfig: 'Choose a config',
+  howReady: 'Ready-made firmware, nothing to build here', howOwn: 'Own build', howPickTemplate: 'Choose a recipe', howPickConfig: 'Choose one of my recipes',
   howNeedsBluetooth: b => `Needs Bluetooth, which does not work on the ${b}`, howNone: 'Nothing here yet.',
   boardLimits: (b, list) => `Not on the ${b}: ${list}`, notOnBoard: b => `Does not work on the ${b}`,
   boardNoBluetooth: b => `This configuration uses Bluetooth, which does not work on the ${b}. Remove those parts, or go back and choose another board.`,
@@ -1179,7 +1184,7 @@ const TEXT = {
   confirmAddToHa: 'Open a pairing window on the device and add it to Home Assistant now? This takes a minute or two on Thread.',
   setUpConnections: 'Set up connections', openDevice: 'Open device', wRecipeTarget: 'Where should it go?', recipeNew: 'A new ESP32', recipeNewHelp: 'Install the generic firmware first',
   recipeOn: n => `On ${n}`, recipeOnHelp: 'Replaces its connections after you save and apply',
-  catalogType: 'Type', filterAll: 'All', filterFirmware: 'Firmware', filterRecipes: 'Recipes', official: 'Official', recipe: 'Recipe', use: 'Use',
+  catalogType: 'Type', filterAll: 'All', filterFirmware: 'Firmware', filterRecipes: 'Recipes', official: 'Official', recipe: 'Recipe', use: 'Install',
   community: 'Community', verified: 'Verified', source: 'Source', version: 'Version', stars: 'GitHub stars',
   downloads: 'Downloads', updated: 'Last release', keyFingerprint: 'Key fingerprint', maker: 'Maker',
   catalogOffline: 'The online catalog is not reachable: this shows the official firmware and examples only.',
@@ -2533,6 +2538,15 @@ function localCatalog() {
 const catalogItems = () => catalogData ? catalogData.items : localCatalog();
 
 const catalogBoardName = chip => BOARDS[chip]?.name || String(chip).toUpperCase();
+// The chips of the linked devices: "My boards" in the catalog's board filter
+function myBoardChips() {
+  if (!state) return [];
+  return [...new Set(state.proxies.map(p => {
+    const app = running(statuses[p.id])?.app || p.app || '';
+    if (isGenericApp(app)) { const variant = app.slice('mb_generic'.length + 1); return !variant || variant === 'wifi' ? 'esp32c6' : variant; }
+    return app === 'octo_bridge' ? 'esp32c6' : '';
+  }).filter(chip => BOARDS[chip]))].sort();
+}
 const catalogBleRequired = it => (it.requires || []).includes('bluetooth') ||
   (it.kind === 'recipe' && rowsNeed(rowsOf(it.connections)).includes('bluetooth'));
 
@@ -2657,14 +2671,27 @@ const sourceAdded = repo => (state.sources || []).some(s => s.repo === repo);
 const badge = it => it.official ? `<span class="chip accent">${t('official')}</span>`
   : `<span class="chip">${t('community')}</span>${it.verified ? ` <span class="chip ok">${t('verified')}</span>` : ''}${it.liked ? ` <span class="chip ok">${t('liked')}</span>` : ''}`;
 
+// What fits: the tested boards by name, the untested ones as a number
+function catalogFit(boards, experimental) {
+  if (boards.length) return boards.join(', ') + (experimental.length ? ` · +${experimental.length} untested` : '');
+  return experimental.length ? `${experimental.join(', ')} (untested)` : '';
+}
+function protocolLabels(labels) {
+  return labels.map(label => {
+    const known = PROTOCOL_ICONS.get(label);
+    return `<span class="chip proto ${known?.style || ''}">${known ? icon(known.glyph) : ''}${esc(label)}</span>`;
+  }).join('');
+}
 function catalogCard(it, i) {
-  const {labels} = catalogCompatibility(it, catalogVariants(it));
+  const {labels, boards, experimental} = catalogCompatibility(it, catalogVariants(it));
+  const sub = [it.kind === 'firmware' && it.version ? `v${it.version}` : '', catalogFit(boards, experimental)].filter(Boolean).join(' · ')
+    || (it.kind === 'firmware' ? '' : t('recipe'));
   return `<div class="card" data-item="${esc(it.id || it.source + '/' + it.title)}"
     onclick="openItem(${i}, this.querySelector('.catalog-open'))">
     <div class="head"><span class="ico">${it.kind === 'firmware' ? appIcon(it.app) : icon('recipe')}</span>
-      <div class="info"><h3><button type="button" class="catalog-open" aria-haspopup="dialog">${esc(it.title)}</button></h3><div class="sub">${it.kind === 'firmware' ? esc(it.version || '') : t('recipe')} · ${esc(it.maker || (it.source || '').split('/')[0])}</div></div></div>
+      <div class="info"><h3><button type="button" class="catalog-open" aria-haspopup="dialog">${esc(it.title)}</button></h3><div class="sub">${esc(sub)}</div></div></div>
     <div class="meta catalog-description sub">${esc(catalogDescription(it))}</div>
-    <div class="acts">${badge(it)}${protocolIcons(labels, `catalog-card-${i}`)}</div></div>`;
+    <div class="acts">${it.official ? '' : badge(it)}${protocolLabels(labels)}</div></div>`;
 }
 
 // Search: every word of the query has to be found, in any order. A word also
@@ -2808,7 +2835,8 @@ function catalogMatches(items, filters, query) {
 // Firmware, recipes and the recipe categories are one tree: what the item is.
 const catalogKind = filters => filters.category !== 'all' ? 'cat:' + filters.category : filters.type;
 function chooseCatalogFilter(filters, name, value, checked) {
-  if (name === 'board') {  // boards combine: any of the checked ones
+  if (name === 'board' && value === 'mine') filters.board = checked ? myBoardChips().join(',') || 'any' : 'any';
+  else if (name === 'board') {  // boards combine: any of the checked ones
     const chosen = new Set(filters.board === 'any' ? [] : filters.board.split(','));
     if (checked) chosen.add(value); else chosen.delete(value);
     filters.board = [...chosen].sort().join(',') || 'any';
@@ -2824,8 +2852,10 @@ function catalogFilterGroups(filters, withSort) {
     ...(specs || []).filter(sp => sp.app === 'generic' || sp.app === 'octo_bridge').map(sp => chipKey(sp.board || 'esp32-c6'))].filter(Boolean));
   const chosenBoards = filters.board === 'any' ? [] : filters.board.split(',');
   chosenBoards.forEach(chip => boards.add(chip));
+  const untested = chip => BOARDS[chip]?.support === 'experimental';
   const boardOptions = [...boards].map(chip => [chip, catalogBoardName(chip)])
-    .sort(([, a], [, b]) => a.localeCompare(b));
+    .sort(([a, x], [b, y]) => Number(untested(a)) - Number(untested(b)) || x.localeCompare(y));
+  const mine = myBoardChips();
   const options = (name, title, pairs) => ({name, title, options: pairs.map(([value, label]) =>
     ({value, label, count: left({[name]: value}), checked: filters[name] === value}))});
   const kind = catalogKind(filters);
@@ -2837,8 +2867,13 @@ function catalogFilterGroups(filters, withSort) {
     ...(withSort ? [{name: 'sort', title: 'Sort', options: availableSorts().map(([value, label]) => ({value, label, checked: filters.sort === value}))}] : []),
     {name: 'kind', title: 'Category', options: kinds.map(([value, label, changes, child]) =>
       ({value, label, child, count: left(changes), checked: kind === value}))},
-    {name: 'board', title: 'Board', multi: true, none: 'Any board', options: boardOptions.map(([value, label]) =>
-      ({value, label, count: left({board: value}), checked: chosenBoards.includes(value)}))},
+    {name: 'board', title: 'Board', multi: true, none: 'Any board',
+      help: 'Supported boards are tested on real hardware. Untested boards are built from the documentation and should work, but nobody has tried them yet.',
+      options: [
+        ...(mine.length ? [{value: 'mine', label: 'My boards', note: mine.map(catalogBoardName).join(', '),
+          count: left({board: mine.join(',')}), checked: filters.board === mine.join(',')}] : []),
+        ...boardOptions.map(([value, label]) => ({value, label, note: untested(value) ? 'untested' : '',
+          count: left({board: value}), checked: filters.board !== mine.join(',') && chosenBoards.includes(value)}))]},
     {...options('network', 'Network', catalogNetworkOptions),
       help: 'Wi-Fi uses your wireless network. Thread requires a Thread border router.'},
     {...options('bluetooth', 'Bluetooth', catalogBluetoothOptions),
@@ -2851,7 +2886,7 @@ function catalogFilterGroups(filters, withSort) {
   ];
 }
 const filterOption = (group, option, prefix = '') => `<label class="${option.child ? 'child' : ''}">
-  <input type="${group.multi ? 'checkbox' : 'radio'}" name="${prefix}${group.name}" value="${esc(option.value)}" ${option.checked ? 'checked' : ''}><span>${esc(option.label)}</span>
+  <input type="${group.multi ? 'checkbox' : 'radio'}" name="${prefix}${group.name}" value="${esc(option.value)}" ${option.checked ? 'checked' : ''}><span>${esc(option.label)}${option.note ? ` <span class="sub">· ${esc(option.note)}</span>` : ''}</span>
   ${option.count === undefined ? '' : `<span class="sub" data-count>${option.count}</span>`}</label>`;
 
 // Desktop: the filters stay in view beside the list and apply at once
@@ -2887,7 +2922,7 @@ function updateCatalogSheet() {
       row.querySelector('[data-summary]').textContent = group.options.filter(option => option.checked).map(option => option.label).join(', ') || group.none;
     }
   }
-  const count = catalogMatches(catalogItems(), filters, catalogSearchQuery()).length;
+  const count = catalogMatches(catalogItems(), filters, catalogSearchQuery()).length + myRecipes(filters, catalogSearchQuery()).length;
   $('#applyCatalogFilters').textContent = `View ${count} ${count === 1 ? 'result' : 'results'}`;
 }
 
@@ -3024,9 +3059,10 @@ function renderCatalog() {
     <span class="chev" aria-hidden="true"></span></button></div>` : '';
   const mine = myRecipes({...filters, ...(filters.category === 'all' ? {} : {category: filters.category})}, q);
   const resultCount = (bedRecipes?.count ?? fw.length + visibleRecipes.length) + mine.length;
-  const resultNoun = bedRecipes ? (resultCount === 1 ? 'recipe' : 'recipes') : (resultCount === 1 ? 'result' : 'results');
+  const shownCount = bedCount > 1 ? resultCount - bedCount : resultCount;
+  const resultNoun = bedRecipes ? (resultCount === 1 ? 'recipe' : 'recipes') : (shownCount === 1 ? 'result' : 'results');
   const resultLabel = catalogLoading && !resultCount ? 'Loading catalog…'
-    : `${resultCount} ${resultNoun}${q ? ` for “${corrected ? q : catalogQuery.trim()}”` : ''}${corrected ? `, shown instead of “${catalogQuery.trim()}”` : ''}`;
+    : `${shownCount} ${resultNoun}${bedCount > 1 ? `, plus ${bedCount} bed recipes under Beds` : ''}${q ? ` for “${corrected ? q : catalogQuery.trim()}”` : ''}${corrected ? `, shown instead of “${catalogQuery.trim()}”` : ''}`;
   if ($('#catalogResultCount').textContent !== resultLabel) $('#catalogResultCount').textContent = resultLabel;
   // No match is never a dead end: say what was looked for and offer the ways out
   const filtersOn = Object.keys(defaultCatalogFilters).some(key => key !== 'sort' && filters[key] !== defaultCatalogFilters[key]);
@@ -3051,7 +3087,7 @@ function renderCatalog() {
       ['type', {firmware: 'Firmware', recipe: 'Recipes'}[filters.type]],
       ['source', {official: 'Official', community: 'Community', mine: t('myConfigs')}[filters.source]],
       ['category', recipeCategories.get(filters.category)],
-      ['board', filters.board !== 'any' && filters.board.split(',').map(catalogBoardName).join(' or ')],
+      ['board', filters.board !== 'any' && (filters.board === myBoardChips().join(',') ? 'My boards' : filters.board.split(',').map(catalogBoardName).join(' or '))],
       ['network', filters.network !== 'any' && NET_NAMES[filters.network]],
       ['bluetooth', filters.bluetooth !== 'any' && catalogBluetoothOptions.find(([value]) => value === filters.bluetooth)?.[1]],
       ['family', selectedBedFamily && (bedRecipeFamilies.get(selectedBedFamily) || 'Other beds')],
@@ -3110,6 +3146,32 @@ function openItem(i, trigger) {
   renderItem();
   if (!$('#itemDlg').open) $('#itemDlg').showModal();
 }
+// What to buy or have for a recipe, from its connection types
+const PARTS = {relay: 'Relay module', led: 'LED or LED driver', button: 'Push button', contact: 'Contact or reed switch',
+  motion: 'PIR motion sensor', sht4x: 'SHT4x temperature and humidity sensor (I²C)', scd4x: 'SCD4x CO₂ sensor (I²C)',
+  led_strip: 'Addressable LED strip (WS2812B) with its own 5 V supply', led_strip_rgbw: 'RGBW LED strip (SK6812) with its own 5 V supply',
+  ir_send: 'IR LED with a transistor', ir_receive: 'IR receiver (38 kHz)', pulse_meter: 'A pulse output (meter or opener)',
+  ble_sensor: 'Bluetooth thermometer (BTHome, or Xiaomi with pvvx/ATC firmware)', ble_presence: 'Bluetooth tag with a fixed address'};
+function recipeParts(it, boards, experimental) {
+  const rows = rowsOf(it.connections);
+  const parts = new Map();
+  for (const r of rows) {
+    const part = PARTS[r.type] || connectionDriver(r.type, [])?.title || TEXT.types[r.type] || r.type;
+    parts.set(part, (parts.get(part) || 0) + 1);
+  }
+  const fit = catalogFit(boards, experimental);
+  // Codes to send or receive share one LED or receiver; other parts are one each
+  const shared = new Set([PARTS.ir_send, PARTS.ir_receive, PARTS.ble_sensor, PARTS.ble_presence, PARTS.pulse_meter]);
+  const list = [`An ESP32 board${fit ? `: ${fit}` : ''}`, ...[...parts].map(([part, n]) => n > 1 && !shared.has(part) ? `${n} × ${part}` : part)];
+  if (it.text && /^bluetooth_device:/m.test(it.text)) list.push('The bed or device itself, within Bluetooth range');
+  return `<h3>What you need</h3><ul class="parts">${list.map(line => `<li>${esc(line)}</li>`).join('')}</ul>`;
+}
+function showOctoFirmware() {
+  const firmware = catalogItems().find(x => x.kind === 'firmware' && x.official && x.app === 'octo_bridge');
+  if (!firmware) return;
+  item = firmware; itemVariant = undefined;
+  renderItem();
+}
 function renderItem() {
   itemDialog.setAttribute('closedby', 'any');
   const it = item;
@@ -3130,6 +3192,10 @@ function renderItem() {
   setHtml($('#itemBody'), `<div class="catalog-detail"><div class="head" style="display:flex;gap:10px;align-items:center"><span class="ico">${it.kind === 'firmware' ? appIcon(it.app) : icon('recipe')}</span>
       <div style="flex:1"><h2>${esc(it.title)}</h2><div class="sub">${esc(it.maker || '')}</div></div>${badge(it)}</div>
     <p>${esc(catalogDescription(it))}</p>
+    ${officialBedFamily(it) === 'octo' && catalogItems().some(x => x.kind === 'firmware' && x.official && x.app === 'octo_bridge')
+      ? `<div class="notice">This recipe makes simple Matter buttons on a generic ESP32-C6. The <b>Octo bed bridge</b> firmware instead shows the head and legs as covers and the light as a light in Home.
+        <div class="actions" style="justify-content:flex-start"><button type="button" class="text" onclick="showOctoFirmware()">View Octo bed bridge</button></div></div>` : ''}
+    ${it.kind === 'recipe' ? recipeParts(it, ...(({boards, experimental}) => [boards, experimental])(catalogCompatibility(it, variants))) : ''}
     ${it.kind === 'recipe' ? recipeSetupHtml(it.text) : ''}
     <div class="compatibility">${catalogCompatibilityHtml(it, catalogCompatibility(it, variants))}</div>
     ${it.kind === 'recipe' && variants.length && rows.some(r => connectionPins(r, []).length) ? `<p class="sub">${t('catalogCheckPins')}</p>` : ''}
@@ -3336,14 +3402,13 @@ function specRow(sp) {
   const summary = sp.error || facts.join(' · ') || t('noSpecConnections');
   const where = [boardName, NET_NAMES[sp.network]].filter(Boolean).join(' · ');
   const installerIssue = octoInstallerIssue(sp, true);
-  return `<div class="spec-row" data-config="${esc(sp.slug)}">
-    <div class="spec-name">
-      <span class="ico" aria-hidden="true">${icon('recipe')}</span><span class="info">${esc(sp.name)}<span class="sub ${sp.error ? 'warnText' : ''}">${esc(summary)}</span>
-        ${where && !sp.error ? `<span class="sub">${esc(where)}</span>` : ''}
-        ${installerIssue ? `<span class="sub warnText">${esc(installerIssue)}</span>` : ''}</span>
-    </div>
-    <div class="spec-actions">
-      ${sp.error ? '' : `<button class="spec-use" aria-label="${t('specUse')} · ${esc(sp.name)}" onclick="useConfig('${sp.slug}')">${t('specUse')}</button>`}
+  return `<div class="card spec-card" data-config="${esc(sp.slug)}">
+    <div class="head"><span class="ico" aria-hidden="true">${icon('recipe')}</span>
+      <div class="info"><h3>${esc(sp.name)}</h3><div class="sub">${esc(where || t('myConfigs'))}</div></div></div>
+    <div class="meta catalog-description sub ${sp.error ? 'warnText' : ''}">${esc(summary)}</div>
+    ${installerIssue ? `<div class="sub warnText">${esc(installerIssue)}</div>` : ''}
+    <div class="acts">
+      ${sp.error ? '' : `<button class="spec-use" aria-label="${t('specUse')} · ${esc(sp.name)}" onclick="useConfig('${sp.slug}')">${t('specUse')}</button>`}<span class="grow"></span>
       <details class="more"><summary aria-label="${t('more')} · ${esc(sp.name)}">${icon('dots')}</summary><div class="pop" style="bottom:auto;top:100%">
         <button onclick="editSpec('${sp.slug}')">${t('edit')}</button>
         ${sp.error ? '' : `<button onclick="shareSpec('${sp.slug}')">${t('share')}</button>`}
@@ -3389,7 +3454,7 @@ function myRecipesHtml(found, filters, query) {
   const empty = specs.length ? `<p class="sub">${query ? esc(t('noConfigMatch', catalogQuery.trim())) : 'No recipes match these filters.'}</p>`
     : `<div class="empty"><h2>${t('noConfigsTitle')}</h2><p class="sub">${t('noConfigs')}</p>
       <div class="actions" style="justify-content:center"><button class="pri" onclick="newSpec()">${t('newSpec')}</button></div></div>`;
-  return head + (found.length ? `<div class="spec-list">${found.map(specRow).join('')}</div>` : empty);
+  return head + (found.length ? `<div class="grid">${found.map(specRow).join('')}</div>` : empty);
 }
 function renderBuilds() {
   const dev = state.settings.dev_mode;
@@ -5594,7 +5659,10 @@ async function detectOnHost() {
 // the generic firmware is configured
 function wizFlow() {
   const generic = !wiz.octoConfig && (!wiz.file || isGenericFile(wiz.file));
-  return ['board', ...(wiz.configText || wiz.recipe ? [] : ['how']), ...(generic && wiz.choice && wiz.choice.wifiFile ? ['network'] : []),
+  // Before the board is confirmed its firmware is not chosen yet: count the
+  // network step it will have, so the step count does not grow on the way
+  const choice = wiz.choice || (wiz.step === 'board' || wiz.step === 'start' ? factoryChoices().find(x => x.chip === (wiz.chip || 'esp32c6') && isGenericFile(x.file)) : null);
+  return ['board', ...(wiz.configText || wiz.recipe ? [] : ['how']), ...(generic && choice && choice.wifiFile ? ['network'] : []),
     ...(generic || wiz.octoConfig ? ['configure'] : []), 'method', 'install', 'setup', 'link', 'done'];
 }
 function wizNext() { const f = wizFlow(); go(f[f.indexOf(wiz.step) + 1]); }

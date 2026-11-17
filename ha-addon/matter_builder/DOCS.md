@@ -47,7 +47,9 @@ ESP32 (Wi-Fi); see *Chips and networks*.
   saving checks them and restarts the device. Other firmware shows what it
   reports, read-only.
 - **Catalog**: firmware and recipes from the official source and from
-  community sources, with a page per item. **My recipes** at the top are your
+  community sources, with a page per item that lists what you need. The
+  Board filter separates tested from untested boards, and *My boards* keeps
+  what fits the ESP32s you have linked. **My recipes** at the top are your
   own (YAML kept in the add-on): install one on a new ESP32 or apply it to a
   linked device. Save one from a device with *Save as recipe*, or use *Copy to
   a new board* to put the same connections on another ESP32 in one go. Old

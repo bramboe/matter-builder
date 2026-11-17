@@ -70,11 +70,14 @@ a:not(.button){color:var(--primary)}
 .card .meta{margin-top:8px;display:grid;gap:2px}
 .card .acts{display:flex;flex-wrap:wrap;align-items:center;gap:2px;margin:auto -8px -6px;padding-top:10px}
 .card .acts details.more{margin-left:auto}
-#devicesTab{padding-block-end:72px}
-#addDeviceBtn{position:fixed;z-index:3;inset-inline-end:calc(24px + env(safe-area-inset-right));
-  inset-block-end:calc(24px + max(var(--taskbar-height,0px),env(safe-area-inset-bottom)));
-  min-height:48px;padding-inline:18px;border-radius:24px;box-shadow:var(--shadow)}
-#addDeviceBtn > span[aria-hidden]{display:flex}
+/* The main action of a tab floats at the bottom right, as Home Assistant's own "Add device".
+   The list ends with as much room as the button takes, so the last card can always scroll clear. */
+:root{--fab-gap:24px;--fab-height:48px}
+#devicesTab,#developerTab{padding-block-end:calc(var(--fab-height) + var(--fab-gap) * 2 + max(var(--taskbar-height,0px),env(safe-area-inset-bottom)))}
+.fab{position:fixed;z-index:3;inset-inline-end:calc(var(--fab-gap) + env(safe-area-inset-right));
+  inset-block-end:calc(var(--fab-gap) + max(var(--taskbar-height,0px),env(safe-area-inset-bottom)));
+  min-height:var(--fab-height);padding-inline:18px;border-radius:calc(var(--fab-height) / 2);box-shadow:var(--shadow)}
+.fab > span[aria-hidden]{display:flex}
 #deviceGrid{grid-template-columns:repeat(auto-fill,minmax(min(100%,360px),1fr))}
 .card[data-device] .head{align-items:flex-start}
 .card[data-device] .head .info{overflow-wrap:anywhere}
@@ -693,7 +696,7 @@ button.catalog-tip-trigger{position:relative}
     <div class="card ghost"><div class="head"><span class="skel round"></span><div class="info" style="display:grid;gap:8px"><span class="skel" style="width:55%"></span><span class="skel" style="width:80%"></span></div></div><span class="skel" style="width:40%"></span><span class="skel" style="width:70%;height:24px;border-radius:12px"></span></div>
     <div class="card ghost"><div class="head"><span class="skel round"></span><div class="info" style="display:grid;gap:8px"><span class="skel" style="width:45%"></span><span class="skel" style="width:70%"></span></div></div><span class="skel" style="width:30%"></span><span class="skel" style="width:70%;height:24px;border-radius:12px"></span></div>
   </div>
-  <button type="button" class="pri" id="addDeviceBtn" onclick="openWizard()"><span data-t="addDevice"></span></button>
+  <button type="button" class="pri fab" id="addDeviceBtn" onclick="openWizard()"><span data-t="addDevice"></span></button>
 </section>
 
 <!-- Catalog -->
@@ -720,9 +723,10 @@ button.catalog-tip-trigger{position:relative}
 
 <!-- Developer -->
 <section id="developerTab" hidden>
-  <div class="section-head"><h2 data-t="myConfigs"></h2><span class="grow"></span><button class="pri" id="newSpecBtn" onclick="newSpec()" data-t="newSpec"></button></div>
+  <div class="section-head"><h2 data-t="myConfigs"></h2></div>
   <p class="sub config-intro" id="specHelp" data-t="specHelp"></p>
   <div class="spec-list" id="specList"></div>
+  <button type="button" class="pri fab" id="newSpecBtn" onclick="newSpec()"><span data-t="newSpec"></span></button>
   <details class="spec-builds" id="devBlock" hidden>
     <summary data-t="otherFirmwareBuilds"></summary>
     <div class="card">
@@ -1536,9 +1540,9 @@ async function ignoreFound(id, on) {
   refresh();
 }
 
-$('#addDeviceBtn').insertAdjacentHTML('afterbegin', `<span aria-hidden="true">${icon('plus')}</span>`);
+$$('.fab').forEach(button => button.insertAdjacentHTML('afterbegin', `<span aria-hidden="true">${icon('plus')}</span>`));
 new ResizeObserver(([{target}]) => {
-  $('#devicesTab').style.setProperty('--taskbar-height', `${target.offsetHeight}px`);
+  document.documentElement.style.setProperty('--taskbar-height', `${target.offsetHeight}px`);
 }).observe($('#taskbar'));
 
 function renderDevices() {

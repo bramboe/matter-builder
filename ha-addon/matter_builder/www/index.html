@@ -941,9 +941,14 @@ ${esc(text)}</textarea></mb-yaml-editor>`;
 }
 
 const TEXT = {
-  tabDevices: 'Devices', tabCatalog: 'Catalog', tabConfigs: 'Configs', configuration: 'Configuration', searchDevices: 'Search devices', searchCatalog: 'Search the catalog', searchConfigs: 'Search configs', clearSearch: 'Clear search',
+  tabDevices: 'Devices', tabCatalog: 'Catalog', tabConfigs: 'My configs', configuration: 'Configuration', searchDevices: 'Search devices', searchCatalog: 'Search the catalog', searchConfigs: 'Search configs', clearSearch: 'Clear search',
   noDeviceMatch: q => `No devices match “${q}”`, noDeviceMatchHelp: 'Search looks at the name, the address and the connected items.',
-  myConfigs: 'Saved configurations', saveConfig: 'Save a reusable configuration', configSaved: n => `Saved “${n}” in Configs.`,
+  myConfigs: 'My configs', saveConfig: 'Save as configuration', configSaved: n => `Saved “${n}” in My configs.`,
+  editConfiguration: 'Edit configuration',
+  octoCatalogInstallHelp: 'Install on an ESP32-C6. After linking the bridge, you can set up your beds under Devices.',
+  setUpBeds: 'Set up beds',
+  octoSaveCopyHelp: 'Save these Bluetooth commands in My configs for a future installation.',
+  octoSavedCopyHint: 'Use your saved configuration in My configs to build an installer with these commands.',
   readOnlyYaml: 'This firmware has no configurable connections; its own settings are on its page. This is what it reports:',
   settingsHelp: 'Settings of this device. Saving restarts it; on Thread it is back within a minute.', settingsLabel: 'Settings', bedsLabel: 'Beds', bedN: n => `Bed ${n}`, bedsHelp: 'Beds are paired and named on the device page:', settingsYamlHelp: 'Edit the same device settings as in the visual editor.',
   settingsYamlBlock: 'Use the settings: block with two spaces before each setting.',
@@ -956,7 +961,7 @@ const TEXT = {
   wConfigure: 'Configure the device', configureHelp: 'Its name and what is connected. Wi-Fi, Thread and passwords are set on the device itself.',
   octoCommands: 'Bluetooth commands',
   octoCommandsHelp: 'This is the command set for the selected installer. Set bed addresses and PINs on the linked bridge after installation.',
-  octoEditorPurpose: 'Save the device name and Bluetooth commands for a future installation. To use edited commands, open this configuration in Configs and build its installer.',
+  octoEditorPurpose: 'Save the device name and Bluetooth commands for a future installation. To use edited commands, choose Use on a device in My configs and build its installer.',
   octoCustomInstaller: 'Build an installer to use the Bluetooth commands saved in this configuration.',
   octoStockCommands: 'This installer uses the official command set. Your Bluetooth edits stay in the saved configuration.',
   octoAddHelp: 'Octo Bridge has fixed movement and light actions. To create extra Bluetooth actions as Matter buttons, start a separate configuration for a generic ESP32-C6.',
@@ -984,8 +989,8 @@ const TEXT = {
   octoInstallerBuildMissing: 'The installer is still unavailable. Check the build log or choose another installer.',
   octoInstallerCatalog: 'Browse Octo firmware',
   octoInstallerCatalogHelp: 'Check the Catalog for an available Octo Bridge release.',
-  startEmpty: 'Empty', fromConfigs: 'Saved configurations', fromRecipes: 'Recipes', skipConfiguration: 'Continue without a configuration', saveToConfigs: 'Save a reusable copy',
-  saveToConfigsHelp: 'Find it later in Configs to reuse the connections, Bluetooth commands and rules on another ESP32.',
+  startEmpty: 'Empty', fromConfigs: 'Saved configurations', fromRecipes: 'Recipes', skipConfiguration: 'Continue without a configuration', saveToConfigs: 'Save as configuration',
+  saveToConfigsHelp: 'Find it in My configs to reuse the connections, Bluetooth commands and rules on another ESP32.',
   configOk: (n, c) => `${n}: ${c} connection${c === 1 ? '' : 's'}.`, applyTo: 'Apply to a device', noGeneric: 'No linked generic device yet.',
   applyingConfig: 'Applying the configuration…', configOnTrial: s => `The new connections run on trial: keep them within ${s} s, or the device goes back.`,
   configKept: 'Kept. The device is ready.', configFailed: e => `The configuration was not applied: ${e}`,
@@ -1119,7 +1124,7 @@ const TEXT = {
   needsLabel: 'Needs', components: 'Components',
   missingComponent: type => `This device's firmware has no “${type}” (a component): install firmware built with that component first.`,
   componentsHelp: 'Connection types of their own, built into the firmware: change them in YAML; installing needs a build (developer mode) or a package.',
-  needsBuild: 'This config uses components: build it first (Configs › menu › Build, developer mode), or install it as a package from the catalog.', needsBluetooth: 'This firmware uses Bluetooth for what it does (not only for pairing): the ESP32 needs Bluetooth, and shares its radio between Bluetooth and the network.', firmwareTooOld: v => `IR and Bluetooth connections need generic firmware ${v} or newer: update the device first (Firmware tab).`,
+  needsBuild: 'This config uses components: build it first (My configs › More › Build, developer mode), or install it as a package from the catalog.', needsBluetooth: 'This firmware uses Bluetooth for what it does (not only for pairing): the ESP32 needs Bluetooth, and shares its radio between Bluetooth and the network.', firmwareTooOld: v => `IR and Bluetooth connections need generic firmware ${v} or newer: update the device first (Firmware tab).`,
   needCode: n => `Enter an IR code for ${n}, like nec:00FF:A25D.`, needMac: n => `Enter a Bluetooth address for ${n}, like AA:BB:CC:DD:EE:FF.`, liveSend: 'Send', liveHere: 'here', liveAway: 'away', liveSeen: s => `seen ${s} s ago`,
   saved: 'Saved as draft.', unchanged: 'Nothing changed.', applying: 'Restarting with the new connections…',
   trialLeft: s => `On trial: keep within ${s} s.`, kept: 'Kept.', yamlError: e => `YAML: ${e}`,
@@ -1153,7 +1158,7 @@ const TEXT = {
   boardNoRelease: 'No firmware for it in this release yet', boardOthers: 'Boards that do not work',
   wHow: 'How do you want to start?', howScratch: 'From scratch', howScratchHelp: 'Add what is connected, one thing at a time',
   howTemplate: 'From a template', howTemplateHelp: 'A ready-made recipe from the catalog; change it as you like',
-  howConfig: 'Reuse a saved configuration', howConfigHelp: 'Use connections and rules you saved under Configs.',
+  howConfig: 'Reuse a saved configuration', howConfigHelp: 'Use connections and rules you saved in My configs.',
   howReady: 'Ready-made firmware, nothing to build here', howOwn: 'Own build', howPickTemplate: 'Choose a template', howPickConfig: 'Choose a config',
   howNeedsBluetooth: b => `Needs Bluetooth, which does not work on the ${b}`, howNone: 'Nothing here yet.',
   boardLimits: (b, list) => `Not on the ${b}: ${list}`, notOnBoard: b => `Does not work on the ${b}`,
@@ -1216,7 +1221,7 @@ const TEXT = {
   host: 'This host', cores: 'cores', memory: 'GB memory', disk: 'GB free',
   fewCores: 'Few cores or little memory: the first build takes an hour or more. More cores for the Home Assistant machine help most (about 1.5 GB memory per core).',
   toolchainReady: 'Ready', toolchainMissing: 'Not installed: about 6 GB, 15 minutes or more. Not included in backups.',
-  ownDevices: 'Own devices', noConfigsTitle: 'No configs yet', noConfigs: 'A config keeps a setup to reuse on a linked device or a new board. Save one from a device, or make a new one.',
+  ownDevices: 'Own devices', noConfigsTitle: 'No saved configurations', noConfigs: 'Create a setup you want to reuse, or save one while setting up a device. To install standard firmware, start in Catalog.',
   noConfigMatch: q => `No configs match “${q}”`, goDevices: 'Go to devices', newSpec: 'New config',
   specHelp: 'Reuse your saved connections, Bluetooth commands and rules on a linked device or a new board.',
   specBleCommands: n => n === 1 ? '1 Bluetooth command' : `${n} Bluetooth commands`,
@@ -1225,7 +1230,7 @@ const TEXT = {
     ...(connections ? [`${connections} connection${connections === 1 ? '' : 's'}`] : []),
     ...(rules ? [`${rules} rule${rules === 1 ? '' : 's'}`] : []),
   ],
-  specUse: 'Use on a device…', specTarget: 'Use configuration on a device',
+  specUse: 'Use on a device', specTarget: 'Use configuration on a device',
   specNewBoard: 'Install on a new board', specExisting: n => `Apply to ${n}`,
   noSpecConnections: 'No connections or rules',
   specBuildFiles: 'Build files', otherFirmwareBuilds: 'Other firmware builds', download: 'Download', downloadUpdate: 'Download update', downloadInstaller: 'Download installer',
@@ -3143,6 +3148,7 @@ function renderItem() {
     }).join('')}</div>` : ''}
     ${facts.length ? `<div>${facts.map(([k, v]) => `<div class="row"><div class="label sub">${k}</div><div>${v}</div></div>`).join('')}</div>` : ''}
     ${it.official ? '' : `<div class="banner" style="background:var(--warnchip)"><span class="grow sub" style="color:var(--fg)">${t('communityNotice')}</span></div>`}
+    ${canInstall && it.official && it.app === 'octo_bridge' ? `<p class="sub">${t('octoCatalogInstallHelp')}</p>` : ''}
     ${it.kind === 'firmware' && !canInstall ? `<p class="sub">${t('updateOnly')}</p>` : ''}
     ${it.official || !it.url ? '' : `<div class="actions" style="justify-content:flex-start">
       <a class="button" href="${esc(it.url)}" target="_blank" rel="noopener">★ ${t('rate')}</a>
@@ -3183,7 +3189,9 @@ function useItem() {
 function installItem(file = $('#catalogVariant')?.value || catalogVariants(item).find(v => v.factory)?.factory || item.factory) {
   communityGate(() => {
     if (!sourceAdded(item.source)) { addSourceFlow(item.source, item.key_sha256, () => installItem(file)); return; }
-    startCatalogWizard('method', {file});
+    const stockOcto = item.official && item.app === 'octo_bridge';
+    const choice = stockOcto ? octoInstaller(file, item.version || fileVersion(file.replace(/-factory\.bin$/, '.bin'))) : null;
+    startCatalogWizard('method', {file, choice, stockOcto});
   });
 }
 
@@ -3341,9 +3349,9 @@ function specRow(sp) {
         ${installerIssue ? `<span class="sub warnText">${esc(installerIssue)}</span>` : ''}</span>
     </div>
     <div class="spec-actions">
-      <button class="text" aria-label="${t('edit')} ${esc(sp.name)}" onclick="editSpec('${sp.slug}')">${t('edit')}</button>
-      ${sp.error ? '' : `<button class="spec-use" aria-label="${t(installerIssue ? 'octoInstallerTitle' : 'specUse')} · ${esc(sp.name)}" onclick="useConfig('${sp.slug}')">${t(installerIssue ? 'octoInstallerTitle' : 'specUse')}</button>`}
-      <details class="more"><summary aria-label="${t('more')}">${icon('dots')}</summary><div class="pop" style="bottom:auto;top:100%">
+      ${sp.error ? '' : `<button class="spec-use" aria-label="${t('specUse')} · ${esc(sp.name)}" onclick="useConfig('${sp.slug}')">${t('specUse')}</button>`}
+      <details class="more"><summary aria-label="${t('more')} · ${esc(sp.name)}">${icon('dots')}</summary><div class="pop" style="bottom:auto;top:100%">
+        <button onclick="editSpec('${sp.slug}')">${t('editConfiguration')}</button>
         ${sp.error ? '' : `<button onclick="shareSpec('${sp.slug}')">${t('share')}</button>`}
         ${dev ? `<button onclick="buildSpec('${sp.slug}')" ${sp.error || !state.toolchain || state.job.running ? 'disabled' : ''}>${t('build')}</button>` : ''}
         <button class="warn" onclick="deleteSpec('${sp.slug}')">${t('del')}</button></div></details></div>
@@ -3380,7 +3388,7 @@ function renderDeveloper() {
     : `<div class="empty" style="grid-column:1/-1"><div class="ico" style="margin:0 auto 10px;width:48px;height:48px">${icon('recipe')}</div>
       <h2>${t('noConfigsTitle')}</h2><p class="sub">${t('noConfigs')}</p>
       <div class="actions" style="justify-content:center"><button class="pri" onclick="newSpec()">${t('newSpec')}</button>
-        <button onclick="goTab('devices')">${t('goDevices')}</button></div></div>`);
+        <button onclick="goTab('catalog')">${t('browseCatalog')}</button></div></div>`);
   $('#devBlock').hidden = !state.settings.dev_mode;
   $('#buildGenericBtn').disabled = !state.toolchain || state.job.running;
   $('#buildHint').hidden = state.toolchain;
@@ -3469,6 +3477,7 @@ async function postSpec(checkOnly) {
   finally { $('#specCheck').disabled = $('#specSave').disabled = false; }
 }
 async function editSpec(slug) {
+  $$('details.more[open]').forEach(d => { d.open = false; });
   try {
     const r = await api(`api/specs/${slug}`);
     if (r.error) { toast(r.error); return; }
@@ -4329,7 +4338,7 @@ async function loadBridgeEditor(proxy, host) {
     const result = await api(endpoint);
     if (!page.isConnected) return;
     if (result.error) throw new Error(result.error);
-    const {build, packets, toolchain} = result;
+    const {build, packets, packet_defaults: packetDefaults, toolchain} = result;
     page.innerHTML = `<h3>Bluetooth firmware</h3>
       <p class="sub">Build &amp; upload creates a new firmware version for this device and restarts it.</p>
       <form>
@@ -4343,9 +4352,12 @@ async function loadBridgeEditor(proxy, host) {
         <div data-firmware-yaml hidden></div>
         <p class="notice" role="status">${toolchain ? '' : 'Install the build toolchain in Settings to build and upload.'}</p>
         <p class="error" role="alert" hidden></p>
-        <div class="actions"><button class="pri" type="submit" disabled>Build &amp; upload</button></div>
+        <p class="sub" data-config-status role="status" hidden></p>
+        <div class="actions"><button class="plain" type="button" data-save-copy hidden>${t('saveConfig')}</button>
+          <button class="pri" type="submit" disabled>Build &amp; upload</button></div>
       </form>`;
-    const form = page.querySelector('form'), button = form.querySelector('button');
+    const form = page.querySelector('form'), button = form.querySelector('button[type="submit"]');
+    const copy = form.querySelector('[data-save-copy]'), copyStatus = form.querySelector('[data-config-status]');
     const visual = form.querySelector('[data-firmware-visual]'), yaml = form.querySelector('[data-firmware-yaml]');
     const notice = form.querySelector('.notice'), error = form.querySelector('.error');
     const packetInputs = [...form.querySelectorAll('[data-packet]')];
@@ -4379,6 +4391,12 @@ async function loadBridgeEditor(proxy, host) {
     };
     const read = () => visual.hidden ? readYaml() : readVisual();
     const changed = values => Object.keys(baseline).filter(key => values[key] !== baseline[key]);
+    const commandKeys = Object.keys(packetDefaults || {});
+    const hasCustomCommands = () => {
+      try { const values = read(); return commandKeys.some(key => values[key] !== packetDefaults[key]); }
+      catch (e) { return false; }
+    };
+    let savingCopy = false;
     const setError = message => { error.textContent = message; error.hidden = !message; };
     let pendingSince = null;
     const editor = {
@@ -4392,6 +4410,8 @@ async function loadBridgeEditor(proxy, host) {
       sync() {
         button.disabled = this.busy || setEditor.busy || !toolchain || !this.dirty() ||
           (!visual.hidden && !form.checkValidity());
+        copy.hidden = !hasCustomCommands();
+        copy.disabled = this.busy || savingCopy;
       },
       syncVisual() {
         const values = readYaml();
@@ -4440,9 +4460,30 @@ async function loadBridgeEditor(proxy, host) {
     if (managed?.settings) setEditor.render();
     editor.syncMode(managed?.settings ? setEditor.mode : 'visual');
     form.oninput = () => { setError(''); editor.sync(); };
+    copy.onclick = async () => {
+      if (copy.disabled || copy.hidden) return;
+      savingCopy = true;
+      editor.sync();
+      copyStatus.hidden = true;
+      setError('');
+      try {
+        const values = read();
+        const name = await actionDialog(t('saveConfig'), t('octoSaveCopyHelp'), t('save'), `${proxy.name.slice(0, 25).trimEnd()} config`);
+        if (!name || !page.isConnected) return;
+        const device = {app: 'octo_bridge', board: 'esp32-c6', version: build.version, packetDefaults,
+          packets: Object.fromEntries(commandKeys.map(key => [key, values[key]]))};
+        const text = specYaml(JSON.stringify(name), [], [], [], [], null, device);
+        const saved = await api('api/specs', {text, create_only: true});
+        if (saved.error) throw new Error(saved.error);
+        invalidateSpecs();
+        copyStatus.textContent = `${t('configSaved', saved.spec.name)} ${t('octoSavedCopyHint')}`;
+        copyStatus.hidden = false;
+      } catch (e) { setError(e.message); }
+      finally { savingCopy = false; editor.sync(); }
+    };
     form.onsubmit = async event => {
       event.preventDefault();
-      if (button.disabled) return;
+      if (button.disabled || savingCopy) return;
       let next;
       try { next = read(); }
       catch (e) { setError(e.message); return; }
@@ -5317,7 +5358,7 @@ function octoInstallerIssue(saved, fromConfigs = false) {
   if (chipKey(board) !== 'esp32c6') return t('octoConfigBoard');
   if (exactOctoInstaller({...saved, board}, saved)) return '';
   const {action} = octoInstallerNextStep(saved.packetBuild);
-  const guidance = fromConfigs ? t('octoInstallerFromConfigs', t('octoInstallerTitle'), action) : t('octoInstallerFromPicker', action);
+  const guidance = fromConfigs ? t('octoInstallerFromConfigs', t('specUse'), action) : t('octoInstallerFromPicker', action);
   return `${t(saved.packetBuild ? 'octoCustomInstaller' : 'octoInstallerMissing', saved.version)} ${guidance}`;
 }
 
@@ -5769,6 +5810,7 @@ function renderWizard() {
   } else if (wiz.step === 'done') {
     title = t('wLinked');
     const a = wiz.apply || {};
+    const octo = wiz.stockOcto || wiz.octoConfig || state.proxies.some(p => p.id === wiz.linkedId && p.app === 'octo_bridge');
     body = `<p>${esc(wiz.configSpec ? t('linkedName', wiz.linkedName || '') : t('linkedText', wiz.linkedName || ''))}</p>
       ${wiz.defaultWifi === true ? '<p class="sub">The default Wi-Fi was saved on this device. If it uses Matter over Wi-Fi, it can switch to this network after a restart.</p>' : ''}
       ${wiz.defaultWifi === false ? '<p class="error" role="alert">Could not save the default configuration Wi-Fi. You can retry from Settings.</p>' : ''}
@@ -5780,7 +5822,7 @@ function renderWizard() {
       ${a.state === 'error' ? `<div class="error" role="alert">${esc(t('configFailed', a.error))}</div>` : ''}
       <div class="actions end">${a.state === 'trial' ? `<button class="pri" onclick="keepConfig()">${t('keep')}</button>` : `<button class="plain" onclick="completeWizard()" ${a.state === 'applying' ? 'disabled' : ''}>${t('done')}</button>`}
         ${a.state === 'review' ? '<button class="pri" id="wReviewChanges" onclick="applyConfig()">Review changes</button>' : ''}
-        ${wiz.linkedId && a.state !== 'trial' && a.state !== 'applying' && a.state !== 'review' ? `<button class="${['kept', 'applied'].includes(a.state) ? 'plain' : 'pri'}" onclick="const w = wiz; completeWizard(() => openDevice(w.linkedId, 'connections'))">${['kept', 'applied'].includes(a.state) ? t('openDevice') : t('setUpConnections')}</button>` : ''}</div>`;
+        ${wiz.linkedId && a.state !== 'trial' && a.state !== 'applying' && a.state !== 'review' ? `<button class="${['kept', 'applied'].includes(a.state) ? 'plain' : 'pri'}" onclick="const w = wiz; completeWizard(() => openDevice(w.linkedId, 'connections'))">${octo ? t('setUpBeds') : t(['kept', 'applied'].includes(a.state) ? 'openDevice' : 'setUpConnections')}</button>` : ''}</div>`;
   }
   $('#wTitle').textContent = title;
   $('#taskTitle').textContent = progress ? `${title} · ${progress}` : title;

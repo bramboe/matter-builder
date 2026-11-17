@@ -284,10 +284,14 @@ def value_of(text):
     return flow(text) if text[:1] in "{[" else scalar(text)
 
 
+YAML_LINE_TOKEN = re.compile(r'''(?<![^\s:,\[\{])(?:"[^"]*"|'[^']*')|(?<!\S)#.*$''')
+
+
 def parse_yaml(text):
     lines = []
     for number, raw in enumerate(text.splitlines(), 1):
-        line = re.sub(r"\s+#.*$|^\s*#.*$", "", raw).rstrip()
+        comment = next((token for token in YAML_LINE_TOKEN.finditer(raw) if token[0].startswith("#")), None)
+        line = raw[:comment.start()].rstrip() if comment else raw.rstrip()
         if line.strip():
             lines.append((number, len(line) - len(line.lstrip()), line.strip()))
 

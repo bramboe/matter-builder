@@ -2920,7 +2920,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 except ValueError as err:
                     return self.reply({"error": str(err)}, 400)
                 packets = build.get("packets", BRIDGE_DEFAULT_PACKETS) if bridge_packets_supported(build) else None
-                return self.reply({"build": build, "packets": packets, "toolchain": toolchain_ready()})
+                return self.reply({"build": build, "packets": packets, "toolchain": toolchain_ready(),
+                                   "packet_defaults": BRIDGE_DEFAULT_PACKETS if packets else None})
             if parts[3] == "status":
                 return self.reply(checked_status(proxy))
             if parts[3] == "logs":
@@ -2955,7 +2956,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if data.get("check_only"):
                 return self.reply({"spec": spec})
             SPECS.mkdir(parents=True, exist_ok=True)
-            (SPECS / f"{spec['slug']}.yaml").write_text(text)
+            spec_file = SPECS / f"{spec['slug']}.yaml"
+            output = tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=SPECS, delete=False)
+            staged = Path(output.name)
+            try:
+                with output:
+                    output.write(text)
+                if data.get("create_only"):
+                    os.link(staged, spec_file)
+                else:
+                    staged.replace(spec_file)
+            except FileExistsError:
+                return self.reply({"error": "A configuration with this name already exists in My configs. Choose another name."}, 409)
+            finally:
+                staged.unlink(missing_ok=True)
             return self.reply({"spec": spec})
         if path.startswith("/api/specs/") and path.endswith("/build"):
             spec_file = SPECS / (Path(path).parent.name + ".yaml")

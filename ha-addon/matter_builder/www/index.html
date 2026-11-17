@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Matter Builder</title>
 <link rel="icon" type="image/svg+xml" href="matter-builder-app-icoon-transparant.svg">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <script defer src="yaml-editor.js?v=2"></script>
 <style>
 /* Colours, radii and spacing follow the Home Assistant frontend */
@@ -953,8 +954,13 @@ const TEXT = {
   recipeSetup: 'Wiring and setup',
   recipeMeasurementsFirmware: 'Requires generic firmware 0.1.31 or later.',
   wConfigure: 'Configure the device', configureHelp: 'Its name and what is connected. Wi-Fi, Thread and passwords are set on the device itself.',
-  octoCommands: 'Built-in Bluetooth commands',
-  octoCommandsHelp: 'These are the standard Octo firmware commands. Bed addresses, PINs and any custom firmware changes are managed on the linked bridge.',
+  octoCommands: 'Bluetooth commands',
+  octoCommandsHelp: 'This is the command set for the selected installer. Set bed addresses and PINs on the linked bridge after installation.',
+  octoEditorPurpose: 'Save the device name and Bluetooth commands for a future installation. To use edited commands, open this configuration in Configs and build its installer.',
+  octoCustomInstaller: 'Build an installer to use the Bluetooth commands saved in this configuration.',
+  octoStockCommands: 'This installer uses the official command set. Your Bluetooth edits stay in the saved configuration.',
+  octoAddHelp: 'Octo Bridge has fixed movement and light actions. To create extra Bluetooth actions as Matter buttons, start a separate configuration for a generic ESP32-C6.',
+  octoAddAction: 'Create Bluetooth command configuration',
   octoConfigReview: 'Review Octo Bridge configuration',
   octoConfigBoard: 'This configuration requires an ESP32-C6.',
   octoInstallerTitle: 'Choose an Octo Bridge installer',
@@ -2048,6 +2054,15 @@ class ConfigEditor {
       ${commands}
       <button class="ed-add" onclick="${ref}.bleAddCommand()" ${b.commands.length >= BLE_COMMANDS_MAX ? 'disabled' : ''}>${icon('plus')} ${t('bleAddCommand')}</button>`;
   }
+  setOctoPacket(key, input, event) {
+    this.specDevice.packets[key] = formatHexInput(input, packetHex, event);
+    this.changed(false);
+  }
+  resetOctoPackets() {
+    this.specDevice.packets = {...this.specDevice.packetDefaults};
+    this.changed();
+    this.host.querySelector('#resetOctoPackets')?.focus();
+  }
   text() { return this.mode === 'yaml' ? this.yaml : recipeHeader(this.originalYaml) + specYaml(this.name.trim(), this.rows, this.components, this.drivers, this.rules, this.cleanBle(), this.specDevice); }
 
   // ---- rules
@@ -2463,7 +2478,7 @@ class ConfigEditor {
     const nameField = `<div class="ed-item"><div class="ed-item-head" style="cursor:default"><span class="ico">${appIcon(this.specDevice?.app)}</span>
       <label class="field" style="flex:1"><span>${t('deviceName')}</span><input maxlength="32" value="${esc(this.name)}" oninput="${ref}.setName(this.value)"></label></div></div>`;
     if (this.specDevice?.app === 'octo_bridge') {
-      this.host.innerHTML = `${head}${nameField}${savedOctoCommands(this.specDevice)}${error}`;
+      this.host.innerHTML = `${head}${nameField}${octoConfigFields(this.specDevice, ref)}${error}`;
       return;
     }
     const full = this.rows.length >= 8;
@@ -3412,15 +3427,26 @@ function openSpecEditor(isNew, title = specEditor.name) {
   openTask({blocked: () => $('#specSave').disabled, dirty: () => specDirty});
   $('#specTitle').focus();
 }
-function newSpec() {
+async function openOctoCommandConfig() {
+  if (!pageTask || leavingTask || !await canLeaveTask()) return;
+  const {service, characteristic, write, idle} = BLE_TEMPLATES.octo;
+  const name = `${specEditor.name.trim().slice(0, 23)} actions`;
+  completeWizard(() => newSpec({name, ble: {...bleEmpty(), service, characteristic, write, idle}}));
+}
+
+function newSpec(bluetooth = null) {
   if (pageTask) return;
-  specEditor.mode = defaultEditorMode();
+  specEditor.mode = bluetooth ? 'visual' : defaultEditorMode();
   specEditor.specDevice = null;
   specEditor.board = null;
   specEditor.components = []; specEditor.drivers = [];
   specEditor.mount($('#specEditorHost'));
-  specEditor.load('My device', [], SAFE_PINS);
+  specEditor.load(bluetooth?.name || 'My device', [], SAFE_PINS, [], bluetooth?.ble);
   openSpecEditor(true);
+  if (bluetooth) {
+    $('#specTitle').textContent = t('octoAddAction');
+    specEditor.bleAddCommand();
+  }
 }
 async function postSpec(checkOnly) {
   $('#specCheck').disabled = $('#specSave').disabled = true;
@@ -4230,6 +4256,27 @@ function savedOctoCommands(device) {
   </section>`;
 }
 
+function octoConfigFields(device, ref) {
+  const row = (label, key) => `<div class="row">
+    <dt><label for="spec-packet-${key}">${label}</label></dt>
+    <dd><input class="mono" id="spec-packet-${key}" spellcheck="false" autocomplete="off" autocapitalize="off"
+      maxlength="191" value="${esc(groupHex(packetHex(device.packets[key])))}"
+      oninput="${ref}.setOctoPacket('${key}', this, event)" oncompositionend="${ref}.setOctoPacket('${key}', this, event)"></dd></div>`;
+  return `<section class="device-settings-card firmware-packets">
+    <h3>Bluetooth commands</h3>
+    <p class="sub">${esc(appTitle(device.app))} ${esc(device.version)} · ${esc(device.board.toUpperCase())}</p>
+    <p class="sub">${t('octoEditorPurpose')}</p>
+    ${device.packetDefaults && device.packets ? bridgeCommandGroups(row) +
+      `<div class="actions"><button type="button" id="resetOctoPackets" onclick="${ref}.resetOctoPackets()">Restore standard commands</button></div>`
+      : '<p class="sub">Command editing is unavailable for this configuration.</p>'}
+    </section>
+    <section class="device-settings-card">
+      <h3>Extra Bluetooth actions</h3>
+      <p class="sub">${t('octoAddHelp')}</p>
+      <button type="button" onclick="openOctoCommandConfig()">${t('octoAddAction')}</button>
+    </section>`;
+}
+
 function bridgePacketFields(build, packets) {
   if (!packets) return '<p class="sub">Packet editing is unavailable for this firmware revision.</p>';
   const row = (label, key) => `<div class="row"><dt><label for="packet-${key}">${label}</label></dt>
@@ -4302,7 +4349,7 @@ async function loadBridgeEditor(proxy, host) {
     const visual = form.querySelector('[data-firmware-visual]'), yaml = form.querySelector('[data-firmware-yaml]');
     const notice = form.querySelector('.notice'), error = form.querySelector('.error');
     const packetInputs = [...form.querySelectorAll('[data-packet]')];
-    const normalize = raw => raw.replace(/\s/g, '').toUpperCase();
+    const normalize = packetHex;
     for (const input of packetInputs) input.addEventListener('input', event => formatHexInput(input, normalize, event));
     // Both views edit the same draft. Only the firmware action submits it.
     const baseline = {keepalive_ms: build.keepalive_ms, light_enabled: build.light_enabled, ...packets};
@@ -4753,6 +4800,11 @@ const MIN_GROUPS = '0.1.13';
 function specYaml(name, rows, components = [], drivers = [], rules = [], ble = null, device = null) {
   const lines = ['device:', `  name: ${name}`, `  app: ${device?.app || 'generic'}`];
   if (device) lines.push(`  board: ${device.board}`, `  version: ${device.version}`);
+  if (device?.app === 'octo_bridge' && device.packetDefaults) {
+    const edits = Object.entries(device.packets).map(([key, value]) => [key, packetHex(value)])
+      .filter(([key, value]) => value !== device.packetDefaults[key]);
+    if (edits.length) lines.push('', 'octo_packets:', ...edits.map(([key, value]) => `  ${key}: ${JSON.stringify(value)}`));
+  }
   lines.push('', 'connections:');
   for (const r of rows) {
     const d = connectionDriver(r.type, drivers);
@@ -4795,7 +4847,8 @@ function specYaml(name, rows, components = [], drivers = [], rules = [], ble = n
 async function parseSpec(text) {
   const r = await api('api/specs', {text, check_only: true});
   if (!r.spec) throw new Error(r.error || 'not valid');
-  return {name: r.spec.name, device: {app: r.spec.app, board: r.spec.board, version: r.spec.version, packets: r.spec.firmware_packets}, rows: rowsOf(r.spec.connections), components: (r.spec.components || []).map(c => ({source: c.source})),
+  return {name: r.spec.name, device: {app: r.spec.app, board: r.spec.board, version: r.spec.version,
+    packets: r.spec.firmware_packets, packetDefaults: r.spec.firmware_defaults, packetBuild: r.spec.packet_build}, rows: rowsOf(r.spec.connections), components: (r.spec.components || []).map(c => ({source: c.source})),
     drivers: r.spec.drivers || [], rules: r.spec.rules || [], ble: r.spec.bluetooth_device || null};
 }
 
@@ -4818,6 +4871,7 @@ const OCTO_BLE_SETUP = [
 ];
 const bleHex = v => String(v).replace(/[\s:-]/g, '').toUpperCase();
 const groupHex = value => value.match(/.{1,2}/g)?.join(' ') || '';
+const packetHex = value => value.replace(/\s/g, '').toUpperCase();
 function formatHexInput(input, normalize, event) {
   const raw = input.value;
   if (event.isComposing) return raw;
@@ -5248,9 +5302,11 @@ function octoReleaseInstallers() {
 
 function exactOctoInstaller(device, saved) {
   if (chipKey(device.board) !== 'esp32c6') return null;
-  const {version} = device;
-  const built = saved && `${saved.slug.replaceAll('-', '_')}-${version}-factory.bin`;
+  const {version, packetBuild} = device;
+  const suffix = packetBuild ? `_packets_${packetBuild}` : '';
+  const built = saved && `${saved.slug.replaceAll('-', '_')}${suffix}-${version}-factory.bin`;
   if (saved?.factory.includes(built)) return octoInstaller(built, version);
+  if (packetBuild) return null;
   const release = octoReleaseInstallers().find(f => f.version === version);
   return release ? octoInstaller(release.file, version) : null;
 }
@@ -5260,9 +5316,9 @@ function octoInstallerIssue(saved, fromConfigs = false) {
   const board = saved.board || 'esp32-c6';
   if (chipKey(board) !== 'esp32c6') return t('octoConfigBoard');
   if (exactOctoInstaller({...saved, board}, saved)) return '';
-  const {action} = octoInstallerNextStep();
+  const {action} = octoInstallerNextStep(saved.packetBuild);
   const guidance = fromConfigs ? t('octoInstallerFromConfigs', t('octoInstallerTitle'), action) : t('octoInstallerFromPicker', action);
-  return `${t('octoInstallerMissing', saved.version)} ${guidance}`;
+  return `${t(saved.packetBuild ? 'octoCustomInstaller' : 'octoInstallerMissing', saved.version)} ${guidance}`;
 }
 
 function latestOctoRelease() {
@@ -5270,10 +5326,10 @@ function latestOctoRelease() {
     !latest || newer(release.version, latest.version) ? release : latest, null);
 }
 
-function octoInstallerNextStep() {
+function octoInstallerNextStep(packetBuild) {
   const release = latestOctoRelease();
   const canBuild = state.settings.dev_mode && state.toolchain;
-  if (release) return {release, canBuild, action: t('octoInstallerPick', release.version), guidance: 'octoInstallerUseOfficial'};
+  if (release && !packetBuild) return {release, canBuild, action: t('octoInstallerPick', release.version), guidance: 'octoInstallerUseOfficial'};
   if (canBuild) return {release, canBuild, action: t('octoInstallerBuild'), guidance: 'octoInstallerUseBuild'};
   return {release, canBuild, action: t('octoInstallerBuildSettings'), guidance: 'octoInstallerUseSettings'};
 }
@@ -5290,7 +5346,7 @@ function chooseOfficialOctoInstaller(button) {
   if (wiz.octoBuild) return;
   const {file, version} = button.dataset;
   if (octoReleaseInstallers().some(release => release.file === file && release.version === version)) {
-    continueWithOctoInstaller(octoInstaller(file, version));
+    continueWithOctoInstaller({...octoInstaller(file, version), official: true});
   } else {
     wiz.error = t('octoInstallerChanged');
     renderWizard();
@@ -5312,15 +5368,18 @@ function octoInstallerRecovery(device) {
     return `<p class="notice">${t('octoConfigBoard')}</p><div class="choices">
       ${choice(false, 'store', t('octoInstallerCatalog'), t('octoInstallerCatalogHelp'), 'browseOctoInstallers()')}</div>`;
   }
-  const {release, canBuild, action, guidance} = octoInstallerNextStep();
-  return `<p class="notice">${esc(t('octoInstallerMissing', device.version))}
+  const {release, canBuild, action, guidance} = octoInstallerNextStep(device.packetBuild);
+  const official = release ? choice(false, 'chip', esc(t('octoInstallerPick', release.version)),
+    t(device.packetBuild ? 'octoStockCommands' : 'octoInstallerStock'), 'chooseOfficialOctoInstaller(this)',
+    `data-file="${esc(release.file)}" data-version="${esc(release.version)}" ${wiz.octoBuild ? 'disabled' : ''}`) : '';
+  return `<p class="notice">${esc(t(device.packetBuild ? 'octoCustomInstaller' : 'octoInstallerMissing', device.version))}
       ${wiz.octoBuild ? '' : esc(t(guidance, action))}</p>
     <div class="choices">
-      ${release ? choice(false, 'chip', esc(action), t('octoInstallerStock'), 'chooseOfficialOctoInstaller(this)',
-        `data-file="${esc(release.file)}" data-version="${esc(release.version)}" ${wiz.octoBuild ? 'disabled' : ''}`) : ''}
+      ${device.packetBuild ? '' : official}
       ${canBuild ? choice(false, 'chip', t(wiz.octoBuild ? 'octoInstallerBuilding' : 'octoInstallerBuild'),
         t('octoInstallerBuildHelp'), 'buildOctoInstaller()', wiz.octoBuild ? 'disabled' : '')
         : choice(false, 'chip', t('octoInstallerBuildSettings'), t('octoInstallerBuildSettingsHelp'), "completeWizard(() => $('#settingsBtn').click())")}
+      ${device.packetBuild ? official : ''}
       ${choice(false, 'store', t('octoInstallerCatalog'), t('octoInstallerCatalogHelp'), 'browseOctoInstallers()')}
     </div>
     ${wiz.octoBuild ? `<p class="sub" role="status">${t('octoInstallerBuilding')}</p>` : ''}
@@ -5649,8 +5708,11 @@ function renderWizard() {
     const selectedVersion = wiz.choice?.version;
     const installerDetails = selectedVersion && selectedVersion !== spec.device.version
       ? `<p class="notice">${esc(t('octoInstallerSelected', spec.device.version, selectedVersion))}</p>` : '';
+    const usesStock = wiz.choice?.official && spec.device.packetBuild;
+    const reviewed = {...spec.device, version: selectedVersion, packets: usesStock ? spec.device.packetDefaults : spec.device.packets};
     body = `<h3>${esc(spec.name)}</h3>
-      ${wiz.file ? installerDetails + savedOctoCommands({...spec.device, version: selectedVersion}) : octoInstallerRecovery(spec.device)}
+      ${wiz.file ? installerDetails + (usesStock ? `<p class="notice">${t('octoStockCommands')}</p>` : '') +
+        savedOctoCommands(reviewed) : octoInstallerRecovery(spec.device)}
       <div class="actions end"><button class="plain" onclick="wizPrev()">${t('back')}</button>
         ${wiz.file ? `<button class="pri" onclick="wizNext()">${t('next')}</button>` : ''}</div>`;
   } else if (wiz.step === 'configure') {

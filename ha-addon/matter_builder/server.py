@@ -25,6 +25,7 @@ import secrets
 import socket
 import struct
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -61,6 +62,10 @@ RELEASES = DATA / "releases"
 RELEASE_CACHE = RELEASES / "verified.json"  # the merged, signature-checked list
 SPECS = DATA / "specs"
 SRC = Path(os.environ.get("MB_SRC", "/opt/octo-matter"))
+SPEC_TOOLS = SRC / "tools" if (SRC / "tools" / "mb_generate.py").is_file() else HERE / "src" / "tools"
+sys.path.insert(0, str(SPEC_TOOLS))
+from mb_generate import BRIDGE_DEFAULT_PACKETS, apply_bridge_packets, bridge_packets  # noqa: E402
+sys.path.pop(0)
 RELEASE_KEY = HERE / "release-key.pem"
 # Where ready-made firmware comes from: GitHub releases, signed (see
 # .github/workflows/release.yml); the add-on option "releases_repo" overrides it
@@ -1164,6 +1169,69 @@ def ha_core_session():
     return call, sock
 
 
+# The sidebar icon (panel_icon: matter-builder:logo in config.yaml) is not a
+# Material Design icon: Home Assistant draws it from an icon set that the
+# add-on registers as a dashboard resource, a small module inlined as a data:
+# URL. The add-on finds its own resource again by the marker in that module,
+# and replaces it when the icon changes. With dashboard resources in YAML mode
+# there is nothing to register; the sidebar then shows no icon.
+ICONSET_MARKER = "Matter Builder icons"
+
+
+def iconset_url():
+    svg = (HERE / "www" / "matter-builder-zijbalk.svg").read_text()
+    path = re.search(r'<path[^>]* d="([^"]+)"', svg).group(1)
+    module = (f"// {ICONSET_MARKER}: registered by the Matter Builder add-on (matter-builder:logo)\n"
+              f"const icons = {{logo: {json.dumps(path)}}};\n"
+              "window.customIcons = window.customIcons || {};\n"
+              'window.customIcons["matter-builder"] = {\n'
+              '  getIcon: async (name) => ({path: icons[name] || icons.logo, viewBox: "0 0 24 24"}),\n'
+              "  getIconList: async () => Object.keys(icons).map((name) => ({name})),\n"
+              "};\n"
+              'window.dispatchEvent(new Event("custom-icons-registered"));\n')
+    return "data:text/javascript;base64," + base64.b64encode(module.encode()).decode()
+
+
+def is_iconset_resource(url):
+    if not str(url).startswith("data:"):
+        return False
+    head, _, body = str(url).partition(",")
+    try:
+        text = base64.b64decode(body).decode() if head.endswith(";base64") else urllib.parse.unquote(body)
+    except ValueError:
+        return False
+    return ICONSET_MARKER in text
+
+
+def register_iconset():
+    if STANDALONE or not SUPERVISOR_TOKEN:
+        return
+    url = iconset_url()
+    for attempt in range(10):  # Home Assistant may still be starting
+        try:
+            call, sock = ha_core_session()
+        except OSError:
+            time.sleep(30)
+            continue
+        try:
+            mine = [r for r in call("lovelace/resources") if is_iconset_resource(r.get("url"))]
+            if len(mine) == 1 and mine[0].get("url") == url:
+                return
+            for extra in mine[1:]:
+                call("lovelace/resources/delete", resource_id=extra["id"])
+            if mine:
+                call("lovelace/resources/update", resource_id=mine[0]["id"], res_type="module", url=url)
+            else:
+                call("lovelace/resources/create", res_type="module", url=url)
+            print("sidebar icon registered in Home Assistant", flush=True)
+            return
+        except OSError as err:
+            print(f"sidebar icon not registered: {err}", flush=True)
+            return
+        finally:
+            sock.close()
+
+
 def slug(text):
     return re.sub(r"[^a-z0-9]+", "_", str(text).lower()).strip("_")
 
@@ -1715,7 +1783,7 @@ def check_spec(text):
         f.write(text)
         path = f.name
     try:
-        result = subprocess.run(["python3", str(SRC / "tools" / "mb_generate.py"), "--check", path],
+        result = subprocess.run(["python3", str(SPEC_TOOLS / "mb_generate.py"), "--check", path],
                                 capture_output=True, text=True)
     finally:
         os.unlink(path)
@@ -1723,7 +1791,8 @@ def check_spec(text):
         return None, (result.stderr.strip() or result.stdout.strip()).removeprefix("spec error: ")
     spec = json.loads(result.stdout)
     if spec["app"] == "octo_bridge":
-        spec["firmware_packets"] = BRIDGE_DEFAULT_PACKETS
+        spec["firmware_defaults"] = BRIDGE_DEFAULT_PACKETS
+        spec["firmware_packets"] = {**BRIDGE_DEFAULT_PACKETS, **spec.get("octo_packets", {})}
     return spec, None
 
 
@@ -1732,7 +1801,13 @@ def list_specs():
     for path in sorted(SPECS.glob("*.yaml")):
         spec, error = check_spec(path.read_text())
         project = spec["slug"].replace("-", "_") if spec else None
+        firmware = sorted((p.name for p in FIRMWARE.glob(f"{project}-*.bin")), key=version_key) if project else []
         factory = [f.name for f in FACTORY.glob(f"{project}-*-factory.bin")] if project else []
+        if spec and spec.get("packet_build"):
+            prefix = f'{project}_packets_{spec["packet_build"]}-{spec["version"]}'
+            image, installer = f"{prefix}.bin", f"{prefix}-factory.bin"
+            firmware = [image] if (FIRMWARE / image).is_file() else []
+            factory = [installer] if (FACTORY / installer).is_file() else []
         out.append({"slug": path.stem, "name": spec["name"] if spec else path.stem, "app": spec["app"] if spec else "",
                     "version": spec["version"] if spec else "", "board": spec["board"] if spec else "", "error": error,
                     "connections": len(spec["connections"]) if spec else 0,
@@ -1740,8 +1815,8 @@ def list_specs():
                     "rules": len(spec["rules"]) if spec else 0,
                     "ble_commands": len(spec.get("bluetooth_device", {}).get("commands", [])) if spec else 0,
                     "requires": spec.get("requires", []) if spec else [], "network": spec.get("network") if spec else None,
-                    "firmware": sorted((p.name for p in FIRMWARE.glob(f"{project}-*.bin")), key=version_key)
-                    if project else [], "factory": sorted(factory, key=lambda n: version_key(n.removesuffix("-factory.bin")))})
+                    "packetBuild": spec.get("packet_build") if spec else None,
+                    "firmware": firmware, "factory": sorted(factory, key=lambda n: version_key(n.removesuffix("-factory.bin")))})
     return out
 
 
@@ -2001,100 +2076,8 @@ def update_all():
 
 
 BRIDGE_PACKET_REVISION = "f6a1cb819667756025a5bdca35bb8aa894b6fe84"
-BRIDGE_DEFAULT_PACKETS = {
-    "head_up": "40027000010B0240",
-    "head_down": "40027100010A0240",
-    "legs_up": "4002700001090440",
-    "legs_down": "4002710001080440",
-    "both_up": "4002700001070640",
-    "both_down": "4002710001060640",
-    "stop": "40027300000B40",
-    "light_on": "4020720008DE000102010101010140",
-    "light_off": "4020720008DF000102010101010040",
-    "capabilities": "4020710000EF40",
-}
-
-
 def bridge_packets_supported(build):
     return build.get("revision") == BRIDGE_PACKET_REVISION or build.get("packet_profile") == "octo-standard-v1"
-
-
-def bridge_packets(data):
-    """Validate and normalize complete Octo frames before inserting byte literals in C++."""
-    if not isinstance(data, dict) or data.keys() != BRIDGE_DEFAULT_PACKETS.keys():
-        raise ValueError("The Bluetooth command list is incomplete.")
-    packets = {}
-    for key, value in data.items():
-        if not isinstance(value, str) or len(value) > 256:
-            raise ValueError(f"Invalid Bluetooth packet for {key.replace('_', ' ')}.")
-        raw = "".join(value.split()).upper()
-        try:
-            if not re.fullmatch(r"(?:[0-9A-F]{2}){7,64}", raw):
-                raise ValueError("enter 7 to 64 hexadecimal bytes")
-            frame = bytes.fromhex(raw)
-            if frame[0] != 0x40 or frame[-1] != 0x40:
-                raise ValueError("the packet must start and end with 40")
-            decoded = []
-            stream = iter(frame[1:-1])
-            for byte in stream:
-                if byte == 0x3C:
-                    byte = {1: 0x40, 2: 0x3C, 3: 0x4F, 4: 0x41}.get(next(stream, 0))
-                    if byte is None:
-                        raise ValueError("invalid escape sequence")
-                elif byte in (0x40, 0x4F, 0x41):
-                    raise ValueError("a reserved byte must be escaped")
-                decoded.append(byte)
-            if len(decoded) < 5 or decoded[2] * 256 + decoded[3] != len(decoded) - 5:
-                raise ValueError("the payload length does not match")
-            if decoded[:2] == [0x20, 0x43]:
-                raise ValueError("authentication packets are generated by the firmware")
-            if (0x80 + sum(decoded)) % 256:
-                raise ValueError("the packet checksum does not match")
-        except ValueError as err:
-            raise ValueError(f"{key.replace('_', ' ').capitalize()}: {err}.") from err
-        packets[key] = raw
-    return packets
-
-
-def apply_bridge_packets(checkout, packets):
-    """Overlay the verified release's packet call sites and report the compiled bytes."""
-    core = checkout / "components" / "octo_core"
-    driver = core / "bed_link.cpp"
-    commands = core / "octo_commands.cpp"
-    source = driver.read_text()
-    replacements = (
-        ("octo::get_features()", "bridge_packets::capabilities()", 1),
-        ("octo::motor_stop()", "bridge_packets::stop()", 2),
-        ("up ? octo::motor_up(mask) : octo::motor_down(mask)", "bridge_packets::movement(mask, up)", 1),
-        ("octo::light(on)", "(on ? bridge_packets::light_on() : bridge_packets::light_off())", 1),
-    )
-    for before, after, count in replacements:
-        if source.count(before) != count:
-            raise ValueError("The verified Bluetooth driver does not match the packet editor.")
-        source = source.replace(before, after)
-    metadata = commands.read_text()
-    if metadata.count("return MB_BRIDGE_BUILD_JSON;") != 1:
-        raise ValueError("The firmware build metadata could not be extended.")
-    header = ["#pragma once", '#include "octo_protocol.h"', "#include <string>", "namespace bridge_packets {"]
-    for key, raw in packets.items():
-        literals = ", ".join(f"0x{byte:02X}" for byte in bytes.fromhex(raw))
-        header.append(f"inline octo::Bytes {key}() {{ return {{{literals}}}; }}")
-    header.extend((
-        "inline octo::Bytes movement(uint8_t mask, bool up) {",
-        "    if (mask == octo::MOTOR_HEAD) return up ? head_up() : head_down();",
-        "    if (mask == octo::MOTOR_FEET) return up ? legs_up() : legs_down();",
-        "    return up ? both_up() : both_down();",
-        "}",
-        "inline std::string build_json(std::string json) {",
-        "    json.pop_back();",
-        '    return json + R"packets(, "packets": ' + json.dumps(packets, separators=(",", ":")) + '})packets";',
-        "}",
-        "}",
-    ))
-    (core / "bridge_packets.h").write_text("\n".join(header) + "\n")
-    driver.write_text('#include "bridge_packets.h"\n' + source)
-    commands.write_text('#include "bridge_packets.h"\n' + metadata.replace(
-        "return MB_BRIDGE_BUILD_JSON;", "return bridge_packets::build_json(MB_BRIDGE_BUILD_JSON);"))
 
 
 def bridge_build_state(proxy):
@@ -2165,7 +2148,7 @@ def bridge_build_and_upload(proxy, base, edits):
         if subprocess.check_output(["git", "-C", str(checkout), "rev-parse", "HEAD"], text=True).strip() != revision:
             raise ValueError("The firmware source revision did not match.")
         if "packets" in edits:
-            apply_bridge_packets(checkout, edits["packets"])
+            apply_bridge_packets(checkout / "components" / "octo_core", edits["packets"])
         manifest.write_text(json.dumps({"base": base, "configuration": edits, "version": version,
                                         "official_version": source_version}) + "\n")
         env = {"MB_SRC": str(checkout), "MB_SOURCE_REVISION": revision, "MB_CHIP": "esp32c6", "MB_NETWORK": "thread",
@@ -2698,7 +2681,12 @@ def password_problem(password):
 
 # Without a session: the login page, its assets and the login API.
 BRAND_ICON = "/matter-builder-app-icoon-transparant.svg"
-PUBLIC_PATHS = {"/", "/index.html", "/esptool.js", "/yaml-editor.js", BRAND_ICON, "/api/auth", "/api/auth/login", "/api/auth/setup"}
+# The icons browsers ask for on their own; /favicon.ico is a PNG, which every
+# current browser reads by its content
+PNG_ICONS = {"/favicon.ico": "favicon.png", "/apple-touch-icon.png": "apple-touch-icon.png",
+             "/apple-touch-icon-precomposed.png": "apple-touch-icon.png"}
+PUBLIC_PATHS = {"/", "/index.html", "/esptool.js", "/yaml-editor.js", BRAND_ICON, *PNG_ICONS,
+                "/api/auth", "/api/auth/login", "/api/auth/setup"}
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -2859,6 +2847,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self.reply((HERE / "www" / "index.html").read_bytes(), ctype="text/html; charset=utf-8")
         if path == BRAND_ICON:
             return self.reply((HERE / "www" / BRAND_ICON[1:]).read_bytes(), ctype="image/svg+xml")
+        if path in PNG_ICONS:
+            return self.reply((HERE / "www" / PNG_ICONS[path]).read_bytes(), ctype="image/png")
         if path == "/yaml-editor.js":
             return self.reply((HERE / "www" / "yaml-editor.js").read_bytes(), ctype="text/javascript; charset=utf-8")
         if path == "/esptool.js":
@@ -3214,6 +3204,7 @@ if __name__ == "__main__":
     threading.Thread(target=night_loop, daemon=True).start()
     threading.Thread(target=health_loop, daemon=True).start()
     threading.Thread(target=found_sweep, daemon=True).start()
+    threading.Thread(target=register_iconset, daemon=True).start()
     fetch_server = Server(("::", FETCH_PORT), FetchHandler)
     threading.Thread(target=fetch_server.serve_forever, daemon=True).start()
     print(f"Matter Builder on port {PORT}, updates fetched from port {FETCH_PORT}", flush=True)

@@ -16,6 +16,7 @@ set -eo pipefail
 APP="${1:-generic}"
 DATA="${MB_DATA:-/data}"
 SRC="${MB_SRC:-/opt/octo-matter}"
+SPEC_GENERATOR="$SRC/tools/mb_generate.py"
 # An add-on installed from GitHub has only the generator and the examples in
 # the image; toolchain.sh fetched the firmware sources into /data
 [ -d "$SRC/components" ] || SRC="${MB_DATA:-/data}/sources"
@@ -24,6 +25,7 @@ CHIP="${MB_CHIP:-esp32c6}"
 NETWORK="${MB_NETWORK:-}"
 OUTPUT="${MB_FIRMWARE_OUTPUT:-$DATA/firmware}"
 BRIDGE_OPTIONS=()
+PACKET_BUILD=
 BUILD="$DATA/build/$APP-$CHIP${NETWORK:+-$NETWORK}"
 export CCACHE_DIR="$DATA/ccache"
 
@@ -56,8 +58,14 @@ if [ "$APP" = project ]; then
 fi
 if [ "$APP" = spec ]; then
     PROJECT_DIR="$DATA/work/spec"
+    # The generator bundled with the add-on also handles newer specs when
+    # the toolchain's downloaded firmware sources are from an older version.
+    if [ -f "$SPEC_GENERATOR" ]; then
+        mkdir -p "$WORK/tools"
+        cp "$SPEC_GENERATOR" "$WORK/tools/mb_generate.py"
+    fi
     python3 "$WORK/tools/mb_generate.py" "$SPEC_FILE" "$PROJECT_DIR"
-    SLUG=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["spec"]["slug"])' "$PROJECT_DIR/build-manifest.json")
+    read -r SLUG PACKET_BUILD < <(python3 -c 'import json,sys; s = json.load(open(sys.argv[1]))["spec"]; print(s["slug"], s.get("packet_build", ""))' "$PROJECT_DIR/build-manifest.json")
     BUILD="$DATA/build/spec-$SLUG"
     mkdir -p "$BUILD"
 fi
@@ -101,11 +109,12 @@ if [ -n "${MB_OTA_REPORT:-}" ]; then
         "$PROJECT" "$VERSION" "$size" "$free" "$((100 * free / slot))" "$slot" | tee "$MB_OTA_REPORT"
 fi
 
-cp "$BUILD/$PROJECT.bin" "$OUTPUT/$PROJECT-$VERSION.bin"
+IMAGE="$PROJECT${PACKET_BUILD:+_packets_$PACKET_BUILD}-$VERSION"
+cp "$BUILD/$PROJECT.bin" "$OUTPUT/$IMAGE.bin"
 if [ -z "${MB_FIRMWARE_OUTPUT:-}" ]; then
     mkdir -p "$OUTPUT/factory"
     # Bootloader, partition table and app in one image, for a new ESP32 over USB
-    (cd "$BUILD" && python -m esptool --chip "$CHIP" merge_bin -o "$OUTPUT/factory/$PROJECT-$VERSION-factory.bin" @flash_args)
-    echo "== Factory image: $PROJECT-$VERSION-factory.bin"
+    (cd "$BUILD" && python -m esptool --chip "$CHIP" merge_bin -o "$OUTPUT/factory/$IMAGE-factory.bin" @flash_args)
+    echo "== Factory image: $IMAGE-factory.bin"
 fi
-echo "== Ready: $PROJECT-$VERSION.bin ($(stat -c %s "$OUTPUT/$PROJECT-$VERSION.bin") bytes)"
+echo "== Ready: $IMAGE.bin ($(stat -c %s "$OUTPUT/$IMAGE.bin") bytes)"

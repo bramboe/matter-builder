@@ -957,7 +957,23 @@ const TEXT = {
   octoCommandsHelp: 'These are the standard Octo firmware commands. Bed addresses, PINs and any custom firmware changes are managed on the linked bridge.',
   octoConfigReview: 'Review Octo Bridge configuration',
   octoConfigBoard: 'This configuration requires an ESP32-C6.',
-  octoConfigImage: v => `No installer is available for Octo Bridge ${v}. Build this configuration in Configs or choose an available Octo Bridge version in Catalog.`,
+  octoInstallerTitle: 'Choose an Octo Bridge installer',
+  octoInstallerMissing: v => `Octo Bridge ${v} has no ready-to-use installer.`,
+  octoInstallerResolve: 'Choose how to continue before connecting your ESP32.',
+  octoInstallerPick: v => `Use Octo bed bridge ${v}`,
+  octoInstallerStock: 'Install the official firmware over Thread. You can set up your beds after installation.',
+  octoInstallerSelected: (saved, selected) => `This installation uses official version ${selected}. Your saved configuration stays on ${saved}.`,
+  octoInstallerChanged: 'The selected release is no longer available. Choose an installer again.',
+  octoInstallerBuild: 'Build an installer',
+  octoInstallerBuildHelp: 'Build from the source included with this add-on, using the version number in your saved configuration.',
+  octoInstallerBuildSettings: 'Set up firmware builds',
+  octoInstallerBuildSettingsHelp: 'Enable Developer mode and install the build tools in Settings. Then open this configuration again.',
+  octoInstallerBuilding: 'Building the installer…',
+  octoInstallerBuildBusy: 'Another task is running. Wait for it to finish, then try again.',
+  octoInstallerBuildFailed: 'The build failed. Check the build log, then try again or choose another installer.',
+  octoInstallerBuildMissing: 'The installer is still unavailable. Check the build log or choose another installer.',
+  octoInstallerCatalog: 'Browse Octo firmware',
+  octoInstallerCatalogHelp: 'Check the Catalog for an available Octo Bridge release.',
   startEmpty: 'Empty', fromConfigs: 'Saved configurations', fromRecipes: 'Recipes', skipConfiguration: 'Continue without a configuration', saveToConfigs: 'Save a reusable copy',
   saveToConfigsHelp: 'Find it later in Configs to reuse the connections, Bluetooth commands and rules on another ESP32.',
   configOk: (n, c) => `${n}: ${c} connection${c === 1 ? '' : 's'}.`, applyTo: 'Apply to a device', noGeneric: 'No linked generic device yet.',
@@ -3295,17 +3311,19 @@ function specRow(sp) {
   else if (sp.ble_commands) facts.push(t('specBleCommands', sp.ble_commands));
   else if (sp.requires?.includes('bluetooth')) facts.push(t('bleTitle'));
   const summary = sp.error || facts.join(' · ') || t('noSpecConnections');
+  const installerIssue = octoInstallerIssue(sp);
   const files = dev ? [
     ...[...sp.firmware].reverse().map(file => [file, t('downloadUpdate')]),
     ...[...sp.factory].reverse().map(file => [file, t('downloadInstaller')]),
   ] : [];
   return `<div class="spec-row" data-config="${esc(sp.slug)}">
     <div class="spec-name">
-      <span class="ico" aria-hidden="true">${icon('recipe')}</span><span class="info">${esc(sp.name)}<span class="sub ${sp.error ? 'warnText' : ''}">${esc(summary)}</span></span>
+      <span class="ico" aria-hidden="true">${icon('recipe')}</span><span class="info">${esc(sp.name)}<span class="sub ${sp.error ? 'warnText' : ''}">${esc(summary)}</span>
+        ${installerIssue ? `<span class="sub warnText">${esc(installerIssue)}</span>` : ''}</span>
     </div>
     <div class="spec-actions">
       <button class="text" aria-label="${t('edit')} ${esc(sp.name)}" onclick="editSpec('${sp.slug}')">${t('edit')}</button>
-      ${sp.error ? '' : `<button class="spec-use" aria-label="${t('specUse')} ${esc(sp.name)}" onclick="useConfig('${sp.slug}')">${t('specUse')}</button>`}
+      ${sp.error ? '' : `<button class="spec-use" aria-label="${t(installerIssue ? 'octoInstallerTitle' : 'specUse')} · ${esc(sp.name)}" onclick="useConfig('${sp.slug}')">${t(installerIssue ? 'octoInstallerTitle' : 'specUse')}</button>`}
       <details class="more"><summary aria-label="${t('more')}">${icon('dots')}</summary><div class="pop" style="bottom:auto;top:100%">
         ${sp.error ? '' : `<button onclick="shareSpec('${sp.slug}')">${t('share')}</button>`}
         ${dev ? `<button onclick="buildSpec('${sp.slug}')" ${sp.error || !state.toolchain || state.job.running ? 'disabled' : ''}>${t('build')}</button>` : ''}
@@ -3325,8 +3343,9 @@ async function useConfig(slug) {
     const spec = await parseSpec(text);
     const saved = (specs || []).find(s => s.slug === slug);
     const octoConfig = spec.device.app === 'octo_bridge' ? spec : null;
+    const choice = octoConfig ? exactOctoInstaller(spec.device, saved) : null;
     openWizard('recipeTarget', null, {recipe: {title: spec.name, rows: spec.rows, text}, configText: text, configSlug: slug, octoConfig,
-      configFactory: saved?.factory.at(-1), configNeedsBuild: spec.components.length > 0});
+      choice, file: choice?.file || null, configFactory: saved?.factory.at(-1), configNeedsBuild: spec.components.length > 0});
   } catch (e) { toast(e.message); }
 }
 
@@ -5198,7 +5217,7 @@ function openWizard(step, host, extra) {
 }
 function installConfigOnNewBoard() {
   if (wiz.octoConfig) {
-    selectOctoInstaller(wiz.octoConfig, (specs || []).find(sp => sp.slug === wiz.configSlug) || {slug: wiz.configSlug, factory: []});
+    if (!wiz.file) return;
     wiz.chip = 'esp32c6';
     go('board');
     return;
@@ -5214,13 +5233,126 @@ function installConfigOnNewBoard() {
   go('board');
 }
 
-function selectOctoInstaller(spec, saved) {
-  const {app, board, version} = spec.device;
-  const built = `${saved.slug.replaceAll('-', '_')}-${version}-factory.bin`;
-  const release = (state.release_factory || []).find(f => f.official && f.app === app && f.version === version && f.chip === 'esp32c6' && f.network === 'thread');
-  wiz.octoConfig = spec;
-  wiz.file = chipKey(board) === 'esp32c6' ? (saved.factory.includes(built) ? built : release?.file || null) : null;
-  wiz.choice = wiz.file ? {chip: 'esp32c6', title: `${appTitle(app)} ${version}`} : null;
+function octoInstaller(file, version) {
+  return {file, version, chip: 'esp32c6', title: `${appTitle('octo_bridge')} ${version}`};
+}
+
+function octoReleaseInstallers() {
+  return (state.release_factory || []).filter(f => f.official && f.app === 'octo_bridge' &&
+    f.chip === 'esp32c6' && f.network === 'thread' && f.file);
+}
+
+function exactOctoInstaller(device, saved) {
+  if (chipKey(device.board) !== 'esp32c6') return null;
+  const {version} = device;
+  const built = saved && `${saved.slug.replaceAll('-', '_')}-${version}-factory.bin`;
+  if (saved?.factory.includes(built)) return octoInstaller(built, version);
+  const release = octoReleaseInstallers().find(f => f.version === version);
+  return release ? octoInstaller(release.file, version) : null;
+}
+
+function octoInstallerIssue(saved) {
+  if (saved.error || saved.app !== 'octo_bridge') return '';
+  if (chipKey(saved.board || 'esp32-c6') !== 'esp32c6') return t('octoConfigBoard');
+  return exactOctoInstaller({...saved, board: saved.board || 'esp32-c6'}, saved) ? '' : t('octoInstallerMissing', saved.version);
+}
+
+function latestOctoRelease() {
+  return octoReleaseInstallers().reduce((latest, release) =>
+    !latest || newer(release.version, latest.version) ? release : latest, null);
+}
+
+function continueWithOctoInstaller(installer) {
+  wiz.choice = installer;
+  wiz.file = installer.file;
+  wiz.keepFile = true;
+  if (wiz.step === 'recipeTarget') installConfigOnNewBoard();
+  else go('configure');
+}
+
+function chooseOfficialOctoInstaller(button) {
+  if (wiz.octoBuild) return;
+  const {file, version} = button.dataset;
+  if (octoReleaseInstallers().some(release => release.file === file && release.version === version)) {
+    continueWithOctoInstaller(octoInstaller(file, version));
+  } else {
+    wiz.error = t('octoInstallerChanged');
+    renderWizard();
+  }
+}
+
+function browseOctoInstallers() {
+  completeWizard(() => {
+    Object.assign(catalogFilters, defaultCatalogFilters, {type: 'firmware', source: 'official'});
+    selectedBedFamily = '';
+    catalogQuery = 'Octo';
+    markCatalogFilters();
+    goTab('catalog');
+  });
+}
+
+function octoInstallerRecovery(device) {
+  if (chipKey(device.board) !== 'esp32c6') {
+    return `<p class="notice">${t('octoConfigBoard')}</p><div class="choices">
+      ${choice(false, 'store', t('octoInstallerCatalog'), t('octoInstallerCatalogHelp'), 'browseOctoInstallers()')}</div>`;
+  }
+  const release = latestOctoRelease(), canBuild = state.settings.dev_mode && state.toolchain;
+  return `<p class="notice">${esc(t('octoInstallerMissing', device.version))} ${t('octoInstallerResolve')}</p>
+    <div class="choices">
+      ${release ? choice(false, 'chip', esc(t('octoInstallerPick', release.version)), t('octoInstallerStock'), 'chooseOfficialOctoInstaller(this)',
+        `data-file="${esc(release.file)}" data-version="${esc(release.version)}" ${wiz.octoBuild ? 'disabled' : ''}`) : ''}
+      ${canBuild ? choice(false, 'chip', t(wiz.octoBuild ? 'octoInstallerBuilding' : 'octoInstallerBuild'),
+        t('octoInstallerBuildHelp'), 'buildOctoInstaller()', wiz.octoBuild ? 'disabled' : '')
+        : choice(false, 'chip', t('octoInstallerBuildSettings'), t('octoInstallerBuildSettingsHelp'), "completeWizard(() => $('#settingsBtn').click())")}
+      ${choice(false, 'store', t('octoInstallerCatalog'), t('octoInstallerCatalogHelp'), 'browseOctoInstallers()')}
+    </div>
+    ${wiz.octoBuild ? `<p class="sub" role="status">${t('octoInstallerBuilding')}</p>` : ''}
+    ${wiz.error ? `<p class="error" role="alert">${esc(wiz.error)}</p>` : ''}`;
+}
+
+async function buildOctoInstaller() {
+  if (wiz.octoBuild || wiz.file) return;
+  const current = wiz, slug = current.configSlug, device = current.octoConfig.device;
+  const attempt = {};
+  const matches = () => wiz === current && current.octoBuild === attempt;
+  current.octoBuild = attempt;
+  current.error = '';
+  renderWizard();
+  try {
+    const result = await api(`api/specs/${encodeURIComponent(slug)}/build`, {});
+    if (result.error) throw new Error(result.error);
+    while (matches()) {
+      const job = await api('api/job');
+      if (!matches()) return;
+      if (job.kind === 'build' && job.title === `spec:${slug}`) {
+        if (!job.running) {
+          if (!job.ok) throw new Error(t('octoInstallerBuildFailed'));
+          break;
+        }
+      } else {
+        if (!result.started) throw new Error(t('octoInstallerBuildBusy'));
+        break; // The global activity slot can be taken by another task.
+      }
+      await new Promise(resolve => setTimeout(resolve, 1500));
+    }
+    if (!matches()) return;
+    invalidateSpecs();
+    await loadSpecs();
+    if (!matches()) return;
+    const installer = exactOctoInstaller(device, specs.find(sp => sp.slug === slug));
+    if (!installer) throw new Error(t('octoInstallerBuildMissing'));
+    current.octoBuild = null;
+    current.choice = installer;
+    current.file = installer.file;
+    current.keepFile = true;
+    renderWizard();
+    if (['recipeTarget', 'configure'].includes(current.step)) $('#taskTitle').focus();
+  } catch (error) {
+    if (!matches()) return;
+    current.octoBuild = null;
+    current.error = error.message;
+    renderWizard();
+  }
 }
 function closeWizard() { return leaveTask(); }
 function completeWizard(next) {
@@ -5369,15 +5501,21 @@ async function startWith(kind, value) {
     if (wiz !== current || wiz.step !== 'how' || wiz.how !== 'config') return;
     if (spec.device.app === 'octo_bridge') {
       if (wiz.chip !== 'esp32c6') return;
-      selectOctoInstaller(spec, (specs || []).find(sp => sp.slug === value) || {slug: value, factory: []});
+      wiz.octoConfig = spec;
+      wiz.configSlug = value;
+      wiz.octoBuild = null;
+      wiz.choice = exactOctoInstaller(spec.device, (specs || []).find(sp => sp.slug === value));
+      wiz.file = wiz.choice?.file || null;
+      wiz.keepFile = false;
       wiz.configSpec = null;
       wiz.setupText = text;
-      wiz.how = null;
       wizNext();
       return;
     }
   }
-  wiz.octoConfig = null;
+  if (wiz.octoConfig) {
+    Object.assign(wiz, {octoConfig: null, octoBuild: null, configSlug: null, choice: null, file: null, keepFile: false});
+  }
   const c = factoryChoices().find(x => x.chip === wiz.chip && isGenericFile(x.file));
   if (kind === 'firmware') { wiz.choice = factoryChoices().find(x => x.file === value) || null; wiz.file = value; wiz.editorReady = false; wizNext(); return; }
   if (!wiz.keepFile && c) { wiz.choice = c; wiz.file = c.file; }
@@ -5419,8 +5557,12 @@ function renderWizard() {
     title = t(wiz.configSlug ? 'specTarget' : 'wRecipeTarget');
     const generic = wiz.octoConfig ? [] : state.proxies.filter(p => { const r = running(statuses[p.id]); return r && isGenericApp(r.app); });
     if (!wiz.configText) wiz.configText = wiz.recipe.text || specYaml(wiz.recipe.title, wiz.recipe.rows);
-    body = `<div class="sub">${esc(wiz.recipe.title)}</div><div class="choices">
-      ${wiz.deviceOnly ? '' : choice(false, 'usb', t(wiz.configSlug ? 'specNewBoard' : 'recipeNew'), wiz.configSlug ? '' : t('recipeNewHelp'),
+    if (wiz.octoConfig && !wiz.file) {
+      title = t('octoInstallerTitle');
+      body = `<h3>${esc(wiz.recipe.title)}</h3>${octoInstallerRecovery(wiz.octoConfig.device)}
+        <div class="actions end"><button class="plain" onclick="closeWizard()">${t('back')}</button></div>`;
+    } else body = `<div class="sub">${esc(wiz.recipe.title)}</div><div class="choices">
+      ${wiz.deviceOnly ? '' : choice(false, 'usb', t(wiz.configSlug ? 'specNewBoard' : 'recipeNew'), wiz.octoConfig ? esc(wiz.choice.title) : wiz.configSlug ? '' : t('recipeNewHelp'),
         wiz.configSlug ? 'installConfigOnNewBoard()' : "go('board')")}
       ${generic.map(p => choice(false, 'chip', t(wiz.configSlug ? 'specExisting' : 'recipeOn', esc(p.name)), t('recipeOnHelp'), `const r = wiz.recipe; completeWizard(() => openDevice('${p.id}', 'connections', r))`)).join('')}</div>
       ${!wiz.octoConfig && (wiz.deviceOnly || wiz.configSlug) && !generic.length ? `<p class="sub">${t('noGeneric')}</p>` : ''}
@@ -5466,7 +5608,7 @@ function renderWizard() {
       title = t('howPickConfig');
       body = `<div class="choices">${(specs || []).map(sp => {
         const incompatible = sp.app === 'octo_bridge' && wiz.chip !== 'esp32c6';
-        return choice(false, 'recipe', esc(sp.name), esc(incompatible ? t('octoConfigBoard') : sp.error || sp.slug), `startWith('config', '${esc(sp.slug)}')`, incompatible || sp.error ? 'disabled' : '');
+        return choice(false, 'recipe', esc(sp.name), esc(incompatible ? t('octoConfigBoard') : sp.error || octoInstallerIssue(sp) || sp.slug), `startWith('config', '${esc(sp.slug)}')`, incompatible || sp.error ? 'disabled' : '');
       }).join('')}</div>
         <div class="actions end"><button class="plain" onclick="wiz.how = null; renderWizard()">${t('back')}</button></div>`;
     } else {
@@ -5486,11 +5628,14 @@ function renderWizard() {
       <div class="actions end"><button class="plain" onclick="wizPrev()">${t('back')}</button><button class="pri" onclick="wizNext()">${t('next')}</button></div>`;
   } else if (wiz.step === 'configure' && wiz.octoConfig) {
     const spec = wiz.octoConfig;
-    title = t('octoConfigReview');
-    body = `<h3>${esc(spec.name)}</h3>${savedOctoCommands(spec.device)}
-      ${wiz.file ? '' : `<p class="notice" role="status">${esc(t('octoConfigImage', spec.device.version))}</p>`}
+    title = t(wiz.file ? 'octoConfigReview' : 'octoInstallerTitle');
+    const selectedVersion = wiz.choice?.version;
+    const installerDetails = selectedVersion && selectedVersion !== spec.device.version
+      ? `<p class="notice">${esc(t('octoInstallerSelected', spec.device.version, selectedVersion))}</p>` : '';
+    body = `<h3>${esc(spec.name)}</h3>
+      ${wiz.file ? installerDetails + savedOctoCommands({...spec.device, version: selectedVersion}) : octoInstallerRecovery(spec.device)}
       <div class="actions end"><button class="plain" onclick="wizPrev()">${t('back')}</button>
-        <button class="pri" onclick="wizNext()" ${wiz.file ? '' : 'disabled'}>${t('next')}</button></div>`;
+        ${wiz.file ? `<button class="pri" onclick="wizNext()">${t('next')}</button>` : ''}</div>`;
   } else if (wiz.step === 'configure') {
     title = t('wConfigure');
     const cb = BOARDS[wiz.chip];

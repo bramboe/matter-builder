@@ -74,7 +74,7 @@ a:not(.button){color:var(--primary)}
 /* The main action of a tab floats at the bottom right, as Home Assistant's own "Add device".
    The list ends with as much room as the button takes, so the last card can always scroll clear. */
 :root{--fab-gap:24px;--fab-height:48px}
-#devicesTab,#developerTab{padding-block-end:calc(var(--fab-height) + var(--fab-gap) * 2 + max(var(--taskbar-height,0px),env(safe-area-inset-bottom)))}
+#devicesTab,#catalogTab{padding-block-end:calc(var(--fab-height) + var(--fab-gap) * 2 + max(var(--taskbar-height,0px),env(safe-area-inset-bottom)))}
 .fab{position:fixed;z-index:3;inset-inline-end:calc(var(--fab-gap) + env(safe-area-inset-right));
   inset-block-end:calc(var(--fab-gap) + max(var(--taskbar-height,0px),env(safe-area-inset-bottom)));
   min-height:var(--fab-height);padding-inline:18px;border-radius:calc(var(--fab-height) / 2);box-shadow:var(--shadow)}
@@ -716,6 +716,7 @@ button.catalog-tip-trigger{position:relative}
     </div>
   </div>
   <div id="catalogBody" data-view="cards"></div>
+  <button type="button" class="pri fab" id="newRecipeBtn" onclick="newSpec()"><span data-t="newSpec"></span></button>
 </section>
 
 
@@ -3383,8 +3384,7 @@ function myRecipesHtml(found, filters, query) {
   if (!specs) return '';
   const onlyMine = filters.source === 'mine';
   if (!found.length && !onlyMine) return '';
-  const head = `<div class="section-head"><h2>${t('myConfigs')}</h2><span class="grow"></span>
-    <button type="button" class="text" onclick="newSpec()">${icon('plus')} ${t('newSpec')}</button></div>
+  const head = `<div class="section-head"><h2>${t('myConfigs')}</h2></div>
     <p class="sub config-intro">${t('specHelp')}</p>`;
   const empty = specs.length ? `<p class="sub">${query ? esc(t('noConfigMatch', catalogQuery.trim())) : 'No recipes match these filters.'}</p>`
     : `<div class="empty"><h2>${t('noConfigsTitle')}</h2><p class="sub">${t('noConfigs')}</p>

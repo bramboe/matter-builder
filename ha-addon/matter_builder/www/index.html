@@ -71,8 +71,8 @@ a:not(.button){color:var(--primary)}
 .card .acts{display:flex;flex-wrap:wrap;align-items:center;gap:2px;margin:auto -8px -6px;padding-top:10px}
 .card .acts details.more{margin-left:auto}
 #devicesTab{padding-block-end:72px}
-#addDeviceBtn{position:fixed;z-index:3;inset-inline-end:max(16px,env(safe-area-inset-right));
-  inset-block-end:calc(16px + max(var(--taskbar-height,0px),env(safe-area-inset-bottom)));
+#addDeviceBtn{position:fixed;z-index:3;inset-inline-end:calc(24px + env(safe-area-inset-right));
+  inset-block-end:calc(24px + max(var(--taskbar-height,0px),env(safe-area-inset-bottom)));
   min-height:48px;padding-inline:18px;border-radius:24px;box-shadow:var(--shadow)}
 #addDeviceBtn > span[aria-hidden]{display:flex}
 #deviceGrid{grid-template-columns:repeat(auto-fill,minmax(min(100%,360px),1fr))}

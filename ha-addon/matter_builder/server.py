@@ -2967,7 +2967,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 else:
                     staged.replace(spec_file)
             except FileExistsError:
-                return self.reply({"error": "A configuration with this name already exists in My configs. Choose another name."}, 409)
+                return self.reply({"error": "A recipe with this name already exists in My recipes. Choose another name."}, 409)
             finally:
                 staged.unlink(missing_ok=True)
             return self.reply({"spec": spec})

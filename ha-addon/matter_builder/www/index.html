@@ -229,9 +229,6 @@ button.catalog-tip-trigger.optional{border:1px dashed var(--mute)}
 #developerTab{max-width:900px;margin-inline:auto}
 .config-intro{margin:0 2px 16px}
 .spec-list{display:grid;gap:8px}
-.spec-builds.spec-builds-inline{margin:0;padding-top:4px;border-top:1px solid var(--line);flex-basis:100%}
-.spec-builds-inline .row{flex-wrap:wrap}
-.spec-builds-inline .label{min-width:0;overflow-wrap:anywhere}
 .spec-row{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);display:flex;align-items:center;gap:12px;padding:10px 12px;flex-wrap:wrap}
 .spec-name{display:flex;align-items:center;gap:8px;min-width:0;min-height:44px;flex:1 1 160px;font-weight:500}
 .spec-name .info{min-width:0;overflow-wrap:anywhere}
@@ -645,7 +642,6 @@ button.catalog-tip-trigger{position:relative}
     <nav aria-label="Matter Builder">
       <button data-tab="devices" class="on" aria-current="page" data-t="tabDevices"></button>
       <button data-tab="catalog" data-t="tabCatalog"></button>
-      <button data-tab="developer" data-t="tabConfigs" id="devTabBtn"></button>
     </nav>
     <span class="grow"></span>
     <label class="search" id="searchBox"><svg viewBox="0 0 24 24"><path d="M9.5,3A6.5,6.5 0 0,1 16,9.5C16,11.11 15.41,12.59 14.44,13.73L14.71,14H15.5L20.5,19L19,20.5L14,15.5V14.71L13.73,14.44C12.59,15.41 11.11,16 9.5,16A6.5,6.5 0 0,1 3,9.5A6.5,6.5 0 0,1 9.5,3M9.5,5C7,5 5,7 5,9.5C5,12 7,14 9.5,14C12,14 14,12 14,9.5C14,7 12,5 9.5,5Z"/></svg>
@@ -656,7 +652,7 @@ button.catalog-tip-trigger{position:relative}
     <button class="plain" id="settingsBtn" aria-label="Settings" title="Settings"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.43,11L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.5,5.32 14.87,5.07L14.5,2.42C14.46,2.18 14.25,2 14,2H10C9.75,2 9.54,2.18 9.5,2.42L9.13,5.07C8.5,5.32 7.96,5.66 7.44,6.05L4.95,5.05C4.73,4.96 4.46,5.05 4.34,5.27L2.34,8.73C2.21,8.95 2.27,9.22 2.46,9.37L4.57,11C4.53,11.34 4.5,11.67 4.5,12C4.5,12.33 4.53,12.65 4.57,12.97L2.46,14.63C2.27,14.78 2.21,15.05 2.34,15.27L4.34,18.73C4.46,18.95 4.73,19.03 4.95,18.95L7.44,17.94C7.96,18.34 8.5,18.68 9.13,18.93L9.5,21.58C9.54,21.82 9.75,22 10,22H14C14.25,22 14.46,21.82 14.5,21.58L14.87,18.93C15.5,18.67 16.04,18.34 16.56,17.94L19.05,18.95C19.27,19.03 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.97Z"/></svg><span class="settings-label" data-t="settings"></span></button>
   </div>
   <div class="bar spec-editor-bar" id="specEditorBar" hidden>
-    <button class="icon" id="specBack" aria-label="Back to configs"></button>
+    <button class="icon" id="specBack" aria-label="Back to Catalog"></button>
     <h1 id="specTitle" tabindex="-1"></h1>
     <button id="specCheck" data-t="specValidate"></button>
     <button class="pri" id="specSave" data-t="save"></button>
@@ -722,22 +718,6 @@ button.catalog-tip-trigger{position:relative}
   <div id="catalogBody" data-view="cards"></div>
 </section>
 
-<!-- Developer -->
-<section id="developerTab" hidden>
-  <div class="section-head"><h2 data-t="myConfigs"></h2></div>
-  <p class="sub config-intro" id="specHelp" data-t="specHelp"></p>
-  <div class="spec-list" id="specList"></div>
-  <button type="button" class="pri fab" id="newSpecBtn" onclick="newSpec()"><span data-t="newSpec"></span></button>
-  <details class="spec-builds" id="devBlock" hidden>
-    <summary data-t="otherFirmwareBuilds"></summary>
-    <div class="card">
-      <div class="row"><div class="label"><h3 data-t="genericTitle"></h3><div class="sub" data-t="genericHelp"></div></div>
-        <button id="buildGenericBtn" data-t="build"></button></div>
-      <div class="sub" id="buildHint" data-t="installToolchain"></div>
-      <div><h3 data-t="ownBuilds"></h3><div id="builds" class="spec-build-list"></div></div>
-    </div>
-  </details>
-</section>
 
 <section id="specEditor" hidden>
   <div class="error" id="specError" role="alert" hidden></div>
@@ -797,7 +777,7 @@ button.catalog-tip-trigger{position:relative}
           <div class="sub" data-t="manageHelp" style="margin-top:12px"></div>
           <div class="error" id="mError" role="alert" hidden></div>
           <div class="notice" id="mNotice" hidden></div>
-          <div class="actions end"><button class="plain" id="mSaveConfig" data-t="saveConfig"></button><button id="mBleTest" hidden>Test Bluetooth connection</button><span class="grow"></span><button id="mSave" data-t="saveDraft"></button>
+          <div class="actions end"><button class="plain" id="mSaveConfig" data-t="saveConfig"></button><button class="plain" id="mCopyBoard" data-t="copyToBoard"></button><button id="mBleTest" hidden>Test Bluetooth connection</button><span class="grow"></span><button id="mSave" data-t="saveDraft"></button>
             <button class="pri" id="mDeploy" hidden>Apply to device</button>
             <button class="pri" id="mApply" data-t="applyRestart" hidden></button>
             <button class="pri" id="mConfirm" data-t="keep" hidden></button></div>
@@ -906,6 +886,11 @@ button.catalog-tip-trigger{position:relative}
         <div class="sub warnText" id="systemAdvice" hidden></div>
         <div class="row"><div class="label">Toolchain<div class="sub" id="toolchainText"></div></div>
           <button id="toolchainBtn" data-t="install"></button></div>
+        <div class="row"><div class="label"><span data-t="genericTitle"></span><div class="sub" data-t="genericHelp"></div>
+          <div class="sub" id="buildHint" data-t="installToolchain"></div></div>
+          <button id="buildGenericBtn" data-t="build"></button></div>
+        <h3 style="margin-top:16px" id="buildsTitle" data-t="ownBuilds"></h3>
+        <div id="builds" class="spec-build-list"></div>
       </div></section>
     </div>
   </div>
@@ -941,14 +926,15 @@ ${esc(text)}</textarea></mb-yaml-editor>`;
 }
 
 const TEXT = {
-  tabDevices: 'Devices', tabCatalog: 'Catalog', tabConfigs: 'My configs', configuration: 'Configuration', searchDevices: 'Search devices', searchCatalog: 'Search the catalog', searchConfigs: 'Search configs', clearSearch: 'Clear search',
+  tabDevices: 'Devices', tabCatalog: 'Catalog', configuration: 'Configuration', searchDevices: 'Search devices', searchCatalog: 'Search the catalog', clearSearch: 'Clear search',
   noDeviceMatch: q => `No devices match “${q}”`, noDeviceMatchHelp: 'Search looks at the name, the address and the connected items.',
-  myConfigs: 'My configs', saveConfig: 'Save as configuration', configSaved: n => `Saved “${n}” in My configs.`,
+  myConfigs: 'My recipes', saveConfig: 'Save as recipe', configSaved: n => `Saved “${n}” in Catalog › My recipes.`,
+  copyToBoard: 'Copy to a new board',
   editConfiguration: 'Edit configuration',
   octoCatalogInstallHelp: 'Install on an ESP32-C6. After linking the bridge, you can set up your beds under Devices.',
   setUpBeds: 'Set up beds',
-  octoSaveCopyHelp: 'Save these Bluetooth commands in My configs for a future installation.',
-  octoSavedCopyHint: 'Use your saved configuration in My configs to build an installer with these commands.',
+  octoSaveCopyHelp: 'Save these Bluetooth commands as a recipe for a future installation.',
+  octoSavedCopyHint: 'Find it in Catalog › My recipes to install these commands on a board.',
   readOnlyYaml: 'This firmware has no configurable connections; its own settings are on its page. This is what it reports:',
   settingsHelp: 'Settings of this device. Saving restarts it; on Thread it is back within a minute.', settingsLabel: 'Settings', bedsLabel: 'Beds', bedN: n => `Bed ${n}`, bedsHelp: 'Beds are paired and named on the device page:', settingsYamlHelp: 'Edit the same device settings as in the visual editor.',
   settingsYamlBlock: 'Use the settings: block with two spaces before each setting.',
@@ -961,7 +947,7 @@ const TEXT = {
   wConfigure: 'Configure the device', configureHelp: 'Its name and what is connected. Wi-Fi, Thread and passwords are set on the device itself.',
   octoCommands: 'Bluetooth commands',
   octoCommandsHelp: 'This is the command set for the selected installer. Set bed addresses and PINs on the linked bridge after installation.',
-  octoEditorPurpose: 'Save the device name and Bluetooth commands for a future installation. To use edited commands, choose Use on a device in My configs and build its installer.',
+  octoEditorPurpose: 'Save the device name and Bluetooth commands for a future installation. To use edited commands, open the recipe in Catalog › My recipes and choose Install.',
   octoCustomInstaller: 'Build an installer to use the Bluetooth commands saved in this configuration.',
   octoStockCommands: 'This installer uses the official command set. Your Bluetooth edits stay in the saved configuration.',
   octoAddHelp: 'Octo Bridge has fixed movement and light actions. To create extra Bluetooth actions as Matter buttons, start a separate configuration for a generic ESP32-C6.',
@@ -969,7 +955,7 @@ const TEXT = {
   octoConfigReview: 'Review Octo Bridge configuration',
   octoConfigBoard: 'This configuration requires an ESP32-C6.',
   octoInstallerTitle: 'Choose an Octo Bridge installer',
-  octoInstallerMissing: v => `Octo Bridge ${v} has no ready-to-use installer.`,
+  octoInstallerMissing: () => 'There is no ready-to-use Octo Bridge installer yet.',
   octoInstallerFromConfigs: (open, action) => `Select “${open}”, then “${action}”.`,
   octoInstallerFromPicker: action => `Open this configuration and select “${action}”.`,
   octoInstallerUseOfficial: action => `Select “${action}” to continue with the official firmware.`,
@@ -989,8 +975,8 @@ const TEXT = {
   octoInstallerBuildMissing: 'The installer is still unavailable. Check the build log or choose another installer.',
   octoInstallerCatalog: 'Browse Octo firmware',
   octoInstallerCatalogHelp: 'Check the Catalog for an available Octo Bridge release.',
-  startEmpty: 'Empty', fromConfigs: 'Saved configurations', fromRecipes: 'Recipes', skipConfiguration: 'Continue without a configuration', saveToConfigs: 'Save as configuration',
-  saveToConfigsHelp: 'Find it in My configs to reuse the connections, Bluetooth commands and rules on another ESP32.',
+  startEmpty: 'Empty', fromConfigs: 'My recipes', fromRecipes: 'Recipes', skipConfiguration: 'Continue without a configuration', saveToConfigs: 'Save as recipe',
+  saveToConfigsHelp: 'Find it in Catalog › My recipes to put the same connections, Bluetooth commands and rules on another ESP32.',
   configOk: (n, c) => `${n}: ${c} connection${c === 1 ? '' : 's'}.`, applyTo: 'Apply to a device', noGeneric: 'No linked generic device yet.',
   applyingConfig: 'Applying the configuration…', configOnTrial: s => `The new connections run on trial: keep them within ${s} s, or the device goes back.`,
   configKept: 'Kept. The device is ready.', configFailed: e => `The configuration was not applied: ${e}`,
@@ -1124,7 +1110,7 @@ const TEXT = {
   needsLabel: 'Needs', components: 'Components',
   missingComponent: type => `This device's firmware has no “${type}” (a component): install firmware built with that component first.`,
   componentsHelp: 'Connection types of their own, built into the firmware: change them in YAML; installing needs a build (developer mode) or a package.',
-  needsBuild: 'This config uses components: build it first (My configs › More › Build, developer mode), or install it as a package from the catalog.', needsBluetooth: 'This firmware uses Bluetooth for what it does (not only for pairing): the ESP32 needs Bluetooth, and shares its radio between Bluetooth and the network.', firmwareTooOld: v => `IR and Bluetooth connections need generic firmware ${v} or newer: update the device first (Firmware tab).`,
+  needsBuild: 'This config uses components: build it first (Catalog › My recipes › More › Build, developer mode), or install it as a package from the catalog.', needsBluetooth: 'This firmware uses Bluetooth for what it does (not only for pairing): the ESP32 needs Bluetooth, and shares its radio between Bluetooth and the network.', firmwareTooOld: v => `IR and Bluetooth connections need generic firmware ${v} or newer: update the device first (Firmware tab).`,
   needCode: n => `Enter an IR code for ${n}, like nec:00FF:A25D.`, needMac: n => `Enter a Bluetooth address for ${n}, like AA:BB:CC:DD:EE:FF.`, liveSend: 'Send', liveHere: 'here', liveAway: 'away', liveSeen: s => `seen ${s} s ago`,
   saved: 'Saved as draft.', unchanged: 'Nothing changed.', applying: 'Restarting with the new connections…',
   trialLeft: s => `On trial: keep within ${s} s.`, kept: 'Kept.', yamlError: e => `YAML: ${e}`,
@@ -1158,7 +1144,7 @@ const TEXT = {
   boardNoRelease: 'No firmware for it in this release yet', boardOthers: 'Boards that do not work',
   wHow: 'How do you want to start?', howScratch: 'From scratch', howScratchHelp: 'Add what is connected, one thing at a time',
   howTemplate: 'From a template', howTemplateHelp: 'A ready-made recipe from the catalog; change it as you like',
-  howConfig: 'Reuse a saved configuration', howConfigHelp: 'Use connections and rules you saved in My configs.',
+  howConfig: 'Use one of my recipes', howConfigHelp: 'Connections and rules you saved yourself.',
   howReady: 'Ready-made firmware, nothing to build here', howOwn: 'Own build', howPickTemplate: 'Choose a template', howPickConfig: 'Choose a config',
   howNeedsBluetooth: b => `Needs Bluetooth, which does not work on the ${b}`, howNone: 'Nothing here yet.',
   boardLimits: (b, list) => `Not on the ${b}: ${list}`, notOnBoard: b => `Does not work on the ${b}`,
@@ -1221,21 +1207,21 @@ const TEXT = {
   host: 'This host', cores: 'cores', memory: 'GB memory', disk: 'GB free',
   fewCores: 'Few cores or little memory: the first build takes an hour or more. More cores for the Home Assistant machine help most (about 1.5 GB memory per core).',
   toolchainReady: 'Ready', toolchainMissing: 'Not installed: about 6 GB, 15 minutes or more. Not included in backups.',
-  ownDevices: 'Own devices', noConfigsTitle: 'No saved configurations', noConfigs: 'Create a setup you want to reuse, or save one while setting up a device. To install standard firmware, start in Catalog.',
-  noConfigMatch: q => `No configs match “${q}”`, goDevices: 'Go to devices', newSpec: 'New config',
-  specHelp: 'Reuse your saved connections, Bluetooth commands and rules on a linked device or a new board.',
+  ownDevices: 'Own devices', noConfigsTitle: 'No recipes of your own yet', noConfigs: 'Save one from a device (Edit configuration › Save as recipe), or make a new one.',
+  noConfigMatch: q => `No recipes match “${q}”`, goDevices: 'Go to devices', newSpec: 'New recipe',
+  specHelp: 'Your own recipes: for a second device of the same kind, a replacement board, or to share.',
   specBleCommands: n => n === 1 ? '1 Bluetooth command' : `${n} Bluetooth commands`,
   specValidate: 'Validate', specDiscard: 'Discard unsaved changes to this config?', specExample: 'Choose an example',
   specSummary: (connections, rules) => [
     ...(connections ? [`${connections} connection${connections === 1 ? '' : 's'}`] : []),
     ...(rules ? [`${rules} rule${rules === 1 ? '' : 's'}`] : []),
   ],
-  specUse: 'Use on a device', specTarget: 'Use configuration on a device',
+  specUse: 'Install', specTarget: 'Install recipe',
   specNewBoard: 'Install on a new board', specExisting: n => `Apply to ${n}`,
   noSpecConnections: 'No connections or rules',
-  specBuildFiles: 'Build files', otherFirmwareBuilds: 'Other firmware builds', download: 'Download', downloadUpdate: 'Download update', downloadInstaller: 'Download installer',
+  specBuildFiles: 'Build files', otherFirmwareBuilds: 'Firmware builds', download: 'Download', downloadUpdate: 'Download update', downloadInstaller: 'Download installer',
   check: 'Check', save: 'Save', specOk: s => `Valid: ${s.name} ${s.version} (${s.app}).`, specSaved: 'Saved.', del: 'Delete',
-  build: 'Build', updateFile: 'Update file', factoryFile: 'For a new ESP32', confirmDelete: n => `Delete the spec “${n}”? Built files stay.`,
+  build: 'Build', updateFile: 'Update file', factoryFile: 'For a new ESP32', confirmDelete: n => `Delete the recipe “${n}”? Devices that use it keep working, and built files stay.`,
   standardBuilds: 'Standard firmware', genericTitle: 'Generic device', genericHelp: 'Build the standard firmware yourself, the same as the release.',
   ownBuilds: 'Own builds', noBuilds: 'Nothing built yet.', installToolchain: 'Install the toolchain first (Settings).',
   apps: {mb_generic: 'Generic device'},
@@ -2811,7 +2797,7 @@ function matchesCatalogCompatibility(it, {board, network, bluetooth}) {
 function catalogMatches(items, filters, query) {
   const {type, source, category} = filters;
   return items.filter(it => (type === 'all' || it.kind === type) &&
-    (source === 'any' || (source === 'official') === !!it.official) &&
+    (source === 'any' || source !== 'mine' && (source === 'official') === !!it.official) &&
     (category === 'all' || (it.kind === 'recipe' && recipeCategory(it) === category)) &&
     matchesCatalogCompatibility(it, filters) &&
     (!query || textMatches(catalogSearchText(it), query)));
@@ -2831,9 +2817,10 @@ function chooseCatalogFilter(filters, name, value, checked) {
 }
 function catalogFilterGroups(filters, withSort) {
   const items = catalogItems(), query = catalogSearchQuery();
-  const left = changes => catalogMatches(items, {...filters, ...changes}, query).length;
+  const left = changes => catalogMatches(items, {...filters, ...changes}, query).length + myRecipes({...filters, ...changes}, query).length;
   const present = new Set(items.filter(it => it.kind === 'recipe').map(recipeCategory));
-  const boards = new Set(items.flatMap(it => catalogVariants(it).map(variant => variant.chip)).filter(Boolean));
+  const boards = new Set([...items.flatMap(it => catalogVariants(it).map(variant => variant.chip)),
+    ...(specs || []).filter(sp => sp.app === 'generic' || sp.app === 'octo_bridge').map(sp => chipKey(sp.board || 'esp32-c6'))].filter(Boolean));
   const chosenBoards = filters.board === 'any' ? [] : filters.board.split(',');
   chosenBoards.forEach(chip => boards.add(chip));
   const boardOptions = [...boards].map(chip => [chip, catalogBoardName(chip)])
@@ -2855,7 +2842,11 @@ function catalogFilterGroups(filters, withSort) {
       help: 'Wi-Fi uses your wireless network. Thread requires a Thread border router.'},
     {...options('bluetooth', 'Bluetooth', catalogBluetoothOptions),
       help: 'Required means Bluetooth is needed to talk to an accessory. Optional means it can be enabled for compatible accessories.'},
-    options('source', 'Source', [['any', 'Any'], ['official', 'Official'], ['community', 'Community']]),
+    {...options('source', 'Source', [['any', 'Any'], ['official', 'Official'], ['community', 'Community'], ['mine', t('myConfigs')]]),
+      options: [['any', 'Any'], ['official', 'Official'], ['community', 'Community'], ['mine', t('myConfigs')]].map(([value, label]) => {
+        const changed = {...filters, source: value};
+        return {value, label, count: catalogMatches(items, changed, query).length + myRecipes(changed, query).length, checked: filters.source === value};
+      })},
   ];
 }
 const filterOption = (group, option, prefix = '') => `<label class="${option.child ? 'child' : ''}">
@@ -2996,6 +2987,7 @@ function renderBedRecipes(recipes, mobile) {
 let shownItems = [];
 function renderCatalog() {
   if (!catalogData && !catalogLoading && !recipes) loadCatalog();
+  if (!specs) loadSpecs();
   const q = catalogSearchQuery();
   const corrected = q !== catalogQuery.trim().toLowerCase();
   const items = catalogItems();
@@ -3029,15 +3021,16 @@ function renderCatalog() {
     <span class="ico" aria-hidden="true">${icon('bed')}</span>
     <span><b>Beds</b><span class="sub">${bedCount} recipes for adjustable beds, by brand</span></span>
     <span class="chev" aria-hidden="true"></span></button></div>` : '';
-  const resultCount = bedRecipes?.count ?? fw.length + visibleRecipes.length;
+  const mine = myRecipes({...filters, ...(filters.category === 'all' ? {} : {category: filters.category})}, q);
+  const resultCount = (bedRecipes?.count ?? fw.length + visibleRecipes.length) + mine.length;
   const resultNoun = bedRecipes ? (resultCount === 1 ? 'recipe' : 'recipes') : (resultCount === 1 ? 'result' : 'results');
   const resultLabel = catalogLoading && !resultCount ? 'Loading catalog…'
     : `${resultCount} ${resultNoun}${q ? ` for “${corrected ? q : catalogQuery.trim()}”` : ''}${corrected ? `, shown instead of “${catalogQuery.trim()}”` : ''}`;
   if ($('#catalogResultCount').textContent !== resultLabel) $('#catalogResultCount').textContent = resultLabel;
   // No match is never a dead end: say what was looked for and offer the ways out
   const filtersOn = Object.keys(defaultCatalogFilters).some(key => key !== 'sort' && filters[key] !== defaultCatalogFilters[key]);
-  const widerCount = q && filtersOn ? catalogMatches(items, defaultCatalogFilters, q).length : 0;
-  const noMatch = !catalogLoading && !resultCount && (q || filtersOn) ? `<div class="empty">
+  const widerCount = q && filtersOn ? catalogMatches(items, defaultCatalogFilters, q).length + myRecipes(defaultCatalogFilters, q).length : 0;
+  const noMatch = !catalogLoading && !resultCount && (q || filtersOn) && filters.source !== 'mine' ? `<div class="empty">
     <h2>${q ? `No results for “${esc(catalogQuery.trim())}”` : 'Nothing matches these filters'}</h2>
     <p class="sub">${q ? 'Check the spelling, or try a device type, a brand or a board.' : 'Remove a filter to see more of the catalog.'}</p>
     <div class="actions" style="justify-content:center">
@@ -3055,7 +3048,7 @@ function renderCatalog() {
     const applied = [
       ['sort', filters.sort !== 'recommended' && `Sort: ${sortOptions.find(([key]) => key === filters.sort)[1]}`],
       ['type', {firmware: 'Firmware', recipe: 'Recipes'}[filters.type]],
-      ['source', {official: 'Official', community: 'Community'}[filters.source]],
+      ['source', {official: 'Official', community: 'Community', mine: t('myConfigs')}[filters.source]],
       ['category', recipeCategories.get(filters.category)],
       ['board', filters.board !== 'any' && filters.board.split(',').map(catalogBoardName).join(' or ')],
       ['network', filters.network !== 'any' && NET_NAMES[filters.network]],
@@ -3070,11 +3063,12 @@ function renderCatalog() {
   const showRecipes = visibleRecipes.length > 0;
   const heading = showRecipes && filters.type === 'all' ? `<div class="section-head"><h2>${t('recipeSection')}</h2></div>` : '';
   setHtml($('#catalogBody'), (catalogData ? '' : `<p class="sub" style="margin:12px 2px">${t('catalogOffline')}</p>`) +
+    myRecipesHtml(mine, filters, q) +
     (fw.length && filters.type === 'all' ? `<div class="section-head"><h2>${t('firmwareSection')}</h2></div>` : '') +
     (fw.length ? `<div class="grid">${fw.map(([it, i]) => catalogCard(it, i)).join('')}</div>` : '') +
     heading + (bedRecipes?.html ?? ((listedRecipes.length ? `<div class="grid">${listedRecipes.map(({it, i}) => catalogCard(it, i)).join('')}</div>` : '') + bedGroup)) +
     (noMatch || (showRecipes && !visibleRecipes.length ? '<p class="sub">No recipes match these filters.</p>' : '') +
-    (!fw.length && !showRecipes ? `<div class="empty"><p class="sub">${catalogLoading ? t('checking') : t('noCatalog')}</p></div>` : '')));
+    (!fw.length && !showRecipes && filters.source !== 'mine' ? `<div class="empty"><p class="sub">${catalogLoading ? t('checking') : t('noCatalog')}</p></div>` : '')));
 }
 
 // Example specs of the generic device, when the catalog is not reachable
@@ -3331,34 +3325,29 @@ function specDownload(file, label) {
 function specRow(sp) {
   const dev = state.settings.dev_mode;
   const facts = t('specSummary', sp.connections, sp.rules);
+  const boardName = sp.app === 'generic' || sp.app === 'octo_bridge' ? BOARDS[chipKey(sp.board || 'esp32-c6')]?.name : '';
   const connectionNames = sp.connection_names || [];
   const repeatsName = connectionNames.length === 1 && connectionNames[0].trim().toLowerCase() === sp.name.trim().toLowerCase();
   if (sp.connections && connectionNames.length && !repeatsName) facts[0] = connectionNames.join(', ');
-  if (sp.app === 'octo_bridge') facts.push(`${appTitle(sp.app)} ${sp.version} · ${t('octoCommands')}`);
+  if (sp.app === 'octo_bridge') facts.push(`${appTitle(sp.app)} · ${t('octoCommands')}`);
   else if (sp.ble_commands) facts.push(t('specBleCommands', sp.ble_commands));
   else if (sp.requires?.includes('bluetooth')) facts.push(t('bleTitle'));
   const summary = sp.error || facts.join(' · ') || t('noSpecConnections');
+  const where = [boardName, NET_NAMES[sp.network]].filter(Boolean).join(' · ');
   const installerIssue = octoInstallerIssue(sp, true);
-  const files = dev ? [
-    ...[...sp.firmware].reverse().map(file => [file, t('downloadUpdate')]),
-    ...[...sp.factory].reverse().map(file => [file, t('downloadInstaller')]),
-  ] : [];
   return `<div class="spec-row" data-config="${esc(sp.slug)}">
     <div class="spec-name">
       <span class="ico" aria-hidden="true">${icon('recipe')}</span><span class="info">${esc(sp.name)}<span class="sub ${sp.error ? 'warnText' : ''}">${esc(summary)}</span>
+        ${where && !sp.error ? `<span class="sub">${esc(where)}</span>` : ''}
         ${installerIssue ? `<span class="sub warnText">${esc(installerIssue)}</span>` : ''}</span>
     </div>
     <div class="spec-actions">
       ${sp.error ? '' : `<button class="spec-use" aria-label="${t('specUse')} · ${esc(sp.name)}" onclick="useConfig('${sp.slug}')">${t('specUse')}</button>`}
       <details class="more"><summary aria-label="${t('more')} · ${esc(sp.name)}">${icon('dots')}</summary><div class="pop" style="bottom:auto;top:100%">
-        <button onclick="editSpec('${sp.slug}')">${t('editConfiguration')}</button>
+        <button onclick="editSpec('${sp.slug}')">${t('edit')}</button>
         ${sp.error ? '' : `<button onclick="shareSpec('${sp.slug}')">${t('share')}</button>`}
         ${dev ? `<button onclick="buildSpec('${sp.slug}')" ${sp.error || !state.toolchain || state.job.running ? 'disabled' : ''}>${t('build')}</button>` : ''}
-        <button class="warn" onclick="deleteSpec('${sp.slug}')">${t('del')}</button></div></details></div>
-    ${files.length ? `<details class="spec-builds spec-builds-inline">
-      <summary>${t('specBuildFiles')} (${files.length})</summary>
-      ${files.map(([file, label]) => `<div class="row"><div class="label mono">${esc(file)}</div>${specDownload(file, label)}</div>`).join('')}
-    </details>` : ''}</div>`;
+        <button class="warn" onclick="deleteSpec('${sp.slug}')">${t('del')}</button></div></details></div></div>`;
 }
 
 // A config on a new ESP32 (wizard, configured) or on a linked generic device
@@ -3376,28 +3365,42 @@ async function useConfig(slug) {
   } catch (e) { toast(e.message); }
 }
 
-let specQuery = '';
-function renderDeveloper() {
-  if (!specs) { loadSpecs(); return; }
-  const q = specQuery.trim().toLowerCase();
-  const found = q ? specs.filter(sp => textMatches(`${sp.name} ${sp.slug}`.toLowerCase(), q)) : specs;
-  $('#newSpecBtn').hidden = $('#specHelp').hidden = !specs.length;
-  setHtml($('#specList'), found.length ? found.map(specRow).join('') : specs.length
-    ? `<div class="empty" style="grid-column:1/-1"><h2>${esc(t('noConfigMatch', specQuery.trim()))}</h2>
-      <div class="actions" style="justify-content:center"><button type="button" class="pri" onclick="clearSearch()">${t('clearSearch')}</button></div></div>`
-    : `<div class="empty" style="grid-column:1/-1"><div class="ico" style="margin:0 auto 10px;width:48px;height:48px">${icon('recipe')}</div>
-      <h2>${t('noConfigsTitle')}</h2><p class="sub">${t('noConfigs')}</p>
-      <div class="actions" style="justify-content:center"><button class="pri" onclick="newSpec()">${t('newSpec')}</button>
-        <button onclick="goTab('catalog')">${t('browseCatalog')}</button></div></div>`);
-  $('#devBlock').hidden = !state.settings.dev_mode;
+// The user's own recipes (saved configs) are a section of the catalog
+function myRecipes(filters, query) {
+  if (!specs) return [];
+  const {type, source, category, board, network, bluetooth} = filters;
+  if (type === 'firmware' || source === 'official' || source === 'community' || category !== 'all') return [];
+  return specs.filter(sp => {
+    const chip = sp.app === 'generic' || sp.app === 'octo_bridge' ? chipKey(sp.board || 'esp32-c6') : '';
+    const needsBle = sp.app === 'octo_bridge' || sp.ble_commands > 0 || (sp.requires || []).includes('bluetooth');
+    return (board === 'any' || board.split(',').includes(chip)) &&
+      (network === 'any' || !sp.network || sp.network === network) &&
+      (bluetooth === 'any' || (bluetooth === 'required') === needsBle) &&
+      (!query || textMatches(`${sp.name} ${sp.slug} ${(sp.connection_names || []).join(' ')}`.toLowerCase(), query));
+  });
+}
+function myRecipesHtml(found, filters, query) {
+  if (!specs) return '';
+  const onlyMine = filters.source === 'mine';
+  if (!found.length && !onlyMine) return '';
+  const head = `<div class="section-head"><h2>${t('myConfigs')}</h2><span class="grow"></span>
+    <button type="button" class="text" onclick="newSpec()">${icon('plus')} ${t('newSpec')}</button></div>
+    <p class="sub config-intro">${t('specHelp')}</p>`;
+  const empty = specs.length ? `<p class="sub">${query ? esc(t('noConfigMatch', catalogQuery.trim())) : 'No recipes match these filters.'}</p>`
+    : `<div class="empty"><h2>${t('noConfigsTitle')}</h2><p class="sub">${t('noConfigs')}</p>
+      <div class="actions" style="justify-content:center"><button class="pri" onclick="newSpec()">${t('newSpec')}</button></div></div>`;
+  return head + (found.length ? `<div class="spec-list">${found.map(specRow).join('')}</div>` : empty);
+}
+function renderBuilds() {
+  const dev = state.settings.dev_mode;
+  if (!dev) return;
   $('#buildGenericBtn').disabled = !state.toolchain || state.job.running;
   $('#buildHint').hidden = state.toolchain;
-  const configFiles = new Set(specs.flatMap(sp => sp.firmware));
-  const otherBuilds = state.builds.filter(b => !configFiles.has(b.file));
-  $('#devBlock > summary').textContent = `${t('otherFirmwareBuilds')} (${otherBuilds.length})`;
-  setHtml($('#builds'), otherBuilds.length ? otherBuilds.map(b => {
+  $('#buildsTitle').textContent = `${t('otherFirmwareBuilds')} (${state.builds.length})`;
+  setHtml($('#builds'), state.builds.length ? [...state.builds].sort((a, b) => (b.date || 0) - (a.date || 0)).map(b => {
     const app = b.file.slice(0, b.file.lastIndexOf('-'));
-    return `<div class="row"><div class="label">${esc(appTitle(app))} · ${esc(fileVersion(b.file))}
+    const recipe = (specs || []).find(sp => sp.firmware.includes(b.file));
+    return `<div class="row"><div class="label">${esc(recipe ? recipe.name : appTitle(app))} · ${esc(fileVersion(b.file))}
       <div class="sub">${date(b.date)} · ${(b.size / 2 ** 20).toFixed(2)} MB</div></div>${specDownload(b.file, t('download'))}</div>`;
   }).join('') : `<div class="sub">${t('noBuilds')}</div>`);
 }
@@ -3698,24 +3701,24 @@ function showTab(name) {
   });
   $('#devicesTab').hidden = name !== 'devices';
   $('#catalogTab').hidden = name !== 'catalog';
-  $('#developerTab').hidden = name !== 'developer';
   const editingConfig = name === 'config-editor';
   $('#specEditor').hidden = $('#specEditorBar').hidden = !editingConfig;
   $('#taskPage').hidden = $('#taskBar').hidden = name !== 'task';
   $('#mainBar').hidden = editingConfig || name === 'task';
   $('#checkReleases').hidden = name !== 'devices';
-  $('#search').placeholder = t({catalog: 'searchCatalog', developer: 'searchConfigs'}[name] || 'searchDevices');
+  $('#search').placeholder = t({catalog: 'searchCatalog'}[name] || 'searchDevices');
   $('#search').setAttribute('aria-label', $('#search').placeholder);
   if (mainTabs.includes(name)) document.title = `${$(`#mainBar nav button[data-tab="${name}"]`).textContent.trim()} – Matter Builder`;
-  $('#search').value = name === 'catalog' ? catalogQuery : name === 'developer' ? specQuery : query;
+  $('#search').value = name === 'catalog' ? catalogQuery : query;
   syncSearchClear();
   if (name === 'catalog' && !catalogData) loadCatalog();
-  if (name === 'developer' && !specs) loadSpecs();
   render();
 }
 // The three tabs are places: each has an address (#catalog) and a step in the browser history
-const mainTabs = ['devices', 'catalog', 'developer'];
+const mainTabs = ['devices', 'catalog'];
 const tabFromHash = () => {
+  // The former My configs tab lives on in the catalog as My recipes
+  if (/^#developer\b/.test(location.hash)) history.replaceState(history.state, '', '#catalog?source=mine');
   const name = location.hash.slice(1).split('?')[0];
   return mainTabs.includes(name) ? name : 'devices';
 };
@@ -3727,7 +3730,7 @@ function goTab(name) {
 // The catalog's filters, sorting, bed brand and search are part of its address:
 // Back undoes the last change, and a reload or a link keeps them.
 const catalogChoices = {sort: sortOptions.map(([key]) => key), category: ['all', ...recipeCategories.keys()],
-  type: ['all', 'firmware', 'recipe'], source: ['any', 'official', 'community'],
+  type: ['all', 'firmware', 'recipe'], source: ['any', 'official', 'community', 'mine'],
   network: catalogNetworkOptions.map(([value]) => value), bluetooth: catalogBluetoothOptions.map(([value]) => value)};
 let catalogAddress = '#catalog';
 function catalogHash() {
@@ -3787,8 +3790,7 @@ $('#search').oninput = () => {
     catalogQuery = $('#search').value;
     catalogAddress = catalogHash();
     history.replaceState(history.state, '', catalogAddress);  // typing is one step, not one per letter
-  } else if (tab === 'developer') specQuery = $('#search').value;
-  else query = $('#search').value;
+  } else query = $('#search').value;
   render();
 };
 // A sort order is offered when the catalog has the data for it: the release date
@@ -3820,8 +3822,8 @@ function render() {
   const dev = state.settings.dev_mode;
   renderDevices();
   if (tab === 'catalog') renderCatalog();
-  if (tab === 'developer') renderDeveloper();
   renderSettings();
+  renderBuilds();
   if (openId) renderDevicePanel();
 }
 
@@ -3831,7 +3833,7 @@ async function refresh() {
   if (jobInfo && jobInfo.running && !state.job.running) { jobInfo = {...state.job}; updatingName = null; loadStatuses(); }
   render();
   if (state.job.kind) loadJob();
-  if (specs && state.settings.dev_mode && !state.job.running && refresh.wasRunning) loadSpecs();
+  if (specs && state.settings.dev_mode && !state.job.running && refresh.wasRunning) { invalidateSpecs(); loadSpecs(); }
   refresh.wasRunning = state.job.running;
 }
 
@@ -5162,7 +5164,16 @@ async function saveAsConfig() {
     if (r.error) throw new Error(r.error);
     note(t('configSaved', r.spec.name));
     invalidateSpecs();
+    return r.spec.slug;
   } catch (e) { $('#mError').textContent = t('yamlError', e.message); $('#mError').hidden = false; }
+  return null;
+}
+// The same connections on another ESP32: saved as a recipe, then its install
+async function copyToNewBoard() {
+  if (!pageTask) return;
+  const slug = await saveAsConfig();
+  if (!slug || !await canLeaveTask()) return;
+  completeWizard(() => useConfig(slug));
 }
 
 // A recipe in one go: into the draft, then a restart with it on trial
@@ -5242,6 +5253,7 @@ $('#mBleTest').onclick = async () => {
 };
 $('#mDeploy').onclick = saveAndApply;
 $('#mSaveConfig').onclick = saveAsConfig;
+$('#mCopyBoard').onclick = copyToNewBoard;
 $('#mApply').onclick = applyManage;
 $('#mConfirm').onclick = async () => {
   if (deviceBusy || !managed?.io) return;
@@ -5348,8 +5360,8 @@ function exactOctoInstaller(device, saved) {
   const built = saved && `${saved.slug.replaceAll('-', '_')}${suffix}-${version}-factory.bin`;
   if (saved?.factory.includes(built)) return octoInstaller(built, version);
   if (packetBuild) return null;
-  const release = octoReleaseInstallers().find(f => f.version === version);
-  return release ? octoInstaller(release.file, version) : null;
+  const release = octoReleaseInstallers().find(f => f.version === version) || latestOctoRelease();
+  return release ? octoInstaller(release.file, release.version) : null;
 }
 
 function octoInstallerIssue(saved, fromConfigs = false) {

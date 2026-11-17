@@ -18,7 +18,7 @@ ESP32 (Wi-Fi); see *Chips and networks*.
 - **New device**: a wizard that installs firmware on a new ESP32 and links it.
   It asks which ESP32 you have (or recognises it over USB), then how you want
   to start: from scratch, from a template (a recipe), from one of your
-  configs, or with ready-made firmware such as the Octo bed bridge. The
+  own recipes, or with ready-made firmware such as the Octo bed bridge. The
   firmware is picked for you, and what does not work on your board (Bluetooth
   on a classic ESP32, for instance) is shown and cannot be chosen.
 - **Linking**: give the address and password of a device's page, then press
@@ -46,12 +46,13 @@ ESP32 (Wi-Fi); see *Chips and networks*.
   the bed bridge) shows them as a form or as a `settings:` block in YAML;
   saving checks them and restarts the device. Other firmware shows what it
   reports, read-only.
-- **Configs**: your configurations (YAML) kept in the add-on: install one on a
-  new ESP32, apply it to a linked device, or save a device's configuration as
-  one. The New device wizard asks for a configuration too and applies it once
-  the device is linked.
 - **Catalog**: firmware and recipes from the official source and from
-  community sources, with a page per item.
+  community sources, with a page per item. **My recipes** at the top are your
+  own (YAML kept in the add-on): install one on a new ESP32 or apply it to a
+  linked device. Save one from a device with *Save as recipe*, or use *Copy to
+  a new board* to put the same connections on another ESP32 in one go. Old
+  links to the Configs tab open My recipes.
+- **Settings › Developer mode** lists the firmware you built yourself.
 - **Settings**: the Wi-Fi network for configuration mode of every device
   (leave the password empty to keep each device's own),
   package sources, developer mode. *Update all* (top bar) updates every device
@@ -138,7 +139,7 @@ of the project's repository.
 
 ## Sharing a recipe
 
-**Share** on a configuration under *Configs* puts it in the catalog as a
+**Share** on one of your recipes under *Catalog › My recipes* puts it in the catalog as a
 recipe others can use. It goes into a public GitHub repository of your own;
 nobody approves it. The dialog walks through it: make the repository (once),
 add the recipe (GitHub opens with the file and its contents filled in), and

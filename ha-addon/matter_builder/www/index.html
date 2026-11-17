@@ -959,7 +959,11 @@ const TEXT = {
   octoConfigBoard: 'This configuration requires an ESP32-C6.',
   octoInstallerTitle: 'Choose an Octo Bridge installer',
   octoInstallerMissing: v => `Octo Bridge ${v} has no ready-to-use installer.`,
-  octoInstallerResolve: 'Choose how to continue before connecting your ESP32.',
+  octoInstallerFromConfigs: (open, action) => `Select “${open}”, then “${action}”.`,
+  octoInstallerFromPicker: action => `Open this configuration and select “${action}”.`,
+  octoInstallerUseOfficial: action => `Select “${action}” to continue with the official firmware.`,
+  octoInstallerUseBuild: action => `Select “${action}” to create the installer and continue.`,
+  octoInstallerUseSettings: action => `Select “${action}” to enable firmware builds. Then return here to build and continue.`,
   octoInstallerPick: v => `Use Octo bed bridge ${v}`,
   octoInstallerStock: 'Install the official firmware over Thread. You can set up your beds after installation.',
   octoInstallerSelected: (saved, selected) => `This installation uses official version ${selected}. Your saved configuration stays on ${saved}.`,
@@ -3311,7 +3315,7 @@ function specRow(sp) {
   else if (sp.ble_commands) facts.push(t('specBleCommands', sp.ble_commands));
   else if (sp.requires?.includes('bluetooth')) facts.push(t('bleTitle'));
   const summary = sp.error || facts.join(' · ') || t('noSpecConnections');
-  const installerIssue = octoInstallerIssue(sp);
+  const installerIssue = octoInstallerIssue(sp, true);
   const files = dev ? [
     ...[...sp.firmware].reverse().map(file => [file, t('downloadUpdate')]),
     ...[...sp.factory].reverse().map(file => [file, t('downloadInstaller')]),
@@ -5251,15 +5255,27 @@ function exactOctoInstaller(device, saved) {
   return release ? octoInstaller(release.file, version) : null;
 }
 
-function octoInstallerIssue(saved) {
+function octoInstallerIssue(saved, fromConfigs = false) {
   if (saved.error || saved.app !== 'octo_bridge') return '';
-  if (chipKey(saved.board || 'esp32-c6') !== 'esp32c6') return t('octoConfigBoard');
-  return exactOctoInstaller({...saved, board: saved.board || 'esp32-c6'}, saved) ? '' : t('octoInstallerMissing', saved.version);
+  const board = saved.board || 'esp32-c6';
+  if (chipKey(board) !== 'esp32c6') return t('octoConfigBoard');
+  if (exactOctoInstaller({...saved, board}, saved)) return '';
+  const {action} = octoInstallerNextStep();
+  const guidance = fromConfigs ? t('octoInstallerFromConfigs', t('octoInstallerTitle'), action) : t('octoInstallerFromPicker', action);
+  return `${t('octoInstallerMissing', saved.version)} ${guidance}`;
 }
 
 function latestOctoRelease() {
   return octoReleaseInstallers().reduce((latest, release) =>
     !latest || newer(release.version, latest.version) ? release : latest, null);
+}
+
+function octoInstallerNextStep() {
+  const release = latestOctoRelease();
+  const canBuild = state.settings.dev_mode && state.toolchain;
+  if (release) return {release, canBuild, action: t('octoInstallerPick', release.version), guidance: 'octoInstallerUseOfficial'};
+  if (canBuild) return {release, canBuild, action: t('octoInstallerBuild'), guidance: 'octoInstallerUseBuild'};
+  return {release, canBuild, action: t('octoInstallerBuildSettings'), guidance: 'octoInstallerUseSettings'};
 }
 
 function continueWithOctoInstaller(installer) {
@@ -5296,10 +5312,11 @@ function octoInstallerRecovery(device) {
     return `<p class="notice">${t('octoConfigBoard')}</p><div class="choices">
       ${choice(false, 'store', t('octoInstallerCatalog'), t('octoInstallerCatalogHelp'), 'browseOctoInstallers()')}</div>`;
   }
-  const release = latestOctoRelease(), canBuild = state.settings.dev_mode && state.toolchain;
-  return `<p class="notice">${esc(t('octoInstallerMissing', device.version))} ${t('octoInstallerResolve')}</p>
+  const {release, canBuild, action, guidance} = octoInstallerNextStep();
+  return `<p class="notice">${esc(t('octoInstallerMissing', device.version))}
+      ${wiz.octoBuild ? '' : esc(t(guidance, action))}</p>
     <div class="choices">
-      ${release ? choice(false, 'chip', esc(t('octoInstallerPick', release.version)), t('octoInstallerStock'), 'chooseOfficialOctoInstaller(this)',
+      ${release ? choice(false, 'chip', esc(action), t('octoInstallerStock'), 'chooseOfficialOctoInstaller(this)',
         `data-file="${esc(release.file)}" data-version="${esc(release.version)}" ${wiz.octoBuild ? 'disabled' : ''}`) : ''}
       ${canBuild ? choice(false, 'chip', t(wiz.octoBuild ? 'octoInstallerBuilding' : 'octoInstallerBuild'),
         t('octoInstallerBuildHelp'), 'buildOctoInstaller()', wiz.octoBuild ? 'disabled' : '')

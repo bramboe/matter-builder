@@ -461,6 +461,21 @@ const char* page_etag() {
     return etag;
 }
 
+// Browsers ask every page for these on their own; without them each visit
+// logs two or three 404 warnings
+extern "C" const uint8_t favicon_png_start[] asm("_binary_favicon_png_start");
+extern "C" const uint8_t favicon_png_end[] asm("_binary_favicon_png_end");
+extern "C" const uint8_t touch_icon_png_start[] asm("_binary_apple_touch_icon_png_start");
+extern "C" const uint8_t touch_icon_png_end[] asm("_binary_apple_touch_icon_png_end");
+
+esp_err_t send_png(httpd_req_t* req, const uint8_t* start, const uint8_t* end) {
+    httpd_resp_set_type(req, "image/png");
+    httpd_resp_set_hdr(req, "Cache-Control", "public, max-age=604800");
+    return httpd_resp_send(req, reinterpret_cast<const char*>(start), end - start);
+}
+esp_err_t handle_favicon(httpd_req_t* req) { return send_png(req, favicon_png_start, favicon_png_end); }
+esp_err_t handle_touch_icon(httpd_req_t* req) { return send_png(req, touch_icon_png_start, touch_icon_png_end); }
+
 esp_err_t handle_index(httpd_req_t* req) {
     char seen[24] = {};
     httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
@@ -578,7 +593,7 @@ void start(const char* fallback_token) {
     // instead of letting new requests wait for a free slot
     config.max_open_sockets = 5;
     config.lru_purge_enable = true;
-    config.max_uri_handlers = 12;  // 9 in use: the default (8) would be full
+    config.max_uri_handlers = 14;  // 12 in use: the default (8) would be full
     if (httpd_start(&server, &config) != ESP_OK) {
         ESP_LOGE(TAG, "HTTP server failed to start");
         return;
@@ -636,6 +651,20 @@ void start(const char* fallback_token) {
     ota.method = HTTP_POST;
     ota.handler = handle_ota;
     httpd_register_uri_handler(server, &ota);
+
+    // /favicon.ico serves a PNG: every current browser reads it by its content
+    const struct { const char* uri; esp_err_t (*handler)(httpd_req_t*); } icons[] = {
+        {"/favicon.ico", handle_favicon},
+        {"/apple-touch-icon.png", handle_touch_icon},
+        {"/apple-touch-icon-precomposed.png", handle_touch_icon},
+    };
+    for (const auto& icon : icons) {
+        httpd_uri_t route = {};
+        route.uri = icon.uri;
+        route.method = HTTP_GET;
+        route.handler = icon.handler;
+        httpd_register_uri_handler(server, &route);
+    }
 
     if (password[0] == '\0') {
         ESP_LOGW(TAG, "No password yet: choose one on the settings page");

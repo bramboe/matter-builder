@@ -14,9 +14,12 @@ else()
     list(APPEND srcs "net_wifi.cpp")
 endif()
 
+# The icons browsers ask every device page for (/favicon.ico, /apple-touch-icon.png),
+# made from the Matter Builder app icon (BRANDING.md)
 idf_component_register(
     SRCS ${srcs}
     INCLUDE_DIRS "include"
     REQUIRES ${requires}
+    EMBED_FILES "icons/favicon.png" "icons/apple-touch-icon.png"
 )
 target_compile_options(${COMPONENT_LIB} PRIVATE "-DCHIP_HAVE_CONFIG_H")

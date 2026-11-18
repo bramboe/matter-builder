@@ -1161,7 +1161,7 @@ const TEXT = {
   netThread: 'Thread', netThreadHelp: 'Needs a Thread border router (Home Assistant Connect ZBT, Apple TV, Nest Hub). Low power, a mesh that reaches far, no Wi-Fi password on the device. Updates switch to Wi-Fi for a minute when it can reach your Wi-Fi; over Thread alone an update takes about half an hour (fine at night).',
   netWifi: 'Wi-Fi', netWifiHelp: 'Only your Wi-Fi network, no border router. Updates take seconds. Uses more power and needs good Wi-Fi where the device is.',
   chipLabel: c => ({esp32c6: 'ESP32-C6', esp32: 'Classic ESP32 (Wi-Fi)', esp32s3: 'ESP32-S3 (Wi-Fi, untested)', esp32c3: 'ESP32-C3 (Wi-Fi, untested)', esp32c5: 'ESP32-C5 (Wi-Fi, untested)', esp32h2: 'ESP32-H2 (Thread)'}[c] || c),
-  wBoard: 'Which ESP32 do you have?', boardHelp: 'Plug it in and let Matter Builder look, or choose it yourself. The right firmware is picked for you.',
+  wBoard: 'Which ESP32 do you have?', boardHelp: 'Plug it into the Home Assistant machine and Matter Builder recognises it by itself, or choose it yourself. The right firmware is picked for you.',
   boardNoRelease: 'No firmware for it in this release yet', boardOthers: 'Boards that do not work',
   wHow: 'How do you want to start?', howScratch: 'From scratch', howScratchHelp: 'Add what is connected, one thing at a time',
   howTemplate: 'From a recipe', howTemplateHelp: 'A ready-made recipe from the catalog; change it as you like',
@@ -5418,7 +5418,8 @@ function openWizard(step, host, extra) {
   openTask({title: $('#taskTitle').textContent, content: $('#wizardPage'),
     cleanup: () => { clearTimeout(wiz?.linkTimer); wiz = null; },
     blocked: () => wiz?.step === 'install' && !wiz.error || wiz?.apply?.state === 'applying',
-    dirty: () => !!wiz?.editorDirty,
+    // The configuration goes with the installation: from then on nothing is unsaved
+    dirty: () => !!wiz?.editorDirty && !['install', 'setup', 'arrive', 'link', 'done'].includes(wiz.step),
     after: extra?.returnToItem
   }, extra?.context);
   if (!specs) loadSpecs().then(renderWizard);
@@ -5687,6 +5688,30 @@ async function detectOnHost() {
   wiz.boardHost = true;
   await loadPorts();
 }
+
+// The board step looks by itself: the USB ports of the Home Assistant
+// machine, again every few seconds until a board is plugged in, and a port
+// that is Espressif's own USB is recognised at once. Any other port is left
+// alone until the user picks it (it may be a Zigbee or Z-Wave stick, which
+// esptool must not reset). In the browser Web Serial needs a click, so that
+// stays a button.
+async function autoDetectBoard(current) {
+  current.boardHost = true;
+  const until = Date.now() + 3 * 60 * 1000;
+  while (wiz === current && current.step === 'board' && !current.board && Date.now() < until) {
+    let ports = null;
+    try { ports = (await api('api/serial')).ports || []; } catch (e) {}
+    if (wiz !== current || current.step !== 'board' || current.board) return;
+    if (ports) {
+      ports.sort((a, b) => isEspressif(b) - isEspressif(a));
+      if (JSON.stringify(ports) !== JSON.stringify(current.ports)) { current.ports = ports; renderWizard(); }
+      const espressif = ports.filter(isEspressif);
+      if (espressif.length === 1) { current.port = espressif[0].path; await detectBoard(espressif[0].path); return; }
+      if (espressif.length > 1) return;  // more than one ESP32: the user picks
+    }
+    await new Promise(r => setTimeout(r, 3000));
+  }
+}
 // The steps of this run: a configuration brought along (a recipe, a config)
 // skips "how to start", only the ESP32-C6 has a network to choose, and only
 // the generic firmware is configured
@@ -5801,6 +5826,7 @@ function renderWizard() {
       ${wiz.error ? `<p class="error" role="alert">${esc(wiz.error)}</p>` : ''}`;
   } else if (wiz.step === 'board') {
     title = t('wBoard');
+    if (!wiz.autoBoard) { wiz.autoBoard = true; autoDetectBoard(wiz); }
     const busy = wiz.board && wiz.board.busy;
     const have = k => factoryChoices().some(c => c.chip === k && isGenericFile(c.file));
     const found = wiz.board && wiz.board.chip ? wiz.board : null;

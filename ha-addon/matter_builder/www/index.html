@@ -1150,6 +1150,10 @@ const TEXT = {
   wMethod: 'How do you want to install it?', mBrowser: 'Plug into this computer', mBrowserHelp: 'With Chrome or Edge, and Home Assistant opened over HTTPS',
   mBrowserNo: 'Not available here: this needs Chrome or Edge, and Home Assistant over HTTPS', mDownload: 'Download the file',
   mHost: 'Plug into the Home Assistant machine', mHostHelp: 'Works in any browser; the backup goes to the share folder',
+  mBrowserNoBrowser: 'Not available in this browser: it needs Chrome or Edge on a computer.',
+  mBrowserNoHttps: h => `Your browser can do it, but only on a page opened over HTTPS, and this one is http://${h}. Use the Home Assistant machine, or open Home Assistant over HTTPS.`,
+  hostBoard: (b, port) => `The ${b} recognised in the first step, on the Home Assistant machine (${port}).`,
+  otherPort: 'Another port',
   noPorts: 'No USB device found on the Home Assistant machine. Plug in the ESP32, then refresh.', refresh: 'Refresh', usbPort: 'USB port',
   choosePort: 'Choose the ESP32’s port', portWarning: 'Check that this is the ESP32: everything on the chosen device is replaced.',
   confirmPort: n => `Install on “${n}”? Everything on that device is replaced.`, mDownloadHelp: 'Flash it yourself, for example with esptool, at address 0',
@@ -1369,6 +1373,8 @@ const STANDALONE_TEXT = {
   noPorts: 'No USB device found on the machine Matter Builder runs on. Plug in the ESP32 (in Docker: pass it with --device), then refresh.',
   devHelp: 'Build firmware on this machine, with fixed versions of ESP-IDF (v5.5.5) and esp-matter (release/v1.6). Nothing personal is built in.',
   fewCores: 'Few cores or little memory: the first build takes an hour or more (about 1.5 GB memory per core helps).',
+  mBrowserNoHttps: h => `Your browser can do it, but only on a page opened over HTTPS or on localhost, and this one is http://${h}. Use the machine Matter Builder runs on instead.`,
+  hostBoard: (b, port) => `The ${b} recognised in the first step, on the machine Matter Builder runs on (${port}).`,
 };
 let auth = null;
 function showAuth() {
@@ -5977,12 +5983,17 @@ function renderWizard() {
     title = t('wMethod');
     if (wiz.provisionInfo === undefined) loadProvisionInfo();
     if (!serialOk() && wiz.method === 'browser') { wiz.method = 'host'; if (!wiz.ports) loadPorts(); }
+    // The board recognised on the Home Assistant machine in the first step: its port, not a second choice
+    const hostBoard = wiz.method === 'host' && wiz.boardHost && wiz.port && wiz.board?.chip && !wiz.pickPort
+      ? (wiz.ports || []).find(x => x.path === wiz.port) : null;
+    const browserNo = !('serial' in navigator) ? t('mBrowserNoBrowser') : t('mBrowserNoHttps', location.host);
     body = `<p class="sub">${esc(wiz.choice?.title || (isGenericFile(wiz.file) ? appTitle('mb_generic') : 'Selected firmware'))}</p>
       <details><summary class="sub">Firmware file</summary><p class="sub mono">${esc(wiz.file)}</p></details><div class="choices">
-      ${choice(wiz.method === 'browser', 'usb', t('mBrowser'), serialOk() ? t('mBrowserHelp') : t('mBrowserNo'), "wiz.method = 'browser'; renderWizard()", serialOk() ? '' : 'disabled')}
-      ${choice(wiz.method === 'host', 'chip', t('mHost'), t('mHostHelp'), "wiz.method = 'host'; loadPorts()")}
+      ${choice(wiz.method === 'host', 'chip', t('mHost'), hostBoard ? esc(t('hostBoard', (BOARDS[wiz.board.chip] || {name: wiz.board.name}).name, hostBoard.name)) : t('mHostHelp'), "wiz.method = 'host'; if (!wiz.ports) loadPorts(); renderWizard()")}
+      ${serialOk() || !hostBoard ? choice(wiz.method === 'browser', 'usb', t('mBrowser'), serialOk() ? t('mBrowserHelp') : esc(browserNo), "wiz.method = 'browser'; renderWizard()", serialOk() ? '' : 'disabled') : ''}
       ${choice(wiz.method === 'download', 'download', t('mDownload'), t('mDownloadHelp'), "wiz.method = 'download'; renderWizard()")}</div>
-      ${wiz.method === 'host' ? (wiz.ports && wiz.ports.length
+      ${hostBoard ? `<div class="actions" style="justify-content:flex-start;margin-top:0"><button class="text" onclick="wiz.pickPort = true; renderWizard()">${t('otherPort')}</button></div>`
+        : wiz.method === 'host' ? (wiz.ports && wiz.ports.length
         ? `<div class="row"><label class="field" style="flex:1"><span>${t('usbPort')}</span><select required onchange="wiz.port = this.value || null; renderWizard()">
               <option value="">${t('choosePort')}</option>${wiz.ports.map(p => `<option value="${esc(p.path)}" ${p.path === wiz.port ? 'selected' : ''}>${esc(p.name)}${isEspressif(p) ? ' (ESP32)' : ''}</option>`).join('')}</select></label>
             <button class="plain" onclick="loadPorts()">${t('refresh')}</button></div>

@@ -142,6 +142,90 @@ void load_spec_factory() {
 }
 #endif
 
+// The recipe installed with the firmware: the add-on writes it into the new
+// board's NVS ("mbprov"/"script", one console line per line, see
+// ha-addon/matter_builder/server.py). It runs once, at the first start,
+// through the same commands as the page, so the device starts as the recipe
+// without Home Assistant. Only lines a recipe sets are run. The script is
+// erased before it runs, so a line that crashes cannot repeat; the result
+// stays for the add-on ("provision").
+constexpr const char* PROVISION_NS = "mbprov";
+constexpr size_t PROVISION_MAX = 32 * 1024;
+
+bool provision_line_allowed(const std::string& line) {
+    static const char* const allowed[] = {"io set ", "io clear ", "io group ", "name ", "rule set ", "rule clear ",
+                                          "rule enable ", "bledev "};
+    for (const char* prefix : allowed) {
+        if (line.rfind(prefix, 0) == 0) return true;
+    }
+    return false;
+}
+
+void store_provision_result(const std::string& text) {
+    nvs_handle_t nvs;
+    if (nvs_open(PROVISION_NS, NVS_READWRITE, &nvs) != ESP_OK) return;
+    nvs_set_str(nvs, "result", text.substr(0, 200).c_str());
+    nvs_commit(nvs);
+    nvs_close(nvs);
+}
+
+void run_provisioning() {
+    nvs_handle_t nvs;
+    if (nvs_open(PROVISION_NS, NVS_READWRITE, &nvs) != ESP_OK) return;
+    size_t size = 0;
+    if (nvs_get_blob(nvs, "script", nullptr, &size) != ESP_OK || size == 0) {
+        nvs_close(nvs);
+        return;
+    }
+    std::string script(size, '\0');
+    const bool read = size <= PROVISION_MAX && nvs_get_blob(nvs, "script", script.data(), &size) == ESP_OK;
+    nvs_erase_key(nvs, "script");
+    nvs_commit(nvs);
+    nvs_close(nvs);
+    if (!read) {
+        store_provision_result("error: the installed recipe could not be read");
+        return;
+    }
+    int done = 0, failed = 0;
+    bool connections = false;
+    std::string first_error;
+    size_t start = 0;
+    while (start < script.size()) {
+        size_t end = script.find('\n', start);
+        if (end == std::string::npos) end = script.size();
+        const std::string line = script.substr(start, end - start);
+        start = end + 1;
+        if (line.empty()) continue;
+        const std::string reply = provision_line_allowed(line) ? run_command(line) : "not a recipe line\n";
+        if (reply.rfind("ok", 0) == 0) {
+            ++done;
+            connections = connections || line.rfind("io ", 0) == 0;
+        } else {
+            ++failed;
+            ESP_LOGE("main", "Installed recipe: '%s': %s", line.c_str(), reply.c_str());
+            if (first_error.empty()) first_error = line + ": " + reply.substr(0, reply.find('\n'));
+        }
+    }
+    if (connections && !io::keep_draft()) {
+        ++failed;
+        if (first_error.empty()) first_error = "storing the connections failed";
+    }
+    ESP_LOGI("main", "Installed recipe: %d lines set, %d failed", done, failed);
+    store_provision_result(failed == 0 ? "ok, " + std::to_string(done) + " lines"
+                                       : "error: " + std::to_string(failed) + " failed, first " + first_error);
+}
+
+// "provision": what became of the recipe installed with the firmware
+std::string provision_command(const std::vector<std::string>&) {
+    nvs_handle_t nvs;
+    char text[208] = {};
+    size_t size = sizeof(text);
+    if (nvs_open(PROVISION_NS, NVS_READONLY, &nvs) != ESP_OK) return "none\n";
+    const bool have = nvs_get_str(nvs, "result", text, &size) == ESP_OK;
+    nvs_close(nvs);
+    return have ? std::string(text) + "\n" : "none\n";
+}
+
 // BOOT menu or six quick power-ons: forget the page password and open the setup access
 // point, so the owner can choose a new one with the device in hand
 void recovery() {
@@ -196,6 +280,9 @@ extern "C" void app_main() {
                 rules::time_command);
     add_command("name", "name [<text>]                           the device's name\n", io::name_command);
     add_command("json", "json                                    state for the settings page\n", cmd_json);
+    add_command("provision", "provision                               the recipe installed with the firmware: its result\n",
+                provision_command);
+    run_provisioning();  // before io::start() and rules::load(): they start with what it set
 
     boot_guard::early();
     program_access::start(recovery);  // the BOOT button, also in configuration mode

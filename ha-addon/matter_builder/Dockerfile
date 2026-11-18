@@ -32,7 +32,7 @@ ENV MB_COMPONENT_CACHE=/data/component-cache
 
 # The firmware sources this version builds (copied in by tools/addon_sync.sh)
 COPY src /opt/octo-matter
-COPY server.py toolchain.sh build.sh idf_env.sh release-key.pem /opt/matter-builder/
+COPY server.py nvs_image.py toolchain.sh build.sh idf_env.sh release-key.pem /opt/matter-builder/
 COPY www /opt/matter-builder/www
 
 WORKDIR /opt/matter-builder

@@ -60,6 +60,8 @@ WIFI_DEFAULT = DATA / "wifi-default.json"
 NOTIFIED = DATA / "notified.json"
 # Recipes installed on a new board, waiting for that board to be linked
 PENDING_RECIPES = DATA / "pending-recipes.json"
+# Boards installed here with the add-on's key in their NVS: linked as soon as they show up
+PRELINKED = DATA / "prelinked.json"
 RELEASES = DATA / "releases"
 RELEASE_CACHE = RELEASES / "verified.json"  # the merged, signature-checked list
 SPECS = DATA / "specs"
@@ -67,6 +69,8 @@ SRC = Path(os.environ.get("MB_SRC", "/opt/octo-matter"))
 SPEC_TOOLS = SRC / "tools" if (SRC / "tools" / "mb_generate.py").is_file() else HERE / "src" / "tools"
 sys.path.insert(0, str(SPEC_TOOLS))
 from mb_generate import BRIDGE_DEFAULT_PACKETS, apply_bridge_packets, bridge_packets  # noqa: E402
+sys.path[0] = str(HERE)
+import nvs_image  # noqa: E402  (next to this file)
 sys.path.pop(0)
 RELEASE_KEY = HERE / "release-key.pem"
 # Where ready-made firmware comes from: GitHub releases, signed (see
@@ -555,7 +559,7 @@ def start_job(kind, title, target):
     with lock:
         if job["running"]:
             return False
-        job.update(kind=kind, running=True, ok=None, started=time.time(), title=title)
+        job.update(kind=kind, running=True, ok=None, started=time.time(), title=title, provision=None)
     JOB_LOG.parent.mkdir(parents=True, exist_ok=True)
     JOB_LOG.write_text("")
 
@@ -1542,10 +1546,11 @@ def check_board(port, chip, found=None):
     return None
 
 
-def flash_on_host(port, image, backup, recipe=None):
+def flash_on_host(port, image, backup, recipe=None, wifi=False):
     """A factory image at 0 with esptool, after a backup of the whole flash.
-    With a recipe ({text, name, slug}), it then waits for this board to be
-    linked (see "a recipe on a new board")."""
+    The board's NVS gets its network, the add-on's key and the recipe (see "a
+    new board, set up at installation"); the recipe also waits for the board
+    to be linked, for firmware that does not run it itself."""
     chip, _ = chip_and_network(image.name.removesuffix("-factory.bin").rpartition("-")[0])
     log(f"== Checking the board ({CHIP_NAMES.get(chip, chip)} with "
         f"{MIN_FLASH_MB.get(chip, DEFAULT_MIN_FLASH_MB)} MB of flash needed)")
@@ -1561,9 +1566,31 @@ def flash_on_host(port, image, backup, recipe=None):
         log(f"== Backup of the whole flash to {target}")
         if not run_logged([*esptool, "read_flash", "0", "ALL", str(target)]):
             return False
-    log(f"== Installing {image.name}")
-    if not run_logged([*esptool, "write_flash", "0x0", str(image)]):
+    target = image
+    try:
+        data, summary = provisioned_image(image, board.get("mac"), wifi, recipe)
+        with lock:
+            job["provision"] = summary  # the page follows the job: it then waits for this board
+    except ValueError as err:
+        log(f"!! {err}")
         return False
+    if summary["provisioned"]:
+        log("== Set up for this board: " + ", ".join(
+            [*(["Thread network from Home Assistant"] if summary["thread"] else []),
+             *([f"Wi-Fi {summary['wifi']}"] if summary["wifi"] else []),
+             "linked to Matter Builder", *(["the recipe"] if summary["recipe"] else [])]))
+        if chip_and_network(image.name.removesuffix("-factory.bin").rpartition("-")[0])[1] == "thread" and not summary["thread"]:
+            log("== No Thread network in Home Assistant: set it on the device's page after installing")
+        target = DATA / f"install-{summary['board']}.bin"
+        target.write_bytes(data)
+        os.chmod(target, 0o600)
+    log(f"== Installing {image.name}")
+    try:
+        if not run_logged([*esptool, "write_flash", "0x0", str(target)]):
+            return False
+    finally:
+        if target != image:
+            target.unlink(missing_ok=True)
     if recipe:
         key = pending_recipe_add(board.get("mac"), recipe.get("text"), recipe.get("name"), recipe.get("slug"))
         if key:
@@ -1644,9 +1671,13 @@ def dismiss(device_id):
 class Discovery:
     """Every Matter device announces itself (_matter._tcp once paired,
     _matterc._udp while waiting for pairing); those answering /info as
-    "matter-builder" are ours. Each host is asked at most every 10 minutes."""
+    "matter-builder" are ours. Each host is asked at most every 10 minutes.
+    Without Matter running (configuration mode, the setup network's way back
+    onto Wi-Fi) a device announces Matter Builder's own _mbuilder._tcp
+    (generic 0.1.35 and later), or, older, an _http._tcp "… (configuration
+    mode)": those are found the same way."""
 
-    TYPES = ["_matter._tcp.local.", "_matterc._udp.local."]
+    TYPES = ["_matter._tcp.local.", "_matterc._udp.local.", "_mbuilder._tcp.local.", "_http._tcp.local."]
 
     def __init__(self):
         self.zc = None
@@ -1680,6 +1711,8 @@ class Discovery:
             threading.Thread(target=self.check, args=(service_type, name), daemon=True).start()
 
     def check(self, service_type, name):
+        if service_type == "_http._tcp.local." and "(configuration mode)" not in name:
+            return  # any other web server on the network: not asked
         info = self.zc.get_service_info(service_type, name, timeout=3000)
         if not info:
             return
@@ -1700,6 +1733,10 @@ class Discovery:
             found[device["id"]] = device
         print(f"found {device['app']} {device['version']} ({device['id']}) at {host} {address}", flush=True)
         moved(device)
+        proxy = link_prelinked(device) or next((p for p in load_proxies() if p.get("device_id") == device["id"]), None)
+        if proxy:
+            give_thread_network(proxy, device)
+            return
         if not linked(device["id"], host, address) and device["id"] not in ignored_devices():
             notify(device)
 
@@ -1771,6 +1808,8 @@ def found_sweep():
                 answer = device_info(device["address"])
             except Exception:
                 answer = None
+            if answer and answer.get("id") == device["id"] and link_prelinked(device):
+                continue
             with lock:
                 if answer and answer.get("id") == device["id"]:
                     found_misses.pop(device["id"], None)
@@ -2052,7 +2091,7 @@ SETTING_SET = re.compile(r"settings set [a-z_][a-z0-9_]{0,31} [A-Za-z0-9_.:-]{1,
 
 def allowed(line):
     return line in ("io json", "json", "wifi json", "matter", "matter json", "matter open", "matter share", "matter close", "pairing", "pairing ble on",
-                    "pairing ble off", "reboot", "settings json", "settings build", "system json", "bledev json", "events") or line.startswith(ALLOWED_COMMANDS) \
+                    "pairing ble off", "reboot", "settings json", "settings build", "system json", "bledev json", "events", "provision") or line.startswith(ALLOWED_COMMANDS) \
         or SETTING_SET.fullmatch(line) is not None
 
 
@@ -2663,6 +2702,187 @@ def board_mac(esptool_output):
     return found.group(1) if found else ""
 
 
+# ---------------------------------------------------------------- a new board, set up at installation
+# Installing over USB, the add-on fills the board's empty NVS partition (see
+# nvs_image.py) with what it would otherwise be given by hand afterwards:
+#   thread/dataset    Home Assistant's preferred Thread network (Thread firmware)
+#   cfgmode/ssid,pass the default Wi-Fi from Settings, when chosen
+#   access/clients    the add-on's own key: the device is linked when it shows up
+#   mbprov/script     the recipe as console lines, run once at the first start
+#                     (generic firmware 0.1.35 and later; older firmware gets it
+#                     on linking, see "a recipe on a new board")
+# This is per board and never in a release image. Nothing goes into a
+# downloaded file.
+
+PROVISION_LINES = ("io set ", "io clear ", "io group ", "name ", "rule set ", "rule clear ", "rule enable ", "bledev ")
+PROVISION_MAX_SCRIPT = 32 * 1024
+CLIENT_NAME_LEN = 24  # program_access.cpp: struct Client {char name[24]; uint8_t hash[32];}
+
+
+def ha_thread_dataset():
+    """Home Assistant's preferred Thread dataset as TLV bytes, or None (no
+    Home Assistant, no Thread integration, no preferred network)."""
+    if not SUPERVISOR_TOKEN:
+        return None
+    try:
+        call, sock = ha_core_session()
+    except (OSError, ValueError) as err:
+        log(f"!! Home Assistant not reachable for the Thread network: {err}")
+        return None
+    try:
+        datasets = (call("thread/list_datasets") or {}).get("datasets") or []
+        preferred = next((d for d in datasets if d.get("preferred")), None)
+        if not preferred:
+            return None
+        tlv = (call("thread/get_dataset_tlv", dataset_id=preferred["dataset_id"]) or {}).get("tlv") or ""
+        data = bytes.fromhex(tlv)
+        return data if 0 < len(data) <= 254 else None
+    except (OSError, ValueError, KeyError) as err:
+        log(f"!! Home Assistant did not give its Thread network: {err}")
+        return None
+    finally:
+        sock.close()
+
+
+def provision_info():
+    """What a new board would be given, for the wizard (no secrets)."""
+    network = load_wifi_default()
+    return {"thread": ha_thread_dataset() is not None, "wifi_ssid": network.get("ssid") or None}
+
+
+def load_prelinked():
+    try:
+        data = json.loads(PRELINKED.read_text())
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def save_prelinked(data):
+    PRELINKED.parent.mkdir(parents=True, exist_ok=True)
+    tmp = PRELINKED.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, indent=2))
+    os.chmod(tmp, 0o600)
+    tmp.replace(PRELINKED)
+
+
+def provision_script(lines):
+    """The recipe's console lines as the firmware runs them, or "" when a line
+    is not one a recipe sets (the page made them; checked here again)."""
+    clean = []
+    for line in lines or []:
+        line = str(line).strip()
+        if not line:
+            continue
+        if "\n" in line or "\r" in line or not line.startswith(PROVISION_LINES):
+            raise ValueError(f"not a recipe line: {line[:40]}")
+        clean.append(line)
+    script = "\n".join(clean)
+    if len(script) > PROVISION_MAX_SCRIPT:
+        raise ValueError("the recipe is too long to install with the firmware")
+    return script
+
+
+def provisioned_image(image, mac, wifi=False, recipe=None):
+    """The factory image with this board's NVS filled in: (bytes, summary).
+    The add-on's key is kept for the board until it shows up and is linked."""
+    data = image.read_bytes()
+    app = image.name.removesuffix("-factory.bin").rpartition("-")[0]
+    _, network = chip_and_network(app)
+    where = nvs_image.nvs_partition(data)
+    key = board_id(mac)
+    if where is None or not key:
+        return data, {"provisioned": False}
+    nvs = nvs_image.Image()
+    summary = {"provisioned": True, "board": key, "thread": False, "wifi": None, "recipe": False}
+    if network == "thread":
+        dataset = ha_thread_dataset()
+        if dataset:
+            nvs.blob("thread", "dataset", dataset)
+            summary["thread"] = True
+    if wifi:
+        default = load_wifi_default()
+        if default.get("ssid"):
+            nvs.string("cfgmode", "ssid", default["ssid"])
+            if default.get("password"):
+                nvs.string("cfgmode", "pass", default["password"])
+            summary["wifi"] = default["ssid"]
+    token = secrets.token_hex(24)  # the 48 hex characters program_access.cpp issues
+    name = PROGRAM_NAME.encode()[:CLIENT_NAME_LEN - 1]
+    nvs.blob("access", "clients", name + b"\0" * (CLIENT_NAME_LEN - len(name)) + hashlib.sha256(token.encode()).digest())
+    script = provision_script((recipe or {}).get("lines")) if recipe else ""
+    if script and re.fullmatch(r"mb_generic(_[a-z0-9]+)?", app):
+        nvs.blob("mbprov", "script", script.encode())
+        summary["recipe"] = True
+    out = nvs_image.with_nvs(data, nvs.build(where[1]))
+    with pending_lock:
+        prelinked = load_prelinked()
+        prelinked[key] = {"token": token, "added": int(time.time()), "app": app,
+                          "recipe_in_firmware": summary["recipe"]}
+        save_prelinked(prelinked)
+    return out, summary
+
+
+def link_prelinked(device):
+    """A board installed here, seen on the network: linked with the key it was
+    given. Its recipe ran on the device, or waits for the page to apply it."""
+    key = board_id(device.get("id"))
+    with pending_lock:
+        entry = load_prelinked().get(key)
+    if not entry or linked(device["id"], device["host"], device["address"]):
+        return None
+    host = device["address"]
+    status, text = request(host, "/cmd", entry["token"], b"json")
+    if status != 200:
+        return None  # not answering yet, or flashed again since: Link by hand still works
+    proxy = {"id": secrets.token_hex(4), "name": proxy_name(host, entry["token"]), "host": host,
+             "token": entry["token"], "added": int(time.time()), "device_id": device["id"], "app": device.get("app")}
+    recipe = pending_recipe_take(device["id"], device.get("app"))
+    if recipe and entry.get("recipe_in_firmware"):
+        status, done = request(host, "/cmd", entry["token"], b"provision")
+        if status == 200 and done.startswith("ok"):
+            recipe = None  # the firmware ran it at its first start
+        else:
+            log(f"{proxy['name']}: the recipe did not run on the device ({done.strip()[:80]}): apply it from the list")
+    if recipe:
+        proxy["recipe"] = recipe
+    proxies = [p for p in load_proxies() if p.get("device_id") != device["id"]]
+    save_proxies(proxies + [proxy])
+    with pending_lock:
+        prelinked = load_prelinked()
+        prelinked.pop(key, None)
+        save_prelinked(prelinked)
+    dismiss(device["id"])
+    print(f"linked {device.get('app')} {device['id']} at {host}: installed here with the add-on's key", flush=True)
+    return proxy
+
+
+def give_thread_network(proxy, device):
+    """A linked Thread device without a Thread network (it waits in
+    configuration mode for one): Home Assistant's preferred network, then
+    back to normal. Nobody copies a dataset by hand."""
+    if device.get("network") != "thread":
+        return False
+    address, token = device["address"], proxy["token"]
+    status, text = request(address, "/cmd", token, b"thread json")
+    try:
+        have = json.loads(text).get("source") if status == 200 else None
+    except ValueError:
+        have = None
+    if have != "none":
+        return False
+    dataset = ha_thread_dataset()
+    if not dataset:
+        return False
+    status, reply = request(address, "/cmd", token, f"thread dataset {dataset.hex()}".encode())
+    if status != 200 or not reply.startswith("ok"):
+        print(f"{proxy['name']}: the Thread network was not taken ({reply.strip()[:80]})", flush=True)
+        return False
+    request(address, "/cmd", token, b"wifi exit")  # to Thread now; the device restarts
+    print(f"{proxy['name']}: given Home Assistant's Thread network, going back to normal", flush=True)
+    return True
+
+
 def link_poll(link_id):
     pending = links.get(link_id)
     if not pending:
@@ -2969,10 +3189,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self.reply(catalog())
         if path == "/api/serial":
             return self.reply({"ports": serial_ports()})
+        if path == "/api/provision-info":
+            return self.reply(provision_info())
         if path == "/api/state":
             with lock:
                 current = dict(job)
-            proxies = [{k: p.get(k) for k in ("id", "name", "host", "added", "app", "local", "auto_update", "recipe")} for p in load_proxies()]
+            proxies = [{k: p.get(k) for k in ("id", "name", "host", "added", "app", "local", "auto_update", "recipe", "device_id")} for p in load_proxies()]
             return self.reply({"proxies": proxies, "found": found_unlinked(), "toolchain": toolchain_ready(),
                                "builds": builds(), "job": current,
                                "releases": [image_summary(i) for i in release_state["images"]],
@@ -3141,8 +3363,35 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self.reply({"error": "unknown firmware"}, 400)
             backup = bool(data.get("backup", True))
             recipe = data.get("recipe") if isinstance(data.get("recipe"), dict) else None
-            started = start_job("flash", name, lambda: flash_on_host(port, image, backup, recipe))
+            wifi = bool(data.get("wifi"))
+            started = start_job("flash", name, lambda: flash_on_host(port, image, backup, recipe, wifi))
             return self.reply({"started": started})
+        if path == "/api/provision":
+            # Installing in the browser: the factory image set up for the board on its USB port
+            name = Path(str(data.get("file", ""))).name
+            image = FACTORY / name
+            if not image.is_file():
+                try:
+                    image = release_image(name, "factory")
+                except (OSError, ValueError) as err:
+                    return self.reply({"error": str(err)}, 502)
+            if image is None or not image.is_file():
+                return self.reply({"error": "unknown firmware"}, 400)
+            recipe = data.get("recipe") if isinstance(data.get("recipe"), dict) else None
+            try:
+                body, summary = provisioned_image(image, data.get("mac"), bool(data.get("wifi")), recipe)
+            except ValueError as err:
+                return self.reply({"error": str(err)}, 400)
+            if recipe:
+                pending_recipe_add(data.get("mac"), recipe.get("text"), recipe.get("name"), recipe.get("slug"))
+            self.send_response(200)
+            self.send_header("Content-Type", "application/octet-stream")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("X-MB-Provision", json.dumps(summary))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if path == "/api/pending-recipe":
             # Installed in the browser (its MAC read over USB) or downloaded (no MAC)
             recipe = data.get("recipe") if isinstance(data.get("recipe"), dict) else {}

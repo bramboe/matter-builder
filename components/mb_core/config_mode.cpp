@@ -323,6 +323,7 @@ void start_mdns() {
     std::snprintf(instance, sizeof(instance), "%.40s (configuration mode)", mb_core::app().product_name);
     mdns_instance_name_set(instance);
     mdns_service_add(nullptr, "_http", "_tcp", 80, nullptr, 0);
+    mb_core::advertise_matter_builder(nullptr);
 }
 
 // ------------------------------------------------------- fetching an update

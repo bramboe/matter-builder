@@ -49,4 +49,11 @@ const App& app();
 // Runs the app's stop hook, if any
 void stop();
 
+// Matter Builder's own mDNS service, "_mbuilder._tcp", with the board's id
+// (base MAC), app, version and network in its TXT record: how the add-on
+// recognises a device by itself on Wi-Fi and in configuration mode, where
+// there is no Matter announcement to find it by. host: a delegated host
+// name (Wi-Fi under Matter), or nullptr for the device's own mDNS host.
+void advertise_matter_builder(const char* host);
+
 }  // namespace mb_core

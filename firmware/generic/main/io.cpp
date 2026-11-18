@@ -951,6 +951,13 @@ void set_factory(const Slot* slots, const char* name) {
     factory_name = name;
 }
 
+bool keep_draft() {
+    std::lock_guard<std::mutex> guard(lock);
+    std::memcpy(running, draft, sizeof(running));
+    set_trial_boots(0);
+    return store("active", running);
+}
+
 void start() {
     nvs_handle_t nvs;
     if (nvs_open(NVS_NAMESPACE, NVS_READONLY, &nvs) == ESP_OK) {

@@ -58,6 +58,10 @@ void set_factory(const Slot* slots, const char* name);
 // Loads the connections (the draft during a trial) and starts the pins
 void start();
 
+// The draft as the running connections, without a trial: for the recipe the
+// add-on installs with the firmware (app_main.cpp), before start()
+bool keep_draft();
+
 // Bluetooth, for the connections that listen to it: started after Matter,
 // sharing its stack when pairing over Bluetooth is on
 bool needs_bluetooth();

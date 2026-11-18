@@ -988,7 +988,16 @@ const TEXT = {
   recipeWaitingApply: 'Apply recipe', recipeWaitingDrop: 'Set aside',
   recipeWaitingDropTitle: r => `Set aside “${r}”?`,
   recipeWaitingDropText: 'The device keeps its current configuration. You can still apply a recipe to it later from the Catalog.',
-  recipeFromInstall: r => `Installed with the recipe “${r}”: its name and connections are applied now.`, noGeneric: 'No linked generic device yet.',
+  recipeFromInstall: r => `Installed with the recipe “${r}”: its name and connections are applied now.`,
+  recipeStarted: r => `It started as the recipe “${r}”: its name and connections were installed with the firmware.`,
+  wArrive: 'Starting the device', arriveWait: 'The ESP32 starts and joins your network. It appears here by itself in a minute or two, already linked: no address, password or button needed.',
+  arriveNoThread: 'Home Assistant has no Thread network yet, so the ESP32 opens its setup network “Matter-Builder-…” to get one. Set the Thread network on its page; it then appears here by itself, already linked.',
+  arriveNoWifi: 'It has no Wi-Fi yet, so the ESP32 opens its setup network “Matter-Builder-…”. Join it and set your Wi-Fi on its page; it then appears here by itself, already linked.',
+  arriveSlow: 'Not seen yet. Is it powered, and in reach of your Thread network or Wi-Fi? It keeps trying; you can also link it by hand.',
+  arriveGot: (t, w) => `Set up for this board: ${[t ? 'your Thread network from Home Assistant' : '', w ? `Wi-Fi “${w}”` : '', 'linked to Matter Builder'].filter(Boolean).join(', ')}.`,
+  linkByHand: 'Link by hand', giveWifi: s => `Give it the Wi-Fi “${s}”`,
+  giveWifiHelp: 'From Settings › Wi-Fi. A Thread device uses it only for fast updates and its configuration mode; a Wi-Fi device runs on it.',
+  autoThread: 'It joins Home Assistant’s Thread network by itself.', noAutoThread: 'Home Assistant has no Thread network: set it on the device’s page after installing.', noGeneric: 'No linked generic device yet.',
   applyingConfig: 'Applying the configuration…', configOnTrial: s => `The new connections run on trial: keep them within ${s} s, or the device goes back.`,
   configKept: 'Kept. The device is ready.', configFailed: e => `The configuration was not applied: ${e}`,
   emptyTitle: 'Set up your first device',
@@ -5686,7 +5695,9 @@ function wizFlow() {
   // network step it will have, so the step count does not grow on the way
   const choice = wiz.choice || (wiz.step === 'board' || wiz.step === 'start' ? factoryChoices().find(x => x.chip === (wiz.chip || 'esp32c6') && isGenericFile(x.file)) : null);
   return ['board', ...(wiz.configText || wiz.recipe ? [] : ['how']), ...(generic && choice && choice.wifiFile ? ['network'] : []),
-    ...(generic || wiz.octoConfig ? ['configure'] : []), 'method', 'install', 'setup', 'link', 'done'];
+    ...(generic || wiz.octoConfig ? ['configure'] : []), 'method', 'install',
+    // Installed over USB, the board is set up and linked by the add-on: it only has to show up
+    ...((wiz.provision ? wiz.provision.provisioned : wiz.method !== 'download') ? ['arrive'] : ['setup', 'link']), 'done'];
 }
 function wizNext() { const f = wizFlow(); go(f[f.indexOf(wiz.step) + 1]); }
 function wizPrev() { const f = wizFlow(), i = f.indexOf(wiz.step); if (wiz.step === wiz.catalogEntry) return closeWizard(); go(i > 0 ? f[i - 1] : 'start'); }
@@ -5875,6 +5886,7 @@ function renderWizard() {
         <button class="pri" onclick="configureNext()">${t('next')}</button></div>`;
   } else if (wiz.step === 'method') {
     title = t('wMethod');
+    if (wiz.provisionInfo === undefined) loadProvisionInfo();
     if (!serialOk() && wiz.method === 'browser') { wiz.method = 'host'; if (!wiz.ports) loadPorts(); }
     body = `<p class="sub">${esc(wiz.choice?.title || (isGenericFile(wiz.file) ? appTitle('mb_generic') : 'Selected firmware'))}</p>
       <details><summary class="sub">Firmware file</summary><p class="sub mono">${esc(wiz.file)}</p></details><div class="choices">
@@ -5887,8 +5899,19 @@ function renderWizard() {
             <button class="plain" onclick="loadPorts()">${t('refresh')}</button></div>
           <div class="sub warnText">${t('portWarning')}</div>`
         : `<div class="row"><div class="label sub">${wiz.ports ? t('noPorts') : t('checking')}</div><button class="plain" onclick="loadPorts()">${t('refresh')}</button></div>`) : ''}
+      ${wiz.method !== 'download' ? provisionChoices() : ''}
       ${wiz.method !== 'download' ? `<label class="check sub"><input type="checkbox" ${wiz.backup ? 'checked' : ''} onchange="wiz.backup = this.checked">${t('backupFirst')}</label>` : ''}
       <div class="actions end"><button class="plain" onclick="wizPrev()">${t('back')}</button><button class="pri" onclick="startInstall()" ${wiz.method === 'host' && !wiz.port ? 'disabled' : ''}>${wiz.method === 'download' ? t('download') : t('install')}</button></div>`;
+  } else if (wiz.step === 'arrive') {
+    title = t('wArrive');
+    const pv = wiz.provision || {};
+    const threadFirmware = chipAndNetworkOf(wiz.file) === 'thread';
+    const needsAp = threadFirmware ? !pv.thread : !pv.wifi;
+    body = `<p class="sub">${esc(t('arriveGot', pv.thread, pv.wifi))}</p>
+      <p class="notice" role="status">${esc(!needsAp ? t('arriveWait') : threadFirmware ? t('arriveNoThread') : t('arriveNoWifi'))}</p>
+      ${wiz.slow ? `<p class="sub warnText">${esc(t('arriveSlow'))}</p>` : ''}
+      <div class="actions end"><button class="plain" onclick="closeWizard()">${t('close')}</button>
+        <button class="${wiz.slow ? 'pri' : 'plain'}" onclick="go('link')">${t('linkByHand')}</button></div>`;
   } else if (wiz.step === 'install') {
     title = t('wInstalling');
     body = `<p id="wStatus" role="status">${esc(wiz.status)}</p>${wiz.progress !== undefined ? `<div class="progress" role="progressbar" aria-label="${esc(t('wInstalling'))}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${wiz.progress}"><i style="width:${wiz.progress}%"></i></div>` : ''}
@@ -5914,10 +5937,11 @@ function renderWizard() {
     title = t('wLinked');
     const a = wiz.apply || {};
     const octo = wiz.stockOcto || wiz.octoConfig || state.proxies.some(p => p.id === wiz.linkedId && p.app === 'octo_bridge');
-    body = `<p>${esc(wiz.configSpec ? t('linkedName', wiz.linkedName || '') : t('linkedText', wiz.linkedName || ''))}</p>
+    body = `<p>${esc(wiz.configSpec || wiz.recipeStartedName ? t('linkedName', wiz.linkedName || '') : t('linkedText', wiz.linkedName || ''))}</p>
       ${wiz.defaultWifi === true ? '<p class="sub">The default Wi-Fi was saved on this device. If it uses Matter over Wi-Fi, it can switch to this network after a restart.</p>' : ''}
       ${wiz.defaultWifi === false ? '<p class="error" role="alert">Could not save the default configuration Wi-Fi. You can retry from Settings.</p>' : ''}
       ${wiz.recipeName && a.state !== 'error' ? `<p class="sub">${esc(t('recipeFromInstall', wiz.recipeName))}</p>` : ''}
+      ${wiz.recipeStartedName ? `<p class="notice" role="status">${esc(t('recipeStarted', wiz.recipeStartedName))}</p>` : ''}
       ${a.state === 'applying' ? `<p class="notice" role="status">${t('applyingConfig')}</p>` : ''}
       ${a.state === 'review' ? '<p class="sub">Review your configuration before sending it to the linked device.</p>' : ''}
       ${a.state === 'trial' ? `<p class="notice" role="status">${t('configOnTrial', a.trial)}</p>` : ''}
@@ -5988,8 +6012,17 @@ async function configureNext() {
   if (wiz.saveConfig) wiz.editorDirty = false;
   // Kept by the add-on under the board's MAC, so linking it later (another
   // day, another browser) still ends with this configuration on the device
-  wiz.pendingRecipe = {text: wizEditor.text(), name: wiz.configSpec.name, slug: wiz.configSlug || ''};
+  wiz.pendingRecipe = {text: wizEditor.text(), name: wiz.configSpec.name, slug: wiz.configSlug || '',
+    lines: provisionLines(wiz.configSpec, wizEditor.drivers || [])};
   go('method');
+}
+
+// A configuration as the console lines that set it on a new device: what the
+// firmware runs at its first start when the add-on installs it (server.py)
+function provisionLines(spec, drivers) {
+  const fresh = {name: '', draft: [], groups: []};
+  return [...bleLines(null, spec.ble), ...diffLines(fresh, spec.rows, spec.name, spec.drivers || drivers),
+    ...ruleLines([], spec.rules || [])];
 }
 
 // After linking: the configuration onto the device's draft, a restart with it
@@ -6082,7 +6115,7 @@ async function installOnHost() {
   if (!port || !await confirmAction('Install firmware?', t('confirmPort', port.name), 'Install firmware')) return;
   wiz.step = 'install'; wiz.error = ''; wiz.progress = 0; wiz.status = t('usbConnecting');
   renderWizard();
-  const r = await api('api/flash', {port: wiz.port, file: wiz.file, backup: wiz.backup, recipe: wiz.pendingRecipe || null});
+  const r = await api('api/flash', {port: wiz.port, file: wiz.file, backup: wiz.backup, recipe: wiz.pendingRecipe || null, wifi: !!wiz.giveWifi});
   if (!r.started) { wiz.error = r.error || t('jobBusy'); renderWizard(); return; }
   for (;;) {
     await new Promise(res => setTimeout(res, 1500));
@@ -6092,12 +6125,74 @@ async function installOnHost() {
     wiz.status = p.phase || t('usbConnecting');
     wiz.progress = p.total ? Math.round(100 * p.done / p.total) : 0;
     if (!j.running) {
-      if (j.ok) { wiz.status = ''; go('setup'); }
+      if (j.ok) { wiz.status = ''; afterInstall(j.provision); }
       else { wiz.error = (j.log.trim().split('\n').filter(l => !l.startsWith('==')).pop() || t('jobFailed')); renderWizard(); }
       return;
     }
     renderWizard();
   }
+}
+
+// The network a firmware file runs on, from its name (tools/release_manifest.py)
+function chipAndNetworkOf(file) {
+  const app = (file || '').replace(/-factory\.bin$/, '').replace(/-[^-]*$/, '');
+  if (/_wifi$/.test(app)) return 'wifi';
+  return ['esp32c6', 'esp32h2'].includes(chipOfFile(file)) ? 'thread' : 'wifi';
+}
+// What the add-on gives a board it installs over USB: Thread from Home
+// Assistant by itself, the Wi-Fi from Settings when chosen
+function provisionChoices() {
+  const info = wiz.provisionInfo;
+  if (!info) return '';
+  const thread = chipAndNetworkOf(wiz.file) === 'thread';
+  return `${thread ? `<p class="sub">${esc(t(info.thread ? 'autoThread' : 'noAutoThread'))}</p>` : ''}
+    ${info.wifi_ssid ? `<label class="check sub"><input type="checkbox" ${wiz.giveWifi ? 'checked' : ''} onchange="wiz.giveWifi = this.checked" aria-describedby="wGiveWifiHelp">${esc(t('giveWifi', info.wifi_ssid))}</label>
+      <p class="sub" id="wGiveWifiHelp" style="margin:0 0 8px 24px">${esc(t('giveWifiHelp'))}</p>` : ''}`;
+}
+
+// Installed: a board the add-on set up waits to show up (already linked);
+// any other goes through its setup network and Link
+function afterInstall(provision) {
+  wiz.provision = provision || {provisioned: false};
+  if (!wiz.provision.provisioned) { go('setup'); return; }
+  wiz.arriveSince = Date.now();
+  go('arrive');
+  waitForArrival(wiz);
+}
+async function waitForArrival(current) {
+  while (wiz === current && current.step === 'arrive') {
+    await new Promise(r => setTimeout(r, 4000));
+    if (wiz !== current || current.step !== 'arrive') return;
+    try { await refresh(); } catch (e) { continue; }
+    const p = state.proxies.find(x => x.device_id === current.provision.board);
+    if (p) { arrived(current, p); return; }
+    if (!current.slow && Date.now() - current.arriveSince > 4 * 60 * 1000) { current.slow = true; renderWizard(); }
+  }
+}
+async function arrived(current, p) {
+  current.linkedId = p.id;
+  current.linkedName = p.name;
+  go('done');
+  loadStatuses();
+  if (p.recipe) {
+    // Firmware from before the recipe ran at its first start: the normal Apply
+    try {
+      if (!current.configSpec) current.configSpec = await parseSpec(p.recipe.text);
+      current.recipeName = p.recipe.name || current.configSpec.name;
+      if (wiz === current) applyConfig();
+    } catch (e) { if (wiz === current) { current.apply = {state: 'error', error: e.message}; renderWizard(); } }
+  } else if (current.provision.recipe) {
+    current.recipeStartedName = current.pendingRecipe?.name || '';
+    current.apply = {state: 'applied'};
+    renderWizard();
+  }
+}
+async function loadProvisionInfo() {
+  if (wiz.provisionInfo !== undefined) return;
+  wiz.provisionInfo = null;
+  try { wiz.provisionInfo = await api('api/provision-info'); } catch (e) { wiz.provisionInfo = {}; }
+  if (wiz.provisionInfo?.wifi_ssid && wiz.giveWifi === undefined) wiz.giveWifi = true;
+  renderWizard();
 }
 
 async function startInstall() {
@@ -6143,14 +6238,25 @@ async function startInstall() {
       link.download = `backup-${want}-${new Date().toISOString().slice(0, 10)}.bin`;
       link.click();
     }
-    const data = new Uint8Array(await (await fetch(`api/download/${encodeURIComponent(wiz.file)}`)).arrayBuffer());
+    // The image set up for this board (its network, the add-on's key, the
+    // recipe); the plain image when its MAC could not be read
+    let data, provision = null;
+    if (mac) {
+      const res = await fetch('api/provision', {method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({file: wiz.file, mac, wifi: !!wiz.giveWifi, recipe: wiz.pendingRecipe || null})});
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || t('jobFailed'));
+      try { provision = JSON.parse(res.headers.get('X-MB-Provision') || 'null'); } catch (e) {}
+      data = new Uint8Array(await res.arrayBuffer());
+    } else {
+      data = new Uint8Array(await (await fetch(`api/download/${encodeURIComponent(wiz.file)}`)).arrayBuffer());
+    }
     await loader.writeFlash({fileArray: [{data, address: 0}], flashMode: 'keep', flashFreq: 'keep', flashSize: 'keep',
       eraseAll: false, compress: true, reportProgress: (_, written, total) => say(t('usbWriting', Math.round(100 * written / total)), Math.round(100 * written / total))});
     await loader.after('hard_reset');
-    if (wiz?.pendingRecipe) {
+    if (wiz?.pendingRecipe && !provision) {
       try { await api('api/pending-recipe', {mac, recipe: wiz.pendingRecipe}); } catch (e) {}
     }
-    if (wiz) { wiz.status = ''; go('setup'); }
+    if (wiz) { wiz.status = ''; afterInstall(provision); }
   } catch (e) {
     if (wiz) { wiz.error = e.message || String(e); renderWizard(); }
   } finally {

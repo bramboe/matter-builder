@@ -79,21 +79,47 @@ Each firmware in a release also has a **factory image** for a new ESP32.
   `/share/matter-builder/backups`.
 - **Download the file**: flash it yourself at address 0.
 
-The ESP32 then opens its setup network, where you choose its password and
-network. Link it afterwards (*Adopt* under Discovered, or the wizard's *Link
-now*), and it gets the recipe's name and connections: the normal Apply, with
-its review, a restart and *Keep*.
+**Installed over USB, a board is set up for you.** While installing, the
+add-on reads the board's MAC and writes the board's own settings next to the
+firmware (in its NVS partition; release images stay the same for everyone):
 
-**A recipe installed on a new board is not lost on the way.** The setup in
-between can take long, happen in another browser or after closing this one:
-the add-on keeps the recipe under the board's MAC, which it reads over USB
-while installing, and applies it when that board is linked, however it is
-linked. Until it is applied (or set aside), the device list shows it with
-*Apply recipe*. The configuration is then on the device itself, which keeps
-working without Home Assistant. A board flashed from a downloaded file has no
-MAC known to the add-on: its recipe goes to the next generic device that is
-linked, and the review shows what changes before anything is sent. Recipes
-that wait longer than 30 days are dropped.
+- **Thread firmware** gets Home Assistant's preferred Thread network
+  (Settings › Devices & services › Thread). Nobody copies a dataset.
+- **Wi-Fi**, when you tick *Give it the Wi-Fi …* (the network from
+  Settings › Wi-Fi). A Wi-Fi device runs on it; a Thread device uses it only
+  for fast updates and its configuration mode.
+- **The add-on's own key**, so the device is linked as soon as it shows up:
+  no address, page password or BOOT button. You still choose the page
+  password on its page, for yourself.
+- **The recipe** (name, connections, rules, Bluetooth device). Generic
+  firmware 0.1.35 and later runs it once at its first start, through the same
+  commands as its page, so the device starts as the recipe, with or without
+  Home Assistant. Older firmware gets it right after it is linked (below).
+
+The wizard then waits until the device appears, already linked, and says
+what it started with. When Home Assistant has no Thread network (or a Wi-Fi
+device got no Wi-Fi), the device opens its setup network "Matter-Builder-…"
+to get one, and appears by itself after that. A linked Thread device that
+waits in configuration mode without a Thread network is given Home
+Assistant's network automatically. The network key and Wi-Fi password are
+stored on the board as typed ones are: NVS is not encrypted.
+
+**Download the file** gets the plain image: nothing of yours goes into a
+file. It opens its setup network, where you choose its password and network;
+link it afterwards (*Adopt* under Discovered, or the wizard's *Link now*).
+
+**A recipe is not lost on the way.** The add-on also keeps the recipe under
+the board's MAC and applies it when that board is linked, however it is
+linked, with the normal Apply (review, restart, *Keep*): for firmware from
+before 0.1.35, when a line did not run on the device, or for a downloaded
+image (whose recipe goes to the next generic device that is linked, since
+its MAC is unknown). Until it is applied or set aside, the device list shows
+it with *Apply recipe*. Recipes that wait longer than 30 days are dropped.
+
+**Found by itself.** Devices are recognised by their Matter announcement and
+their `/info`; without Matter (configuration mode, or Wi-Fi under the setup
+network) generic 0.1.35 and later announce Matter Builder's own mDNS service
+`_mbuilder._tcp`, with the board's id in it.
 
 On Thread the device's address is the name Matter registers with the border
 router, `<16 hex digits>.local` (its Thread extended address, which the
@@ -103,6 +129,7 @@ A new device knows that name only once it has joined Thread, so after its
 setup network *Done: back to normal* sends you to Matter Builder, which
 finds it under Discovered; later visits to configuration mode link back to
 the right name.
+
 Before installing, the wizard checks that the board is the firmware's chip
 and has flash enough (8 MB, or 4 MB for the classic ESP32 and the C3), and says
 so when it is not.

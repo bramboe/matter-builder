@@ -107,6 +107,7 @@ void on_name_timer(void*) {
         err = mdns_delegate_hostname_add(name, &address);
         if (err == ESP_OK) {
             mdns_service_add_for_host(mb_core::app().product_name, "_http", "_tcp", name, 80, nullptr, 0);
+            mb_core::advertise_matter_builder(name);
         }
     }
     if (err == ESP_OK) {

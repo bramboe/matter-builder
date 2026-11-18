@@ -15,6 +15,7 @@ body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 Roboto,system-
 svg{width:24px;height:24px;fill:currentColor;flex:none}
 /* The header as Home Assistant's: a bar from edge to edge, back arrow at the left, actions at the right */
 header{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:12px;min-height:56px;padding:0 4px 0 16px;background:var(--card);border-bottom:1px solid var(--line)}
+header .brand{flex:none;width:32px;height:32px;color:var(--fg)}
 header h1{flex:1;margin:0;font-size:20px;font-weight:400}
 header .back{display:grid;place-items:center;width:48px;height:48px;margin-left:-12px;border-radius:50%;color:var(--fg)}
 header .back:hover{background:var(--fill)}
@@ -177,6 +178,8 @@ pre{white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--
 <header>
   <!-- Back to Matter Builder, as Home Assistant's pages do: only when opened from the add-on -->
   <a class="icon-btn back" id="backBtn" href="#" aria-label="Back" hidden><svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2Z"/></svg></a>
+  <!-- Matter Builder symbol (BRANDING.md; © 2026 Bram Boersma) -->
+  <svg class="brand" viewBox="0 0 1254 1254" role="img" aria-label="Matter Builder"><g id="mbArm" fill-rule="evenodd" transform="translate(627 468)"><path fill="#D63238" transform="rotate(-65.27)" d="M62 0V-265.3A62 62 0 0 0-62-265.3V0A62 62 0 0 0 62 0ZM-25 0a25 25 0 1 0 50 0a25 25 0 1 0-50 0ZM-25-265.3a25 25 0 1 0 50 0a25 25 0 1 0-50 0Z"/><path fill="#18B6E4" transform="rotate(65.27)" d="M62 0V-265.3A62 62 0 0 0-62-265.3V0A62 62 0 0 0 62 0ZM-25 0a25 25 0 1 0 50 0a25 25 0 1 0-50 0ZM-25-265.3a25 25 0 1 0 50 0a25 25 0 1 0-50 0Z"/><path fill="currentColor" d="M62 0V-304A62 62 0 0 0-62-304V0A62 62 0 0 0 62 0ZM-25 0a25 25 0 1 0 50 0a25 25 0 1 0-50 0ZM-25-304a25 25 0 1 0 50 0a25 25 0 1 0-50 0Z"/></g><use href="#mbArm" transform="rotate(120 627 688)"/><use href="#mbArm" transform="rotate(240 627 688)"/></svg>
   <h1><span data-t="title"></span><button type="button" class="viewer-badge" id="viewerBadge" data-t="viewerBadge"></button> <div class="sub" id="sys"></div></h1>
   <button class="icon-btn" id="menuBtn" aria-label="Menu"><svg><use href="#i-menu"/></svg></button>
   <div class="menu" id="menu">

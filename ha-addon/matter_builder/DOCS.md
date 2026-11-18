@@ -107,6 +107,12 @@ waits in configuration mode without a Thread network is given Home
 Assistant's network automatically. The network key and Wi-Fi password are
 stored on the board as typed ones are: NVS is not encrypted.
 
+**Add to Matter.** A device that no Matter app controls yet says *Not in
+Matter yet* on its card, with *Add to Matter*; the wizard's last step offers
+the same. Choose **Home Assistant** (added to its Matter integration from
+here, in one go) or **Apple Home, Google Home or another app** (its pairing
+code and QR code to scan). Add it to a second app later with *Share*.
+
 **Download the file** gets the plain image: nothing of yours goes into a
 file. It opens its setup network, where you choose its password and network;
 link it afterwards (*Adopt* under Discovered, or the wizard's *Link now*).

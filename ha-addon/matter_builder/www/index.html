@@ -1195,6 +1195,15 @@ const TEXT = {
   shareCopiedToast: 'Code copied', shareAppleToast: 'Code copied: in Apple Home choose More options… and enter it', shareStopBtn: 'Stop sharing', shareNew: 'New code',
   shareOld: 'This firmware cannot make a one-time code yet: update it, or use its own pairing code on its page.',
   addToHa: 'Home Assistant', addToHaBtn: 'Add to Home Assistant',
+  notInMatter: 'Not in Matter yet', addToMatter: 'Add to Matter', matterTitle: n => `Add ${n} to Matter`,
+  matterIntro: 'It works here already, but no Matter app controls it yet. Add it to the app you use; you can add it to another one later with Share.',
+  matterHa: 'Home Assistant', matterHaHelp: 'Into Home Assistant’s Matter integration, from here in one go. On Thread this takes a minute or two.',
+  matterOther: 'Apple Home, Google Home or another app', matterOtherHelp: 'Scan its pairing code with that app.',
+  matterCodeLabel: 'Pairing code',
+  matterCodeHow: 'In the app: add a device or accessory, choose Matter, and scan this code or enter the number.',
+  matterCodeNone: 'The device gives no pairing code right now. Open its page to see its code, or restart it.',
+  matterStarted: 'Adding it to Home Assistant: follow it in the log. It then shows up in Settings › Devices & services › Matter.',
+  matterDoneStep: 'Add it to Matter to control it from Home Assistant, Apple Home or Google Home.',
   addToHaHelp: 'Adds it to Home Assistant’s Matter integration over the network, next to Apple Home or another controller.',
   confirmAddToHa: 'Open a pairing window on the device and add it to Home Assistant now? This takes a minute or two on Thread.',
   setUpConnections: 'Set up connections', openDevice: 'Open device', wRecipeTarget: 'Where should it go?', recipeNew: 'A new ESP32', recipeNewHelp: 'Install the generic firmware first',
@@ -1551,13 +1560,15 @@ function deviceCard(p) {
       <div class="track${work.pct == null ? ' indef' : ''}"><i style="width:${work.pct || 0}%"></i></div></div>` : ''}
     <div class="meta">
       ${s && !s.ok && !s.auth ? `<div class="sub">${t('notReachable')}</div>` : ''}
+      ${notInMatter(s) ? `<span class="chip warn">${t('notInMatter')}</span>` : ''}
       ${r ? protocolIcons(needs(s.io ? (s.io.bluetooth === 'on' || s.io.slots.some(c => isBle(c.type)) ? ['bluetooth'] : [])
         : (pkgOf(r.app) || {}).requires, /^thread/.test(r.net) ? 'thread' : /^wifi|^configuration/.test(r.net) ? 'wifi' : null), `device-${p.id}`) : ''}
     </div>
     <div class="acts">
       ${up ? `<button class="text" onclick="updateProxy('${p.id}', '${esc(up)}')" ${state.job.running ? 'disabled' : ''}>${t('updateTo', fileVersion(up))}</button>` : ''}
       ${relink ? `<button class="text device-primary" onclick="openWizard('link', '${esc(p.host)}')">${t('linkAgain')}</button>` : ''}
-      <button class="${s?.ok && !updating ? 'text device-primary' : 'plain'}" onclick="openDevice('${p.id}', 'connections')" ${updating ? 'disabled' : ''}>${t('editConfiguration')}</button>
+      ${!updating && notInMatter(s) ? `<button class="text device-primary" onclick="openMatterWizard('${p.id}')">${t('addToMatter')}</button>` : ''}
+      <button class="${s?.ok && !updating && !notInMatter(s) ? 'text device-primary' : 'plain'}" onclick="openDevice('${p.id}', 'connections')" ${updating ? 'disabled' : ''}>${t('editConfiguration')}</button>
       <button class="${updating ? 'text device-primary' : 'plain'}" onclick="openLogs('${p.id}')">${t('logs')}</button>
       ${updating ? '' : `<a class="button plain" href="${esc(portalUrl(p))}">${t('openPage')}</a>`}
       ${updating ? `<button class="icon" disabled aria-label="${t('more')}">${icon('dots')}</button>` : `<details class="more"><summary aria-label="${t('more')}">${icon('dots')}</summary><div class="pop">
@@ -3920,6 +3931,7 @@ function render() {
   renderSettings();
   renderBuilds();
   if (openId) renderDevicePanel();
+  if (wiz?.step === 'done') renderWizard();  // whether the linked device is in Matter yet
 }
 
 async function refresh() {
@@ -4895,9 +4907,47 @@ function closeShare() {
 }
 $('#shareDlg').addEventListener('close', () => { clearInterval(shareTimer); shareId = null; });
 
+// Not in any Matter app yet (no controller): it works only from here and its page
+const notInMatter = s => !!(s && s.ok && s.device && s.device.fabrics === 0 && !running(s)?.config);
+
+// Adding a device to Matter: Home Assistant in one go from here, or the
+// pairing code for Apple Home, Google Home or another app. Offered when a
+// new device is linked and on every card of a device no app controls yet.
+function openMatterWizard(id) {
+  $$('details.more').forEach(d => { d.open = false; });
+  const p = state.proxies.find(x => x.id === id);
+  clearInterval(shareTimer);
+  shareId = id; shareData = null;
+  $('#shareTitle').textContent = t('matterTitle', p ? p.name : '');
+  setHtml($('#shareBody'), `<p class="sub">${t('matterIntro')}</p><div class="choices">
+    ${state.standalone ? '' : choice(false, 'link', t('matterHa'), t('matterHaHelp'), `matterToHa('${id}')`, state.job.running ? 'disabled' : '')}
+    ${choice(false, 'share', t('matterOther'), t('matterOtherHelp'), `matterCode('${id}')`)}</div>`);
+  if (!$('#shareDlg').open) $('#shareDlg').showModal();
+}
+async function matterToHa(id) {
+  closeShare();
+  await addToHa(id, true);
+  toast(t('matterStarted'));
+}
+async function matterCode(id) {
+  setHtml($('#shareBody'), `<div class="cardwork"><div class="sub">${t('shareMaking')}</div><div class="track indef"><i></i></div></div>`);
+  let m = null;
+  try { m = JSON.parse(await proxyCommand(id, 'matter json')); } catch (e) {}
+  if (shareId !== id) return;
+  if (!m || !m.manual) { setHtml($('#shareBody'), `<p class="warnText">${t('matterCodeNone')}</p>`); return; }
+  shareData = {qr: m.qr, manual: m.manual, qr_size: m.qr_size, qr_path: m.qr_path};
+  const n = m.qr_size, code = m.manual.replace(/^(\d{4})(\d{3})(\d{4})$/, '$1-$2-$3');
+  setHtml($('#shareBody'), `<p class="sub">${t('matterCodeHow')}</p>
+    <div class="sharebox">${n ? `<svg viewBox="-2 -2 ${n + 4} ${n + 4}" shape-rendering="crispEdges" role="img" aria-label="${esc(m.qr)}"><rect x="-2" y="-2" width="${n + 4}" height="${n + 4}" fill="#fff"/><path fill="#000" d="${m.qr_path}"/></svg>` : ''}
+      <div><div class="sub">${t('matterCodeLabel')}</div><div class="sharecode">${esc(code)}</div></div></div>
+    <div class="actions"><button class="plain" onclick="openMatterWizard('${id}')">${t('back')}</button><span class="grow"></span>
+      ${canShareApp() ? `<button onclick="shareApple()">${t(shareAppLabel())}</button>` : ''}
+      <button class="pri" onclick="copyPlain(shareData.manual);toast(t('shareCopiedToast'))">${t('shareCopyBtn')}</button></div>`);
+}
+
 // Into Home Assistant's Matter fabric, next to Apple Home or another controller
-async function addToHa(id) {
-  if (!await confirmAction('Add to Home Assistant?', t('confirmAddToHa'), 'Add device')) return;
+async function addToHa(id, confirmed = false) {
+  if (!confirmed && !await confirmAction('Add to Home Assistant?', t('confirmAddToHa'), 'Add device')) return;
   await api(`api/proxy/${id}/add_to_ha`, {});
   logOpen = true;
   refresh();
@@ -5977,6 +6027,8 @@ function renderWizard() {
       ${a.state === 'kept' ? `<p class="notice" role="status">${t('configKept')}</p>` : ''}
       ${a.state === 'applied' ? '<p class="notice" role="status">Configuration applied. The device is ready.</p>' : ''}
       ${a.state === 'error' ? `<div class="error" role="alert">${esc(t('configFailed', a.error))}</div>` : ''}
+      ${wiz.linkedId && notInMatter(statuses[wiz.linkedId]) && !['applying', 'trial', 'review'].includes(a.state)
+        ? `<p class="notice">${t('matterDoneStep')}</p><div class="actions" style="justify-content:flex-start"><button class="pri" onclick="const id = wiz.linkedId; completeWizard(() => openMatterWizard(id))">${t('addToMatter')}</button></div>` : ''}
       <div class="actions end">${a.state === 'trial' ? `<button class="pri" onclick="keepConfig()">${t('keep')}</button>` : `<button class="plain" onclick="completeWizard()" ${a.state === 'applying' ? 'disabled' : ''}>${t('done')}</button>`}
         ${a.state === 'review' ? '<button class="pri" id="wReviewChanges" onclick="applyConfig()">Review changes</button>' : ''}
         ${wiz.linkedId && a.state !== 'trial' && a.state !== 'applying' && a.state !== 'review' ? `<button class="${['kept', 'applied'].includes(a.state) ? 'plain' : 'pri'}" onclick="const w = wiz; completeWizard(() => openDevice(w.linkedId, 'connections'))">${octo ? t('setUpBeds') : t(['kept', 'applied'].includes(a.state) ? 'openDevice' : 'setUpConnections')}</button>` : ''}</div>`;

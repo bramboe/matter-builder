@@ -995,6 +995,7 @@ const TEXT = {
   arriveNoWifi: 'It has no Wi-Fi yet, so the ESP32 opens its setup network “Matter-Builder-…”. Join it and set your Wi-Fi on its page; it then appears here by itself, already linked.',
   arriveSlow: 'Not seen yet. Is it powered, and in reach of your Thread network or Wi-Fi? It keeps trying; you can also link it by hand.',
   arriveGot: (t, w) => `Set up for this board: ${[t ? 'your Thread network from Home Assistant' : '', w ? `Wi-Fi “${w}”` : '', 'linked to Matter Builder'].filter(Boolean).join(', ')}.`,
+  needDeviceName: 'Give the device a name: it shows in Matter Builder and in your Matter apps.', deviceNameExample: 'For example Kitchen lights',
   linkByHand: 'Link by hand', giveWifi: s => `Give it the Wi-Fi “${s}”`,
   giveWifiHelp: 'From Settings › Wi-Fi. A Thread device uses it only for fast updates and its configuration mode; a Wi-Fi device runs on it.',
   autoThread: 'It joins Home Assistant’s Thread network by itself.', noAutoThread: 'Home Assistant has no Thread network: set it on the device’s page after installing.', noGeneric: 'No linked generic device yet.',
@@ -2502,7 +2503,7 @@ class ConfigEditor {
       return;
     }
     const nameField = `<div class="ed-item"><div class="ed-item-head" style="cursor:default"><span class="ico">${appIcon(this.specDevice?.app)}</span>
-      <label class="field" style="flex:1"><span>${t('deviceName')}</span><input maxlength="32" value="${esc(this.name)}" oninput="${ref}.setName(this.value)"></label></div></div>`;
+      <label class="field" style="flex:1"><span>${t('deviceName')}</span><input maxlength="32" value="${esc(this.name)}" placeholder="${esc(t('deviceNameExample'))}" oninput="${ref}.setName(this.value)"></label></div></div>`;
     if (this.specDevice?.app === 'octo_bridge') {
       this.host.innerHTML = `${head}${nameField}${octoConfigFields(this.specDevice, ref)}${error}`;
       return;
@@ -5752,7 +5753,7 @@ async function startWith(kind, value) {
   if (!wiz.keepFile && c) { wiz.choice = c; wiz.file = c.file; }
   wizEditor.host = null; wizEditor.board = wiz.chip;
   wiz.setupText = '';
-  if (kind === 'scratch') { wizEditor.load('My device', [], wizPins()); wizEditor.picking = true; }
+  if (kind === 'scratch') { wizEditor.load('', [], wizPins()); wizEditor.picking = true; }
   else if (kind === 'config') {
     wiz.setupText = text;
     await wizEditor.loadText(wiz.setupText, spec);
@@ -5901,6 +5902,8 @@ function renderWizard() {
         : `<div class="row"><div class="label sub">${wiz.ports ? t('noPorts') : t('checking')}</div><button class="plain" onclick="loadPorts()">${t('refresh')}</button></div>`) : ''}
       ${wiz.method !== 'download' ? provisionChoices() : ''}
       ${wiz.method !== 'download' ? `<label class="check sub"><input type="checkbox" ${wiz.backup ? 'checked' : ''} onchange="wiz.backup = this.checked">${t('backupFirst')}</label>` : ''}
+      ${needsDeviceName() ? `<label class="field"><span>${t('deviceName')}</span><input id="wDeviceName" maxlength="32" autocomplete="off" placeholder="${esc(t('deviceNameExample'))}" value="${esc(wiz.deviceName || '')}" oninput="wiz.deviceName = this.value; this.removeAttribute('aria-invalid')" ${wiz.error ? 'aria-invalid="true" aria-describedby="wMethodError"' : ''}></label>` : ''}
+      ${wiz.error ? `<p class="error" role="alert" id="wMethodError">${esc(wiz.error)}</p>` : ''}
       <div class="actions end"><button class="plain" onclick="wizPrev()">${t('back')}</button><button class="pri" onclick="startInstall()" ${wiz.method === 'host' && !wiz.port ? 'disabled' : ''}>${wiz.method === 'download' ? t('download') : t('install')}</button></div>`;
   } else if (wiz.step === 'arrive') {
     title = t('wArrive');
@@ -5965,7 +5968,7 @@ function renderWizard() {
       wiz.editorReady = true;
       wizEditor.host = null;
       if (wiz.configText) wizEditor.loadText(wiz.configText);
-      else { wizEditor.load('My device', [], wizPins()); wizEditor.picking = true; }
+      else { wizEditor.load('', [], wizPins()); wizEditor.picking = true; }
       wizEditor.board = wiz.chip || null; wizEditor.pins = wizPins();
     }
     wizEditor.mount($('#wizEditor'));
@@ -5999,6 +6002,7 @@ async function configureNext() {
     wizEditor.host?.querySelector('.pin-field select[aria-invalid="true"]')?.focus();
     return;
   }
+  if (!(wiz.configSpec.name || '').trim()) { wiz.error = t('needDeviceName'); renderWizard(); return; }
   if (wizEditor.noBluetooth() && wizEditor.usesBluetooth()) { wiz.error = t('boardNoBluetooth', BOARDS[wiz.chip].name); renderWizard(); return; }
   // Components are code: only firmware built from a config has them
   if (wizEditor.components.length && !(specs || []).some(sp => sp.factory.includes(wiz.file))) {
@@ -6195,7 +6199,19 @@ async function loadProvisionInfo() {
   renderWizard();
 }
 
+// Generic firmware installed without a configuration still gets the name
+// the user gives it, never the firmware's "Matter Builder"
+function needsDeviceName() {
+  return !wiz.configSpec && !wiz.octoConfig && isGenericFile(wiz.file);
+}
+
 async function startInstall() {
+  if (needsDeviceName()) {
+    const name = (wiz.deviceName || '').trim().replace(/\s+/g, ' ');
+    if (!name) { wiz.error = t('needDeviceName'); renderWizard(); $('#wDeviceName')?.focus(); return; }
+    wiz.error = '';
+    wiz.pendingRecipe = {text: specYaml(name, []), name, slug: '', lines: [`name ${name}`]};
+  }
   if (wiz.method === 'host') { installOnHost(); return; }
   if (wiz.method === 'download') {
     const a = document.createElement('a');

@@ -91,6 +91,9 @@ firmware (in its NVS partition; release images stay the same for everyone):
 - **The add-on's own key**, so the device is linked as soon as it shows up:
   no address, page password or BOOT button. You still choose the page
   password on its page, for yourself.
+- **Its name**: the recipe's, or the one you give it in the wizard (a new
+  device asks for one, also without a configuration), never the firmware's
+  "Matter Builder".
 - **The recipe** (name, connections, rules, Bluetooth device). Generic
   firmware 0.1.35 and later runs it once at its first start, through the same
   commands as its page, so the device starts as the recipe, with or without

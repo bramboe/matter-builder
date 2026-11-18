@@ -1291,7 +1291,17 @@ std::string state_json() {
 #else
         const char *bt = "none";  // this board's firmware has no Bluetooth (classic ESP32, C3)
 #endif
-        out += std::string(",\"bluetooth\":\"") + bt + "\",\"ble_pairing\":" + (ble_pairing ? "true" : "false");
+        // ble_pairing: how it runs now; ble_pairing_saved: what was chosen, from
+        // the next start on (app_main.cpp "pairing ble on|off"). The page shows
+        // the choice, so it does not seem lost until the restart
+        uint8_t saved = ble_pairing ? 1 : 0;
+        nvs_handle_t nvs;
+        if (nvs_open(NVS_NAMESPACE, NVS_READONLY, &nvs) == ESP_OK) {
+            nvs_get_u8(nvs, "blepair", &saved);
+            nvs_close(nvs);
+        }
+        out += std::string(",\"bluetooth\":\"") + bt + "\",\"ble_pairing\":" + (ble_pairing ? "true" : "false") +
+               ",\"ble_pairing_saved\":" + (saved ? "true" : "false");
     }
     out += ",\"pins\":[";
     for (size_t i = 0; i < sizeof(SAFE_PINS); ++i) {

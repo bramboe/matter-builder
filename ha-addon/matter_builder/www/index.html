@@ -4757,7 +4757,7 @@ function renderDevicePanel() {
       <button class="text" onclick="toggleToken('${p.id}')">${token ? t('hide') : t('show')}</button>
       ${token ? `<button class="text" onclick="copyToken('${p.id}')">${t('copy')}</button>` : ''}</div>
     ${s && s.io && s.io.ble_pairing !== undefined && s.io.bluetooth !== 'none' ? `<div class="row"><div class="label">${t('blePairing')}<div class="sub">${t('blePairingHelp')}</div></div>
-      <label class="switch"><input type="checkbox" aria-label="${t('blePairing')}" ${s.io.ble_pairing ? 'checked' : ''} onchange="setBlePairing('${p.id}', this.checked)"></label></div>
+      <label class="switch"><input type="checkbox" aria-label="${t('blePairing')}" ${blePairingShown(p.id, s.io) ? 'checked' : ''} onchange="setBlePairing('${p.id}', this.checked)"></label></div>
       <div class="row"><div class="label">Bluetooth</div><div class="sub">${esc(s.io.ble_pairing ? t('blePairingOn') + ' · ' : '')}${esc(t('ble_' + s.io.bluetooth) || s.io.bluetooth)}</div></div>` : ''}
     ${r ? `<div class="row"><div class="label">${t('shareDevice').replace('…', '')}<div class="sub">${t('shareIntro')}</div></div>
       <button onclick="shareDevice('${p.id}')">${t('shareDevice')}</button></div>` : ''}
@@ -4768,10 +4768,22 @@ function renderDevicePanel() {
 }
 
 // Pairing over Bluetooth on the device; it restarts to use it
+// Chosen here, in effect after the restart: kept until the device runs with it
+// (firmware from before 0.1.37 reports only how it runs, not what was chosen)
+const blePairingWanted = {};
 async function setBlePairing(id, on) {
   if (!await confirmAction('Change Bluetooth pairing?', t('confirmBlePairing', on), on ? 'Enable pairing' : 'Disable pairing')) { render(); return; }
-  try { await proxyCommand(id, `pairing ble ${on ? 'on' : 'off'}`); await proxyCommand(id, 'reboot'); } catch (e) {}
-  setTimeout(loadStatuses, 15000);
+  let reply = '';
+  try { reply = await proxyCommand(id, `pairing ble ${on ? 'on' : 'off'}`); } catch (e) { reply = e.message; }
+  if (!reply.startsWith('ok')) { toast(reply.trim() || t('notReachable')); render(); return; }
+  blePairingWanted[id] = on;
+  render();
+  try { await proxyCommand(id, 'reboot'); } catch (e) {}
+  for (const wait of [15000, 45000, 90000]) setTimeout(loadStatuses, wait);
+}
+function blePairingShown(id, io) {
+  if (blePairingWanted[id] !== undefined && !!io.ble_pairing === blePairingWanted[id]) delete blePairingWanted[id];
+  return !!(io.ble_pairing_saved ?? blePairingWanted[id] ?? io.ble_pairing);
 }
 
 // Sharing a device with another app: the device makes a one-time code

@@ -606,6 +606,7 @@ const TEXT = {
   send: 'Send', here: 'here', away: 'away',
   blePairing: 'Pair over Bluetooth', bluetooth: 'Bluetooth',
   blePairingHelp: 'Lets a phone pair this device directly, also its first time, and give it the Thread network. Costs memory and radio time; off is fine when you pair with the code. Takes effect after a restart.',
+  blePairingNextOn: 'pairing on after a restart', blePairingNextOff: 'pairing off after a restart',
   bleOn: 'listening', bleStarting: 'starting', bleOff: 'off (no Bluetooth connection)', blePairingOn: 'pairing on',
   confirmBlePairing: on => `${on ? 'Turn on' : 'Turn off'} pairing over Bluetooth and restart now?`,
   relayHelp: 'An output: on or off. Appears as a plug in Home Assistant and Apple Home.',
@@ -1286,10 +1287,14 @@ $('#ioType').innerHTML = TYPES.map(type => `<option value="${type}"></option>`).
 $('#ioType').onchange = () => { fillPins(true); updateIoForm(); };
 function pickType(type) { $('#ioType').value = type; fillPins(true); updateIoForm(); }
 $('#ioUseLast').onclick = () => { $('#ioCode').value = state.io.ir_last; };
+// Chosen here, in effect after the restart; firmware from before 0.1.37
+// reports only how it runs, so the choice is kept here until it does
+let blePairingWanted = null;
 $('#blePairing').onchange = async () => {
   const on = $('#blePairing').checked;
   if (!await deviceDecision(t('confirmBlePairing', on), t('restart'))) { $('#blePairing').checked = !on; return; }
-  await run(`pairing ble ${on ? 'on' : 'off'}`);
+  if (!await run(`pairing ble ${on ? 'on' : 'off'}`)) { $('#blePairing').checked = !on; return; }
+  blePairingWanted = on;
   await run('reboot');
 };
 $('#ioForm').onsubmit = async e => {
@@ -1369,9 +1374,13 @@ function renderBluetooth() {
   const io = state.io;
   // Firmware without Bluetooth (classic ESP32, C3) has nothing to offer here
   $('#blePairingRow').hidden = $('#bluetoothRow').hidden = io.bluetooth === 'none';
-  $('#blePairing').checked = !!io.ble_pairing;
+  // The saved choice (from the next start on), else how it runs now (older firmware)
+  if (blePairingWanted !== null && !!io.ble_pairing === blePairingWanted) blePairingWanted = null;
+  const saved = io.ble_pairing_saved ?? blePairingWanted ?? io.ble_pairing;
+  $('#blePairing').checked = !!saved;
   const scan = io.bluetooth === 'on' ? t('bleOn') : io.bluetooth === 'starting' ? t('bleStarting') : t('bleOff');
-  $('#bluetoothState').textContent = io.ble_pairing ? `${t('blePairingOn')} · ${scan}` : scan;
+  $('#bluetoothState').textContent = (io.ble_pairing ? `${t('blePairingOn')} · ${scan}` : scan) +
+    (!!saved !== !!io.ble_pairing ? ` · ${t(saved ? 'blePairingNextOn' : 'blePairingNextOff')}` : '');
 }
 
 // Sharing a paired device ("matter share"): a one-time code with a countdown.

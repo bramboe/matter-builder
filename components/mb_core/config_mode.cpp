@@ -478,20 +478,25 @@ void on_event(void*, esp_event_base_t base, int32_t id, void* data) {
     }
 }
 
-// The page's address on Thread: the one it was opened on, else the name the
-// bridge registers there (its 802.15.4 EUI-64), for a bridge set up from the
-// access point
+// The page's address on Thread: the name the device registered there (see
+// remember_thread_host), else the one the page was opened on. Empty when
+// neither is known, as for a new device set up from the access point: its
+// Thread name exists only once it has joined (Matter uses the random
+// extended address, not the factory EUI-64), and Matter Builder finds it then.
 std::string home_host() {
-    std::string home = stored_text("home");
-    uint8_t eui[8] = {};
-    if (home.empty() && esp_read_mac(eui, ESP_MAC_IEEE802154) == ESP_OK) {
-        char text[24];
-        std::snprintf(text, sizeof(text), "%02X%02X%02X%02X%02X%02X%02X%02X.local", eui[0], eui[1], eui[2], eui[3],
-                      eui[4], eui[5], eui[6], eui[7]);
-        home = text;
-    }
-    return home;
+    const std::string thread_host = stored_text("srphost");
+    return thread_host.empty() ? stored_text("home") : thread_host;
 }
+
+}  // namespace
+
+void remember_thread_host(const std::string& host) {
+    if (!host.empty() && host.size() < 64 && stored_text("srphost") != host) {
+        store("srphost", host);
+    }
+}
+
+namespace {
 
 // The app's state plus "config_mode": the settings page shows what still
 // works and a configuration banner, and hides what needs Matter

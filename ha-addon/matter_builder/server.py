@@ -58,6 +58,8 @@ PAGES = DATA / "pages"  # each device's own settings page, kept with its ETag
 SETTINGS = DATA / "settings.json"
 WIFI_DEFAULT = DATA / "wifi-default.json"
 NOTIFIED = DATA / "notified.json"
+# Recipes installed on a new board, waiting for that board to be linked
+PENDING_RECIPES = DATA / "pending-recipes.json"
 RELEASES = DATA / "releases"
 RELEASE_CACHE = RELEASES / "verified.json"  # the merged, signature-checked list
 SPECS = DATA / "specs"
@@ -1497,7 +1499,8 @@ def read_board(port):
     found = re.search(r"Chip (?:is|type:)\s*(ESP[-\w]*)", text)
     name = found.group(1).upper() if found else ""
     size = re.search(r"Detected flash size:\s*(\d+)MB", text)
-    return {"name": name, "chip": chip_key(name), "flash_mb": int(size.group(1)) if size else 0}, text
+    return {"name": name, "chip": chip_key(name), "flash_mb": int(size.group(1)) if size else 0,
+            "mac": board_mac(text)}, text
 
 
 def chip_and_network(app):
@@ -1517,14 +1520,17 @@ def image_summary(image):
             "chip": image.get("chip", chip), "network": image.get("network", network)}
 
 
-def check_board(port, chip):
+def check_board(port, chip, found=None):
     """The board on the port is the image's chip, with flash enough for two
-    images; the reason when it is not, else None."""
+    images; the reason when it is not, else None. What esptool found goes
+    into found (a dict) when one is given."""
     board, text = read_board(port)
     with JOB_LOG.open("a") as out:
         out.write(text)
     if board is None:
         return "no ESP32 answered on that port (hold BOOT while plugging it in, and try again)"
+    if found is not None:
+        found.update(board)
     wanted = CHIP_NAMES.get(chip, chip.upper())
     if board["name"] and board["chip"] != chip:
         return (f"this board is an {board['name']}, the firmware is for the {wanted}: "
@@ -1536,12 +1542,15 @@ def check_board(port, chip):
     return None
 
 
-def flash_on_host(port, image, backup):
-    """A factory image at 0 with esptool, after a backup of the whole flash."""
+def flash_on_host(port, image, backup, recipe=None):
+    """A factory image at 0 with esptool, after a backup of the whole flash.
+    With a recipe ({text, name, slug}), it then waits for this board to be
+    linked (see "a recipe on a new board")."""
     chip, _ = chip_and_network(image.name.removesuffix("-factory.bin").rpartition("-")[0])
     log(f"== Checking the board ({CHIP_NAMES.get(chip, chip)} with "
         f"{MIN_FLASH_MB.get(chip, DEFAULT_MIN_FLASH_MB)} MB of flash needed)")
-    problem = check_board(port, chip)
+    board = {}
+    problem = check_board(port, chip, board)
     if problem:
         log(f"!! {problem}")
         return False
@@ -1553,7 +1562,15 @@ def flash_on_host(port, image, backup):
         if not run_logged([*esptool, "read_flash", "0", "ALL", str(target)]):
             return False
     log(f"== Installing {image.name}")
-    return run_logged([*esptool, "write_flash", "0x0", str(image)])
+    if not run_logged([*esptool, "write_flash", "0x0", str(image)]):
+        return False
+    if recipe:
+        key = pending_recipe_add(board.get("mac"), recipe.get("text"), recipe.get("name"), recipe.get("slug"))
+        if key:
+            log(f"== The recipe {recipe.get('name') or ''} waits for board {key}: link it and it is applied")
+        elif key is not None:
+            log(f"== The recipe {recipe.get('name') or ''} waits for the next linked board")
+    return True
 
 
 def run_logged(cmd):
@@ -2561,6 +2578,91 @@ def link_start(host, password):
     return {"link": link_id, "seconds": reply.get("seconds", 120)}
 
 
+# ---------------------------------------------------------------- a recipe on a new board
+# Installing a recipe on a new ESP32 ends with the device running it, also
+# when the setup in between (its access point, Wi-Fi or Thread, adopting)
+# takes hours or happens in another browser. The recipe is kept here under the
+# chip's base MAC, which esptool reads while installing and the firmware gives
+# as its id in /info. Linking that device moves it onto the device's entry,
+# and the page applies it with the normal Apply flow (review, restart, Keep).
+# The configuration then lives on the device itself, which keeps working
+# without Home Assistant. A board installed from a downloaded file has no MAC
+# known here: its recipe waits as "unknown board" for the next generic device
+# that is linked, and the review shows the changes before anything is sent.
+
+PENDING_DAYS = 30
+pending_lock = threading.Lock()
+PENDING_MAX_TEXT = 64 * 1024
+UNKNOWN_BOARD = ""
+
+
+def board_id(mac):
+    """A MAC as the firmware's id (AABBCCDDEEFF), or "" when it is not one."""
+    hexes = re.sub(r"[^0-9A-Fa-f]", "", str(mac or ""))
+    return hexes.upper() if len(hexes) == 12 else ""
+
+
+def load_pending_recipes():
+    try:
+        pending = json.loads(PENDING_RECIPES.read_text())
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(pending, dict):
+        return {}
+    cutoff = time.time() - PENDING_DAYS * 86400
+    return {k: v for k, v in pending.items() if isinstance(v, dict) and v.get("added", 0) >= cutoff}
+
+
+def save_pending_recipes(pending):
+    PENDING_RECIPES.parent.mkdir(parents=True, exist_ok=True)
+    tmp = PENDING_RECIPES.with_suffix(".tmp")
+    tmp.write_text(json.dumps(pending, indent=2))
+    os.chmod(tmp, 0o600)
+    tmp.replace(PENDING_RECIPES)
+
+
+def pending_recipe_add(mac, text, name="", slug=""):
+    """Keep a recipe for the board with this MAC ("" or None: a board not
+    known yet). The newest install on a board wins. The recipe is stored as
+    the page checked it; it is checked again when it is applied."""
+    text = str(text or "")
+    if not text.strip() or len(text) > PENDING_MAX_TEXT:
+        return None
+    key = board_id(mac) or UNKNOWN_BOARD
+    entry = {"text": text, "name": str(name or "")[:64], "slug": str(slug or "")[:80], "added": int(time.time())}
+    with pending_lock:
+        pending = load_pending_recipes()
+        pending[key] = entry
+        save_pending_recipes(pending)
+    return key
+
+
+def pending_recipe_take(device_id, app):
+    """The recipe waiting for this device, removed from the waiting list: the
+    one installed on its MAC, else the one for an unknown board when this is
+    generic firmware. None when there is none."""
+    key = board_id(device_id)
+    with pending_lock:
+        pending = load_pending_recipes()
+        if key and key in pending:
+            entry = pending.pop(key)
+        elif UNKNOWN_BOARD in pending and re.fullmatch(r"mb_generic(_[a-z0-9]+)?", str(app or "")):
+            entry = pending.pop(UNKNOWN_BOARD)
+        else:
+            return None
+        save_pending_recipes(pending)
+    return entry
+
+
+def board_mac(esptool_output):
+    """The base MAC esptool printed: "BASE MAC: aa:bb:…" where it gives one
+    (the ESP32-C6 and -H2, whose "MAC:" is the 8-byte EUI-64), else "MAC:"."""
+    six = r"([0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5})(?![:0-9A-Fa-f])"
+    found = (re.search(r"BASE MAC:\s*" + six, esptool_output)
+             or re.search(r"(?m)^\s*MAC:\s*" + six, esptool_output))
+    return found.group(1) if found else ""
+
+
 def link_poll(link_id):
     pending = links.get(link_id)
     if not pending:
@@ -2578,9 +2680,14 @@ def link_poll(link_id):
         # Linking again (a new key) replaces the old entry
         proxies = [p for p in load_proxies()
                    if p["host"] != pending["host"] and not (device.get("id") and p.get("device_id") == device["id"])]
+        recipe = pending_recipe_take(device.get("id"), device.get("app"))
+        if recipe:
+            proxy["recipe"] = recipe
         save_proxies(proxies + [proxy])
         dismiss(device.get("id"))
         result = {"state": "linked", "id": proxy["id"]}
+        if recipe:
+            result["recipe"] = recipe
         network = load_wifi_default()
         if network:
             result["default_wifi"] = apply_wifi_default(proxy, network)
@@ -2865,7 +2972,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path == "/api/state":
             with lock:
                 current = dict(job)
-            proxies = [{k: p.get(k) for k in ("id", "name", "host", "added", "app", "local", "auto_update")} for p in load_proxies()]
+            proxies = [{k: p.get(k) for k in ("id", "name", "host", "added", "app", "local", "auto_update", "recipe")} for p in load_proxies()]
             return self.reply({"proxies": proxies, "found": found_unlinked(), "toolchain": toolchain_ready(),
                                "builds": builds(), "job": current,
                                "releases": [image_summary(i) for i in release_state["images"]],
@@ -3033,8 +3140,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if image is None or not image.is_file():
                 return self.reply({"error": "unknown firmware"}, 400)
             backup = bool(data.get("backup", True))
-            started = start_job("flash", name, lambda: flash_on_host(port, image, backup))
+            recipe = data.get("recipe") if isinstance(data.get("recipe"), dict) else None
+            started = start_job("flash", name, lambda: flash_on_host(port, image, backup, recipe))
             return self.reply({"started": started})
+        if path == "/api/pending-recipe":
+            # Installed in the browser (its MAC read over USB) or downloaded (no MAC)
+            recipe = data.get("recipe") if isinstance(data.get("recipe"), dict) else {}
+            key = pending_recipe_add(data.get("mac"), recipe.get("text"), recipe.get("name"), recipe.get("slug"))
+            if key is None:
+                return self.reply({"error": "no recipe"}, 400)
+            return self.reply({"ok": True, "board": key})
         if path == "/api/sources/preview":
             return self.reply(preview_source(str(data.get("repo", "")).strip()))
         if path == "/api/sources/add":
@@ -3187,7 +3302,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if not allowed(line):
                     return self.reply({"error": "not allowed from here"}, 400)
                 status, text = command(proxy, line)
+                if status == 200 and line.startswith("name ") and text.startswith("ok"):
+                    remember(proxy, name=line[5:].strip()[:40] or proxy["name"])  # the list shows the device's new name
                 return self.reply({"status": status, "text": text})
+            if parts[3] == "recipe":  # the recipe that waited for this device is applied, or set aside
+                remember(proxy, recipe=None)
+                return self.reply({"ok": True})
             if parts[3] == "rename":
                 name = str(data.get("name", "")).strip()[:40]
                 proxies = load_proxies()

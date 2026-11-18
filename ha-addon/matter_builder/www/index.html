@@ -983,7 +983,12 @@ const TEXT = {
   octoInstallerCatalogHelp: 'Check the Catalog for an available Octo Bridge release.',
   startEmpty: 'Empty', fromConfigs: 'My recipes', fromRecipes: 'Recipes', skipConfiguration: 'Continue without a configuration', saveToConfigs: 'Save as recipe',
   saveToConfigsHelp: 'Find it in Catalog › My recipes to put the same connections, Bluetooth commands and rules on another ESP32.',
-  configOk: (n, c) => `${n}: ${c} connection${c === 1 ? '' : 's'}.`, applyTo: 'Apply to a device', noGeneric: 'No linked generic device yet.',
+  configOk: (n, c) => `${n}: ${c} connection${c === 1 ? '' : 's'}.`, applyTo: 'Apply to a device',
+  recipeWaiting: (r, d) => `${d} was installed with the recipe “${r}”. Apply it to give the device its name and connections.`,
+  recipeWaitingApply: 'Apply recipe', recipeWaitingDrop: 'Set aside',
+  recipeWaitingDropTitle: r => `Set aside “${r}”?`,
+  recipeWaitingDropText: 'The device keeps its current configuration. You can still apply a recipe to it later from the Catalog.',
+  recipeFromInstall: r => `Installed with the recipe “${r}”: its name and connections are applied now.`, noGeneric: 'No linked generic device yet.',
   applyingConfig: 'Applying the configuration…', configOnTrial: s => `The new connections run on trial: keep them within ${s} s, or the device goes back.`,
   configKept: 'Kept. The device is ready.', configFailed: e => `The configuration was not applied: ${e}`,
   emptyTitle: 'Set up your first device',
@@ -1573,7 +1578,11 @@ function renderDevices() {
   setHtml($('#discovered'), found.map(d => `<div class="banner"><span class="ico" style="width:32px;height:32px">${appIcon(d.app)}</span>
       <div class="grow"><b style="font-weight:500">${t('discovered', esc(appTitle(d.app)), esc(d.version || ''))}</b><div class="sub mono">${esc(d.host)}</div></div>
       <button class="plain" onclick="ignoreFound('${esc(d.id)}', true)" title="${esc(t('ignoreHelp'))}">${t('ignore')}</button>
-      <button class="pri" onclick="openWizard('link', '${esc(d.address)}')">${t('adopt')}</button></div>`).join(''));
+      <button class="pri" onclick="openWizard('link', '${esc(d.address)}')">${t('adopt')}</button></div>`).join('')
+    + state.proxies.filter(p => p.recipe).map(p => `<div class="banner"><span class="ico" style="width:32px;height:32px">${icon('recipe')}</span>
+      <div class="grow">${esc(t('recipeWaiting', p.recipe.name || t('recipe'), p.name))}</div>
+      <button class="plain" onclick="dropWaitingRecipe('${p.id}')">${t('recipeWaitingDrop')}</button>
+      <button class="pri" onclick="applyWaitingRecipe('${p.id}')">${t('recipeWaitingApply')}</button></div>`).join(''));
   const q = query.trim().toLowerCase();
   const list = state.proxies.filter(p => !q || textMatches(`${p.name} ${p.host} ${connectedText(statuses[p.id])}`.toLowerCase(), q));
   $('#emptyState').hidden = state.proxies.length > 0;
@@ -1584,6 +1593,17 @@ function renderDevices() {
   const updates = state.proxies.filter(updateFor).length;
   $('#updateAllBtn').hidden = !updates;
   $('#updateAllBtn').textContent = t('updateAll', updates);
+}
+
+// A recipe installed on a board that was linked without finishing it: the
+// normal Apply flow on the device's connections (review, restart, Keep)
+function applyWaitingRecipe(id) {
+  const recipe = state.proxies.find(p => p.id === id)?.recipe;
+  if (recipe) openDevice(id, 'connections', {title: recipe.name, text: recipe.text, waiting: true});
+}
+async function dropWaitingRecipe(id) {
+  const recipe = state.proxies.find(p => p.id === id)?.recipe;
+  if (recipe && await confirmAction(t('recipeWaitingDropTitle', recipe.name || t('recipe')), t('recipeWaitingDropText'), t('recipeWaitingDrop'))) recipeDone(id);
 }
 
 // ---------------------------------------------------------------- configuration editor
@@ -4244,7 +4264,9 @@ async function loadDeviceConfiguration(id, requestId, which, recipe) {
       let full = null;
       if (recipe.text) { try { full = await parseSpec(recipe.text); } catch (e) {} }
       if (requestId !== deviceRequest) return;
-      devEditor.load(device.io.name, (full ? full.rows : recipe.rows).map(r => ({...r})), device.io.pins, full ? full.rules : recipe.rules || [], full ? full.ble : null);
+      // The recipe's device name too: applying a recipe renames the device
+      devEditor.load(full?.name || recipe.title || device.io.name, (full ? full.rows : recipe.rows).map(r => ({...r})), device.io.pins, full ? full.rules : recipe.rules || [], full ? full.ble : null);
+      device.waitingRecipe = !!recipe.waiting;
       devEditor.originalYaml = recipe.text || devEditor.originalYaml;
       devEditor.onChange();
       $('#recipeNotice').innerHTML = `${esc(t('fromRecipe', recipe.title))}${recipeSetupHtml(recipe.text)} <button class="text" onclick="saveAndApply()">${t('saveApply')}</button>`;
@@ -5248,7 +5270,7 @@ async function saveAndApply() {
   try {
     if (!await saveManageNow(true)) return;
     if (managed.io.changed) await applyManageNow();
-    else note(t('configSent'));
+    else { note(t('configSent')); if (managed.waitingRecipe) recipeDone(managed.id); }
   } catch (e) { $('#mError').textContent = e.message; $('#mError').hidden = false; }
   finally { deviceBusy = false; if (managed?.io) showManageState(); }
 }
@@ -5330,6 +5352,7 @@ $('#mConfirm').onclick = async () => {
     showManageState();
     renderDevicePanel();
     note(t('kept'));
+    if (managed.waitingRecipe) recipeDone(managed.id);
   } catch (e) {
     $('#mError').textContent = e.message;
     $('#mError').hidden = false;
@@ -5848,7 +5871,7 @@ function renderWizard() {
       ${wiz.configOk ? `<div class="notice" role="status">${esc(wiz.configOk)}</div>` : ''}
       ${wiz.error ? `<div class="error" role="alert" id="wError">${esc(wiz.error)}</div>` : ''}
       <div class="actions end"><button class="plain" onclick="wizPrev()">${t('back')}</button><span class="grow"></span>
-        <button class="plain" onclick="wiz.configSpec = null; go('method')">${t('skipConfiguration')}</button>
+        <button class="plain" onclick="wiz.configSpec = null; wiz.pendingRecipe = null; go('method')">${t('skipConfiguration')}</button>
         <button class="pri" onclick="configureNext()">${t('next')}</button></div>`;
   } else if (wiz.step === 'method') {
     title = t('wMethod');
@@ -5894,6 +5917,7 @@ function renderWizard() {
     body = `<p>${esc(wiz.configSpec ? t('linkedName', wiz.linkedName || '') : t('linkedText', wiz.linkedName || ''))}</p>
       ${wiz.defaultWifi === true ? '<p class="sub">The default Wi-Fi was saved on this device. If it uses Matter over Wi-Fi, it can switch to this network after a restart.</p>' : ''}
       ${wiz.defaultWifi === false ? '<p class="error" role="alert">Could not save the default configuration Wi-Fi. You can retry from Settings.</p>' : ''}
+      ${wiz.recipeName && a.state !== 'error' ? `<p class="sub">${esc(t('recipeFromInstall', wiz.recipeName))}</p>` : ''}
       ${a.state === 'applying' ? `<p class="notice" role="status">${t('applyingConfig')}</p>` : ''}
       ${a.state === 'review' ? '<p class="sub">Review your configuration before sending it to the linked device.</p>' : ''}
       ${a.state === 'trial' ? `<p class="notice" role="status">${t('configOnTrial', a.trial)}</p>` : ''}
@@ -5962,6 +5986,9 @@ async function configureNext() {
     invalidateSpecs();
   }
   if (wiz.saveConfig) wiz.editorDirty = false;
+  // Kept by the add-on under the board's MAC, so linking it later (another
+  // day, another browser) still ends with this configuration on the device
+  wiz.pendingRecipe = {text: wizEditor.text(), name: wiz.configSpec.name, slug: wiz.configSlug || ''};
   go('method');
 }
 
@@ -6001,7 +6028,7 @@ async function applyConfig() {
     }
     await sendLines(id, lines);
     if (!JSON.parse(await proxyCommand(id, 'io json')).io.changed) {
-      wiz.apply = {state: 'applied'}; renderWizard(); return;
+      wiz.apply = {state: 'applied'}; renderWizard(); recipeDone(id); return;
     }
     try { await proxyCommand(id, 'io apply'); } catch (e) {}
     for (let i = 0; i < 40; i++) {
@@ -6017,8 +6044,14 @@ async function applyConfig() {
     if (wiz) { wiz.apply = {state: 'error', error: e.message}; renderWizard(); }
   }
 }
+// The recipe that waited for this device is on it now (or set aside)
+async function recipeDone(id) {
+  if (!state.proxies.some(p => p.id === id && p.recipe)) return;
+  try { await api(`api/proxy/${id}/recipe`, {}); } catch (e) {}
+  refresh();
+}
 async function keepConfig() {
-  try { await proxyCommand(wiz.linkedId, 'io confirm'); wiz.apply = {state: 'kept'}; }
+  try { await proxyCommand(wiz.linkedId, 'io confirm'); wiz.apply = {state: 'kept'}; recipeDone(wiz.linkedId); }
   catch (e) { wiz.apply = {state: 'error', error: e.message}; }
   renderWizard();
   loadStatuses();
@@ -6049,7 +6082,7 @@ async function installOnHost() {
   if (!port || !await confirmAction('Install firmware?', t('confirmPort', port.name), 'Install firmware')) return;
   wiz.step = 'install'; wiz.error = ''; wiz.progress = 0; wiz.status = t('usbConnecting');
   renderWizard();
-  const r = await api('api/flash', {port: wiz.port, file: wiz.file, backup: wiz.backup});
+  const r = await api('api/flash', {port: wiz.port, file: wiz.file, backup: wiz.backup, recipe: wiz.pendingRecipe || null});
   if (!r.started) { wiz.error = r.error || t('jobBusy'); renderWizard(); return; }
   for (;;) {
     await new Promise(res => setTimeout(res, 1500));
@@ -6074,6 +6107,8 @@ async function startInstall() {
     a.href = `api/download/${encodeURIComponent(wiz.file)}`;
     a.download = wiz.file;
     a.click();
+    // No board to read a MAC from: the recipe waits for the next generic device linked
+    if (wiz.pendingRecipe) api('api/pending-recipe', {mac: '', recipe: wiz.pendingRecipe}).catch(() => {});
     wiz.status = t('downloaded');
     go('setup');
     return;
@@ -6094,6 +6129,8 @@ async function startInstall() {
     const want = (wiz.choice && wiz.choice.chip) || chipOfFile(wiz.file);
     const label = want === 'esp32' ? 'ESP32' : (BOARDS[want] || {name: want}).name;
     if (chipKey(chip) !== want) throw new Error(t('wrongChip', chip.split(' ')[0], label));
+    let mac = '';
+    try { mac = await loader.chip.readMac(loader); } catch (e) {}
     say(t('usbChip', chip));
     const flashMb = parseInt(await loader.detectFlashSize(), 10);
     const needMb = (BOARDS[want] || {flash: 8}).flash;  // two app slots: 1984 KB each with 4 MB, 3 MB each with 8
@@ -6110,6 +6147,9 @@ async function startInstall() {
     await loader.writeFlash({fileArray: [{data, address: 0}], flashMode: 'keep', flashFreq: 'keep', flashSize: 'keep',
       eraseAll: false, compress: true, reportProgress: (_, written, total) => say(t('usbWriting', Math.round(100 * written / total)), Math.round(100 * written / total))});
     await loader.after('hard_reset');
+    if (wiz?.pendingRecipe) {
+      try { await api('api/pending-recipe', {mac, recipe: wiz.pendingRecipe}); } catch (e) {}
+    }
     if (wiz) { wiz.status = ''; go('setup'); }
   } catch (e) {
     if (wiz) { wiz.error = e.message || String(e); renderWizard(); }
@@ -6141,9 +6181,15 @@ async function startLink() {
       wiz.linkedId = s.id;
       wiz.linkedName = added ? added.name : host;
       wiz.pass = '';
+      // The recipe this board was installed with, kept by the add-on: also
+      // when this wizard is not the one that installed it
+      if (!wiz.configSpec && s.recipe) {
+        try { wiz.configSpec = await parseSpec(s.recipe.text); wiz.recipeName = s.recipe.name || wiz.configSpec.name; }
+        catch (e) { wiz.apply = {state: 'error', error: e.message}; }
+      }
       go('done');
       loadStatuses();
-      if (wiz.configSpec && wiz.linkedId) { wiz.apply = {state: 'review'}; renderWizard(); }
+      if (wiz.configSpec && wiz.linkedId) applyConfig();
       return;
     }
     if (s.state !== 'waiting') { wiz.waiting = false; wiz.error = t('notLinked'); renderWizard(); return; }

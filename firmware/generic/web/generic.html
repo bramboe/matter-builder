@@ -572,6 +572,7 @@ const TEXT = {
   configConnectionsHelp: 'The connections work here. Pairing with Home Assistant or Apple Home happens afterwards in normal mode.',
   configDone: 'Done: back to normal', backStarted: h => `Going back to normal: http://${h}/ opens by itself in a minute.`,
   backStartedNoHome: 'Going back to normal. Open the device at its usual address in a minute.',
+  configApDoneNoHome: 'The device goes to Thread. Connect this phone to your own Wi-Fi again. In a minute Matter Builder shows it under Discovered: choose Adopt to link it and open its page.',
   moveManual: link => `Not reachable yet. Open ${link} yourself.`,
   wizMenu: 'Setup wizard', wizTitle: 'Welcome',
   wizHelp: 'Set up Wi-Fi first: installing then goes over Wi-Fi and is much faster. The device then uses Thread as usual; Wi-Fi is only for setup and updates.',
@@ -1789,7 +1790,12 @@ $('#cfgExit').onclick = async () => {
   try {
     await cmd('wifi exit');
     const home = configMode && configMode.home;
-    if (configMode && configMode.ap) { $('#cfgBack').textContent = t(wifiDevice ? 'configApDoneWifi' : 'configApDone', home || wifiHost); return; }
+    // On Thread its address is the name it registers there, known once it has
+    // joined: a new device's page does not know it yet, Matter Builder finds it
+    if (configMode && configMode.ap) {
+      $('#cfgBack').textContent = wifiDevice ? t('configApDoneWifi', wifiHost) : home ? t('configApDone', home) : t('configApDoneNoHome');
+      return;
+    }
     $('#cfgBack').textContent = home ? t('backStarted', home) : t('backStartedNoHome');
     if (home) moveTo(`http://${home}/`, $('#cfgBack'));
   } catch (e) { toast(t('error') + ': ' + e.message); }

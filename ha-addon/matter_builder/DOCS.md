@@ -51,7 +51,8 @@ ESP32 (Wi-Fi); see *Chips and networks*.
   Board filter separates tested from untested boards, and *My boards* keeps
   what fits the ESP32s you have linked. **My recipes** at the top are your
   own (YAML kept in the add-on): install one on a new ESP32 or apply it to a
-  linked device. Save one from a device with *Save as recipe*, or use *Copy to
+  linked device, which then takes the recipe's `device.name` as well as its
+  connections. Save one from a device with *Save as recipe*, or use *Copy to
   a new board* to put the same connections on another ESP32 in one go. Old
   links to the Configs tab open My recipes.
 - **Settings › Developer mode** lists the firmware you built yourself.
@@ -79,7 +80,29 @@ Each firmware in a release also has a **factory image** for a new ESP32.
 - **Download the file**: flash it yourself at address 0.
 
 The ESP32 then opens its setup network, where you choose its password and
-network; link it afterwards, and the wizard continues with its connections.
+network. Link it afterwards (*Adopt* under Discovered, or the wizard's *Link
+now*), and it gets the recipe's name and connections: the normal Apply, with
+its review, a restart and *Keep*.
+
+**A recipe installed on a new board is not lost on the way.** The setup in
+between can take long, happen in another browser or after closing this one:
+the add-on keeps the recipe under the board's MAC, which it reads over USB
+while installing, and applies it when that board is linked, however it is
+linked. Until it is applied (or set aside), the device list shows it with
+*Apply recipe*. The configuration is then on the device itself, which keeps
+working without Home Assistant. A board flashed from a downloaded file has no
+MAC known to the add-on: its recipe goes to the next generic device that is
+linked, and the review shows what changes before anything is sent. Recipes
+that wait longer than 30 days are dropped.
+
+On Thread the device's address is the name Matter registers with the border
+router, `<16 hex digits>.local` (its Thread extended address, which the
+border router publishes on your home network). It is not the factory
+802.15.4 address printed on some boards (the one with `FFFE` in the middle).
+A new device knows that name only once it has joined Thread, so after its
+setup network *Done: back to normal* sends you to Matter Builder, which
+finds it under Discovered; later visits to configuration mode link back to
+the right name.
 Before installing, the wizard checks that the board is the firmware's chip
 and has flash enough (8 MB, or 4 MB for the classic ESP32 and the C3), and says
 so when it is not.
@@ -126,9 +149,9 @@ The catalog (built nightly on the project's GitHub Pages) lists firmware and
 recipes from every package source: GitHub repositories with the topic
 `matter-builder-package`.
 
-- A **recipe** is a generic device's connections, nothing else. *Use* puts it
-  on a new ESP32 or fills in a linked generic device's connections; nothing
-  changes on the device until you save and apply.
+- A **recipe** is a generic device's name and connections, nothing else.
+  *Use* puts it on a new ESP32 or fills in a linked generic device's name and
+  connections; nothing changes on the device until you save and apply.
 - **Firmware** from a community source is only installed after you added the
   source: the add-on then pins the source's key (you see its fingerprint
   first), and from then on only accepts releases signed with that key.

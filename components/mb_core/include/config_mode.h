@@ -50,4 +50,10 @@ bool request(int minutes, bool setup_ap = false);
 bool page_network(std::string& ssid, std::string& password);
 bool store_network(const std::string& ssid, const std::string& password);
 
+// The name the device has on Thread: the SRP host name Matter registers with
+// the border router (<extended address>.local), which the border router
+// publishes on the home network. Remembered for configuration mode, where
+// Thread is off, so "back to normal" points to the address that works.
+void remember_thread_host(const std::string& host);
+
 }  // namespace config_mode

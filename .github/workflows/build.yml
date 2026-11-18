@@ -12,6 +12,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: test/host/run.sh
+      # The add-on's own logic (a recipe waiting for its board), without Home Assistant
+      - run: python3 test/addon/test_pending_recipe.py
 
 # The firmware needs esp-matter (several GB) and is built locally with
 # tools/release.sh.

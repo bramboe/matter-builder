@@ -51,6 +51,13 @@ int64_t uptime_s() { return esp_timer_get_time() / 1000000; }
 void watch_parent(void*) {
     if (!esp_openthread_lock_acquire(pdMS_TO_TICKS(200))) return;
     otInstance* instance = esp_openthread_get_instance();
+    // The name the border router publishes for this device, once registered
+    static std::string remembered;
+    std::string thread_host;
+    const otSrpClientHostInfo* host = otSrpClientGetHostInfo(instance);
+    if (host != nullptr && host->mName != nullptr && host->mState == OT_SRP_CLIENT_ITEM_STATE_REGISTERED) {
+        thread_host = std::string(host->mName) + ".local";
+    }
     otRouterInfo parent = {};
     if (otThreadGetDeviceRole(instance) == OT_DEVICE_ROLE_CHILD && otThreadGetParentInfo(instance, &parent) == OT_ERROR_NONE) {
         if (have_parent && std::memcmp(&parent.mExtAddress, &parent_address, sizeof(parent_address)) != 0) {
@@ -61,6 +68,10 @@ void watch_parent(void*) {
         have_parent = true;
     }
     esp_openthread_lock_release();
+    if (!thread_host.empty() && thread_host != remembered) {
+        remembered = thread_host;
+        config_mode::remember_thread_host(thread_host);  // NVS: outside the OpenThread lock
+    }
 }
 
 // Not attached by then: the network is wrong or away, so go to

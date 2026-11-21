@@ -81,12 +81,13 @@ struct Language {
     const char* head;    // part names, at most 16 bytes (fixed label)
     const char* legs;
     const char* light;
+    const char* stop;    // the stop switch (Apple Home shows no stop button)
 };
 constexpr Language LANGUAGES[] = {
-    {"en", "Preset", "Flat", "Preset %s", "Match %s", "Save as preset %s", "Head", "Legs", "Light"},
-    {"nl", "Stand", "Plat", "Stand %s", "Zelfde als %s", "Bewaar als stand %s", "Hoofd", "Benen", "Licht"},
-    {"de", "Position", "Flach", "Position %s", "Wie %s", "Als Position %s speichern", "Kopf", "Beine", "Licht"},
-    {"es", "Posici\u00f3n", "Plano", "Posici\u00f3n %s", "Igual que %s", "Guardar como posici\u00f3n %s", "Cabeza", "Piernas", "Luz"},
+    {"en", "Preset", "Flat", "Preset %s", "Match %s", "Save as preset %s", "Head", "Legs", "Light", "Stop"},
+    {"nl", "Stand", "Plat", "Stand %s", "Zelfde als %s", "Bewaar als stand %s", "Hoofd", "Benen", "Licht", "Stop"},
+    {"de", "Position", "Flach", "Position %s", "Wie %s", "Als Position %s speichern", "Kopf", "Beine", "Licht", "Stopp"},
+    {"es", "Posici\u00f3n", "Plano", "Posici\u00f3n %s", "Igual que %s", "Guardar como posici\u00f3n %s", "Cabeza", "Piernas", "Luz", "Parar"},
 };
 constexpr int LANGUAGE_COUNT = sizeof(LANGUAGES) / sizeof(LANGUAGES[0]);
 int language = 0;
@@ -243,12 +244,15 @@ struct BedEndpoints {
     Cover feet;
     StopButton stop;
     uint16_t light_endpoint = 0;
+    // A switch that stops the motors when switched on and turns itself off
+    // again: Apple Home does not show the Operational State stop button
+    uint16_t stop_endpoint = 0;
     bool reachable = false;
     char label[32] = {};
     // Head, legs and light are bridged devices of their own ("Sam Head"):
     // Home Assistant names an entity after its device and ignores the part
     // labels, so as parts of one device all three were called "Sam"
-    char part_names[3][48] = {};
+    char part_names[4][48] = {};
 
     // Preset choice labels and options, read by the Mode Select server
     char mode_labels[MODE_COUNT][40] = {};
@@ -282,6 +286,9 @@ const char* part_label(chip::EndpointId endpoint_id) {
         }
         if (endpoint_id == bed.light_endpoint) {
             return text.light;
+        }
+        if (endpoint_id == bed.stop_endpoint) {
+            return text.stop;
         }
     }
     return nullptr;
@@ -605,6 +612,20 @@ void tick(chip::System::Layer* layer, void*) {
     (void) layer->StartTimer(chip::System::Clock::Milliseconds32(TICK_MS), tick, nullptr);
 }
 
+int stop_owner(uint16_t endpoint_id) {
+    for (int i = 0; i < bed_total; ++i) {
+        if (endpoint_id != 0 && beds[i].stop_endpoint == endpoint_id) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+void reset_stop(intptr_t index) {
+    esp_matter_attr_val_t off = esp_matter_bool(false);
+    attribute::update(beds[index].stop_endpoint, OnOff::Id, OnOff::Attributes::OnOff::Id, &off);
+}
+
 int light_owner(uint16_t endpoint_id) {
     for (int i = 0; i < bed_total; ++i) {
         if (beds[i].light_endpoint == endpoint_id) {
@@ -633,6 +654,15 @@ esp_err_t on_attribute(attribute::callback_type_t type, uint16_t endpoint_id, ui
         return ESP_OK;
     }
     if (cluster_id != OnOff::Id || attribute_id != OnOff::Attributes::OnOff::Id) {
+        return ESP_OK;
+    }
+    const int stopper = stop_owner(endpoint_id);
+    if (stopper >= 0) {
+        if (val->val.b) {
+            bed_link::run_in_host([&] { bed_link::stop(stopper); });
+            // Off again right away, like a push button
+            (void) chip::DeviceLayer::PlatformMgr().ScheduleWork(reset_stop, stopper);
+        }
         return ESP_OK;
     }
     const int index = light_owner(endpoint_id);
@@ -725,6 +755,16 @@ void add_cover(node_t* node, endpoint_t* parent, Cover& cover, const char* name)
     cover.SetEndpoint(cover.endpoint_id);
 }
 
+uint16_t add_stop_switch(node_t* node, endpoint_t* parent, const char* name) {
+    endpoint::on_off_plug_in_unit::config_t config;
+    endpoint_t* ep = endpoint::on_off_plug_in_unit::create(node, &config, ENDPOINT_FLAG_BRIDGE, nullptr);
+    if (!grouped) make_bridged(ep, name);
+    endpoint::set_parent_endpoint(ep, parent);
+    cluster::fixed_label::config_t label_config;
+    cluster::fixed_label::create(ep, &label_config, CLUSTER_FLAG_SERVER);
+    return endpoint::get_id(ep);
+}
+
 uint16_t add_light(node_t* node, endpoint_t* parent, const char* name) {
     endpoint::on_off_light::config_t config;
     endpoint_t* ep = endpoint::on_off_light::create(node, &config, ENDPOINT_FLAG_BRIDGE, nullptr);
@@ -738,9 +778,9 @@ uint16_t add_light(node_t* node, endpoint_t* parent, const char* name) {
 // The parts' names follow the bed's name and the language (in the Matter thread)
 void name_parts(BedEndpoints& bed) {
     const Language& text = LANGUAGES[language];
-    const char* parts[3] = {text.head, text.legs, text.light};
-    const uint16_t endpoints[3] = {bed.head.endpoint_id, bed.feet.endpoint_id, bed.light_endpoint};
-    for (int k = 0; k < 3; ++k) {
+    const char* parts[4] = {text.head, text.legs, text.light, text.stop};
+    const uint16_t endpoints[4] = {bed.head.endpoint_id, bed.feet.endpoint_id, bed.light_endpoint, bed.stop_endpoint};
+    for (int k = 0; k < 4; ++k) {
         std::snprintf(bed.part_names[k], sizeof(bed.part_names[k]), "%s %s", bed.label, parts[k]);
         if (endpoints[k] == 0 || grouped) continue;  // grouped: parts have no name of their own
         esp_matter_attr_val_t name = esp_matter_char_str(bed.part_names[k], std::strlen(bed.part_names[k]));
@@ -751,7 +791,7 @@ void name_parts(BedEndpoints& bed) {
 
 void set_parts_attribute(BedEndpoints& bed, uint32_t attribute_id, esp_matter_attr_val_t* value) {
     if (grouped) return;  // only the bed is a bridged device
-    for (uint16_t ep : {bed.head.endpoint_id, bed.feet.endpoint_id, bed.light_endpoint}) {
+    for (uint16_t ep : {bed.head.endpoint_id, bed.feet.endpoint_id, bed.light_endpoint, bed.stop_endpoint}) {
         if (ep != 0) attribute::update(ep, BridgedDeviceBasicInformation::Id, attribute_id, value);
     }
 }
@@ -806,6 +846,14 @@ void start() {
         add_cover(node, parent, bed.feet, bed.part_names[1]);
         bed.light_endpoint = add_light(node, parent, bed.part_names[2]);
     }
+    // The stop switches after all other endpoints, so the endpoint numbers
+    // of the second bed (and the controllers' entities) stay as they were
+    for (int i = 0; i < bed_total; ++i) {
+        BedEndpoints& bed = beds[i];
+        std::snprintf(bed.part_names[3], sizeof(bed.part_names[3]), "%s %s", bed.label, LANGUAGES[language].stop);
+        endpoint_t* device = endpoint::get(node, bed.device_endpoint);
+        bed.stop_endpoint = add_stop_switch(node, grouped ? device : aggregator, bed.part_names[3]);
+    }
 
     bed_link::run_in_host([] { bed_link::on_calibrated(on_calibrated); });
     esp_matter::set_custom_device_instance_info_provider(&device_info);
@@ -829,7 +877,7 @@ void start() {
             attribute::update(0, BasicInformation::Id, BasicInformation::Attributes::NodeLabel::Id, &name);
         }
         // Grouped or not, and how many beds: controllers read it again when it changed
-        matter_info::note_structure(static_cast<uint32_t>(bed_total * 2 + (grouped ? 1 : 0)));
+        matter_info::note_structure(static_cast<uint32_t>(0x100 + bed_total * 2 + (grouped ? 1 : 0)));  // 0x100: stop switches
         for (int i = 0; i < bed_total; ++i) {
             BedEndpoints& bed = beds[i];
             esp_matter_attr_val_t label = esp_matter_char_str(bed.label, std::strlen(bed.label));

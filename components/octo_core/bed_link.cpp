@@ -435,8 +435,44 @@ void on_advertisement(const ble_gap_disc_desc& disc) {
     }
 }
 
+// Someone looked at the scan list (the page, "scan", "json"): keep scanning a
+// while so new beds show up, even when all configured beds are connected
+constexpr int64_t SCAN_WANTED_US = 60 * 1000000LL;
+int64_t scan_wanted_until_us = 0;
+
+void want_scan() {
+    scan_wanted_until_us = now_us() + SCAN_WANTED_US;
+}
+
+// Scanning only while a bed still has to be found. On the ESP32-C6 the radio
+// is shared with Thread: every scan window is time Thread cannot listen, so
+// frames from its parent are missed and resent, which made each command take
+// about a second to arrive (37 % retries with a scan that never stopped)
+bool scan_needed() {
+    bool any = false;
+    for (const auto& bed : beds) {
+        if (!bed.configured) {
+            continue;
+        }
+        any = true;
+        if (bed.state != State::Ready) {
+            return true;
+        }
+    }
+    return !any || now_us() < scan_wanted_until_us;
+}
+
 void ensure_scanning() {
-    if (!synced || connect_in_progress || ble_gap_disc_active()) {
+    if (!synced || connect_in_progress) {
+        return;
+    }
+    if (!scan_needed()) {
+        if (ble_gap_disc_active()) {
+            ble_gap_disc_cancel();
+        }
+        return;
+    }
+    if (ble_gap_disc_active()) {
         return;
     }
     ble_gap_disc_params params = {};
@@ -727,6 +763,11 @@ int gap_event(ble_gap_event* event, void* arg) {
 void manager_tick(ble_npl_event*) {
     const int64_t now = now_us();
     for (auto& bed : beds) {
+        // A connected bed no longer advertises: its signal comes from the link
+        int8_t link_rssi;
+        if (bed.state == State::Ready && bed.conn != NO_CONN && ble_gap_conn_rssi(bed.conn, &link_rssi) == 0) {
+            bed.rssi = link_rssi;
+        }
         if (bed.state == State::Authenticating && now - bed.auth_started_us > PIN_VERIFY_TIMEOUT_US) {
             terminate(bed, "no answer to the PIN");
         } else if (bed.state == State::Ready && now - bed.last_ack_us > LIVENESS_TIMEOUT_US) {
@@ -1167,6 +1208,7 @@ static std::string json_string(const char* text) {
 
 std::string state_json() {
     const int64_t now = now_us();
+    want_scan();  // the page shows the scan list (new beds to add)
     std::string out;
     // heap_total: of all there is, so the page can show how full it is
     // status: the state and the BOOT menu (open action, a press held), for the page and the add-on
@@ -1225,6 +1267,7 @@ std::string status_text() {
 }
 
 std::string scan_text() {
+    want_scan();
     const int64_t now = now_us();
     std::string out;
     appendf(out, "%-17s  %-19s %5s  %s\n", "address", "name", "rssi", "seen");
